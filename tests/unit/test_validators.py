@@ -69,14 +69,17 @@ class TestCorpusValidation:
             extraction_metadata=CorpusMetadata(
                 extraction_date=datetime.now(),
                 total_emails=5,  # Says 5 but only has 2
-                source="test",
-                user_email="user@example.com"
+                source_email="user@example.com",
+                extraction_duration_seconds=1.0
             ),
             emails=[
                 Email(
                     id="1",
                     sender_email="a@example.com",
+                    sender_name="A",
                     sender_domain="example.com",
+                    recipient_email="user@example.com",
+                    recipient_name="User",
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),

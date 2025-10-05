@@ -8,6 +8,7 @@
 1. Load plan.md from feature directory
    → If not found: ERROR "No implementation plan found"
    → Extract: tech stack, libraries, structure
+   → Verify: research.md contains Context7 queries for all libraries
 2. Load optional design documents:
    → data-model.md: Extract entities → model tasks
    → contracts/: Each file → contract test task
