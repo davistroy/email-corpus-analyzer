@@ -1,0 +1,14 @@
+# Core dependencies researched via Context7
+sentence-transformers>=2.0.0  # Text embeddings
+scikit-learn==1.7.1           # Clustering
+beautifulsoup4>=4.12.0        # HTML parsing
+lxml>=4.9.0                   # Fast HTML parser
+
+# Supporting libraries
+tqdm>=4.66.0                  # Progress bars
+pydantic>=2.0.0               # Data validation
+numpy>=1.24.0                 # Array operations (dep of above)
+
+# Testing
+pytest>=7.4.0                 # Test framework
+pytest-cov>=4.1.0             # Coverage reporting

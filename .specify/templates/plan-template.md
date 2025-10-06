@@ -47,7 +47,17 @@
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify compliance with Email Corpus Analysis Constitution v1.0.0:
+
+- [ ] **TDD Compliance**: Plan includes test-first approach (contract tests before implementation)
+- [ ] **Documentation-First**: All design artifacts (spec.md, data-model.md, contracts/) exist before coding
+- [ ] **Context7 Research**: All external libraries researched via Context7 MCP server
+- [ ] **Privacy & Data Security**: Email data stored locally, no unauthorized external transmission
+- [ ] **Modular Components**: Each analysis module independently testable with clear contracts
+- [ ] **Error Resilience**: Plan includes error handling, logging, and graceful degradation
+- [ ] **Performance Transparency**: Long operations include progress indicators and checkpointing
+
+**Justification for any violations:** [Document in Complexity Tracking section]
 
 ## Project Structure
 
