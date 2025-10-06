@@ -5,8 +5,8 @@ Per analyzer_contract.md lines 225-278.
 """
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Dict, List
 
 from ..models.analysis_results import TemporalPatterns
 from ..models.corpus import Corpus
@@ -42,7 +42,7 @@ class TemporalAnalyzer:
         logger.debug(f"Starting temporal analysis on {len(corpus.emails)} emails")
 
         # Group emails by sender
-        sender_emails: Dict[str, List[datetime]] = defaultdict(list)
+        sender_emails: dict[str, list[datetime]] = defaultdict(list)
 
         for idx, email in enumerate(corpus.emails):
             sender_emails[email.sender_email].append(email.received_date)
@@ -57,7 +57,7 @@ class TemporalAnalyzer:
         logger.debug(f"Grouped emails from {len(sender_emails)} unique senders")
 
         # Classify each sender's frequency
-        frequency_distribution: Dict[str, int] = {
+        frequency_distribution: dict[str, int] = {
             "one-time": 0,
             "daily": 0,
             "weekly": 0,
@@ -65,7 +65,7 @@ class TemporalAnalyzer:
             "occasional": 0
         }
 
-        sender_frequencies: Dict[str, Dict] = {}
+        sender_frequencies: dict[str, dict] = {}
 
         for sender, dates in sender_emails.items():
             frequency_type = self.classify_frequency(dates)
@@ -91,7 +91,7 @@ class TemporalAnalyzer:
             sender_frequencies=sender_frequencies
         )
 
-    def classify_frequency(self, dates: List[datetime]) -> str:
+    def classify_frequency(self, dates: list[datetime]) -> str:
         """
         Classify sender frequency based on email patterns.
 
@@ -139,9 +139,8 @@ class TemporalAnalyzer:
         # Apply classification thresholds
         if avg_interval_days < 2:
             return "daily"
-        elif avg_interval_days < 8:
+        if avg_interval_days < 8:
             return "weekly"
-        elif avg_interval_days < 35:
+        if avg_interval_days < 35:
             return "monthly"
-        else:
-            return "occasional"
+        return "occasional"

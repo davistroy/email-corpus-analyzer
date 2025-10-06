@@ -7,12 +7,11 @@ provides debug-level logging with full details including intermediate states.
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def setup_logger(
     name: str,
-    log_file: Optional[Path] = None,
+    log_file: Path | None = None,
     level: int = logging.DEBUG
 ) -> logging.Logger:
     """
@@ -57,7 +56,7 @@ def setup_logger(
     return logger
 
 
-def get_logger(name: str, log_file: Optional[Path] = None) -> logging.Logger:
+def get_logger(name: str, log_file: Path | None = None) -> logging.Logger:
     """
     Get or create a logger instance.
 

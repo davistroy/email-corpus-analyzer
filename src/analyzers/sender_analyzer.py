@@ -6,12 +6,11 @@ Contract compliance: FR-012, FR-013
 """
 import logging
 from collections import Counter, defaultdict
-from typing import Callable
+from collections.abc import Callable
 
+from ..models.analysis_results import SenderAnalysis
 from ..models.corpus import Corpus
 from ..models.sender import Sender, SenderType
-from ..models.analysis_results import SenderAnalysis
-
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +121,8 @@ class SenderAnalyzer:
         Classify sender as personal/service/marketing/work.
 
         Per FR-012, FR-013:
-        - Service: domains contain "noreply", "no-reply", "notification"
-        - Marketing: >10 emails + keywords "unsubscribe", "promotional", "offer"
+        - Service: email or domain contain "noreply", "no-reply", "donotreply", "notification", "notify", "alert"
+        - Marketing: >10 emails + keywords "unsubscribe", "promotional", "offer", "discount", "sale"
         - Work: keywords "meeting", "project", "team", "re:", "fwd:"
         - Personal: default
 
@@ -133,18 +132,19 @@ class SenderAnalyzer:
         Returns:
             SenderType enum value
         """
-        # Check for service indicators in domain
-        service_indicators = ["noreply", "no-reply", "notification"]
+        # Check for service indicators in email or domain
+        service_indicators = ["noreply", "no-reply", "donotreply", "notification", "notify", "alert"]
+        email_lower = sender.email.lower()
         domain_lower = sender.domain.lower()
-        if any(indicator in domain_lower for indicator in service_indicators):
-            logger.debug(f"Classified {sender.email} as SERVICE (domain: {sender.domain})")
+        if any(indicator in email_lower or indicator in domain_lower for indicator in service_indicators):
+            logger.debug(f"Classified {sender.email} as SERVICE (email/domain contains service indicator)")
             return SenderType.SERVICE
 
         # Combine all sample subjects for keyword analysis
         all_subjects_text = " ".join(sender.sample_subjects).lower()
 
-        # Check for marketing indicators
-        marketing_keywords = ["unsubscribe", "promotional", "offer"]
+        # Check for marketing indicators (requires >10 emails)
+        marketing_keywords = ["unsubscribe", "promotional", "offer", "discount", "sale", "promotion"]
         if sender.frequency_count > 10:
             if any(keyword in all_subjects_text for keyword in marketing_keywords):
                 logger.debug(

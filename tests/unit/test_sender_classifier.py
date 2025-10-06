@@ -4,12 +4,14 @@ Unit tests for sender classification logic.
 Tests the classify_sender_type method from sender_analyzer with
 various sender patterns and domains.
 """
-import pytest
-from src.analyzers.sender_analyzer import SenderAnalyzer
-from src.models.sender import Sender, SenderType
-from src.models.email import Email
-from src.models.corpus import Corpus, CorpusMetadata
 from datetime import datetime
+
+import pytest
+
+from src.analyzers.sender_analyzer import SenderAnalyzer
+from src.models.corpus import Corpus, CorpusMetadata
+from src.models.email import Email
+from src.models.sender import Sender, SenderType
 
 
 class TestSenderClassifier:
@@ -254,8 +256,8 @@ class TestSenderClassifier:
             extraction_metadata=CorpusMetadata(
                 extraction_date=datetime.now(),
                 total_emails=3,
-                source_email="user@example.com",
-                extraction_duration_seconds=1.0
+                source="M365",
+                user_email="user@example.com"
             ),
             emails=emails
         )

@@ -4,7 +4,6 @@ Unit tests for confidence score calculation.
 Tests the calculate_confidence function with various category
 properties and edge cases.
 """
-import pytest
 from src.generators.confidence_scorer import calculate_confidence
 from src.models.category import Category, CategorySource
 

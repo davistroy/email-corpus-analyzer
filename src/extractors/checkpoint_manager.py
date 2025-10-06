@@ -4,13 +4,12 @@ Checkpoint manager for resumable email extraction.
 Per FR-010, saves checkpoint every N emails to allow resumption
 of interrupted extractions.
 """
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
+from src.utils.file_manager import load_json, save_json
 from src.utils.logger import get_logger
-from src.utils.file_manager import save_json, load_json
+from src.utils.paths import PathConfig
 
 logger = get_logger(__name__)
 
@@ -20,19 +19,22 @@ class CheckpointManager:
 
     def __init__(
         self,
-        checkpoint_dir: Path | str = "outputs",
+        checkpoint_path: Path | str | None = None,
         checkpoint_interval: int = 100
     ):
         """
         Initialize checkpoint manager.
 
         Args:
-            checkpoint_dir: Directory for checkpoint files
+            checkpoint_path: Custom path for checkpoint file (uses PathConfig if None)
             checkpoint_interval: Save checkpoint every N emails
         """
-        self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_interval = checkpoint_interval
-        self.checkpoint_file = self.checkpoint_dir / "extraction_checkpoint.json"
+
+        if checkpoint_path is None:
+            self.checkpoint_file = PathConfig.get_checkpoint_path()
+        else:
+            self.checkpoint_file = Path(checkpoint_path)
 
     def save_checkpoint(
         self,
@@ -59,7 +61,7 @@ class CheckpointManager:
         save_json(checkpoint_data, self.checkpoint_file)
         logger.info(f"Checkpoint saved: {emails_processed} emails processed")
 
-    def load_checkpoint(self) -> Optional[dict]:
+    def load_checkpoint(self) -> dict | None:
         """
         Load existing checkpoint.
 
@@ -70,6 +72,14 @@ class CheckpointManager:
             logger.debug("No checkpoint file found")
             return None
 
+        # Check if path is a directory instead of a file
+        if self.checkpoint_file.is_dir():
+            logger.warning(
+                f"Checkpoint path is a directory, not a file: {self.checkpoint_file}. "
+                f"Starting fresh extraction."
+            )
+            return None
+
         try:
             checkpoint_data = load_json(self.checkpoint_file)
             logger.info(
@@ -78,7 +88,7 @@ class CheckpointManager:
             )
             return checkpoint_data
         except Exception as e:
-            logger.error(f"Failed to load checkpoint: {e}")
+            logger.warning(f"Failed to load checkpoint: {e}. Starting fresh extraction.")
             return None
 
     def should_checkpoint(self, current_count: int) -> bool:
@@ -96,6 +106,11 @@ class CheckpointManager:
     def clear_checkpoint(self) -> None:
         """Delete checkpoint file after successful completion."""
         if self.checkpoint_file.exists():
+            # Ensure we're not trying to delete a directory
+            if self.checkpoint_file.is_dir():
+                logger.error(f"Cannot clear checkpoint: {self.checkpoint_file} is a directory, not a file")
+                return
+
             self.checkpoint_file.unlink()
             logger.info("Checkpoint cleared")
 

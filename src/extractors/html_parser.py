@@ -5,6 +5,7 @@ Per research.md lines 166-185, uses BeautifulSoup with lxml parser
 and fallback to html.parser for robust handling of malformed HTML.
 """
 from bs4 import BeautifulSoup
+
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,5 +46,9 @@ def extract_plain_text(html_content: str) -> str:
 
     # Get text with separator and strip whitespace
     text = soup.get_text(separator=" ", strip=True)
+
+    # Collapse multiple spaces to single space
+    import re
+    text = re.sub(r'\s+', ' ', text)
 
     return text

@@ -7,10 +7,10 @@ Per analyzer_contract.md lines 104-149.
 import logging
 import re
 from collections import Counter
-from typing import Callable
+from collections.abc import Callable
 
-from ..models.corpus import Corpus
 from ..models.analysis_results import SubjectPatterns
+from ..models.corpus import Corpus
 
 logger = logging.getLogger(__name__)
 

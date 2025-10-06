@@ -3,6 +3,9 @@ File manager utility for JSON save/load with proper permissions.
 
 Per Constitution Principle IV (Privacy & Data Security),
 all output files have 0600 permissions (user read/write only).
+
+Default output directory: ~/data/outputs
+Override using PathConfig.set_output_dir() or CLI arguments.
 """
 import json
 import os
@@ -10,16 +13,17 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.logger import get_logger
+from src.utils.paths import PathConfig
 
 logger = get_logger(__name__)
 
 
-def ensure_output_dir(output_dir: Path | str = "outputs") -> Path:
+def ensure_output_dir(output_dir: Path | str | None = None) -> Path:
     """
     Ensure output directory exists with secure permissions.
 
     Args:
-        output_dir: Path to output directory (default: "outputs")
+        output_dir: Path to output directory (default: uses PathConfig)
 
     Returns:
         Path object for output directory
@@ -27,6 +31,11 @@ def ensure_output_dir(output_dir: Path | str = "outputs") -> Path:
     Raises:
         OSError: If directory creation fails
     """
+    if output_dir is None:
+        # Use centralized configuration
+        return PathConfig.ensure_output_dir_exists()
+
+    # Custom path provided - create it with secure permissions
     path = Path(output_dir)
     path.mkdir(parents=True, exist_ok=True)
 
@@ -89,7 +98,7 @@ def load_json(file_path: Path | str) -> Any:
     if not path.exists():
         raise FileNotFoundError(f"JSON file not found: {path}")
 
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, encoding='utf-8') as f:
         data = json.load(f)
 
     logger.debug(f"Loaded JSON from {path}")

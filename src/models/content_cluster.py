@@ -3,7 +3,7 @@ ContentCluster data model.
 
 Per data-model.md lines 280-292.
 """
-from typing import List, Tuple
+
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +21,6 @@ class ContentCluster(BaseModel):
     cluster_id: int = Field(..., ge=0)
     size: int = Field(..., ge=1)
     percentage: float = Field(..., ge=0, le=100)
-    representative_samples: List[RepresentativeSample] = Field(..., max_length=5)
-    common_domains: List[Tuple[str, int]] = Field(default_factory=list)
-    email_ids: List[str] = Field(default_factory=list)
+    representative_samples: list[RepresentativeSample] = Field(..., max_length=5)
+    common_domains: list[tuple[str, int]] = Field(default_factory=list)
+    email_ids: list[str] = Field(default_factory=list)

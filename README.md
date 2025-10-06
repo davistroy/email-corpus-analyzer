@@ -2,6 +2,58 @@
 
 A Python-based system for extracting emails from Hotmail/Outlook via M365 MCP, analyzing patterns, and generating AI-assisted category suggestions.
 
+## 🚀 Quick Start - Command Line Usage
+
+### Installation
+```bash
+# Clone and navigate to the project
+cd /path/to/email-processor/initial-learning
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Basic Commands
+
+**Default output location:** `~/data/outputs` (created automatically with secure permissions)
+
+```bash
+# Run complete pipeline (extract → analyze → suggest → review)
+python -m src.cli pipeline --user-email your.email@hotmail.com
+
+# Or run individual steps:
+python -m src.cli extract --user-email your.email@hotmail.com  # Extract emails
+python -m src.cli analyze                                       # Analyze patterns
+python -m src.cli suggest                                       # Generate categories
+python -m src.cli review                                        # Review interactively
+
+# Use custom output directory
+python -m src.cli --output-dir ~/my-emails pipeline --user-email your.email@hotmail.com
+
+# Get help
+python -m src.cli --help
+python -m src.cli <command> --help  # For specific command help
+```
+
+### Output Files
+
+| File | Description |
+|------|-------------|
+| `email_corpus.json` | Extracted email data |
+| `corpus_analysis_results.json` | Analysis results (5 analyzers) |
+| `category_suggestions.json` | AI-generated category suggestions |
+| `category_suggestions_report.md` | Human-readable report |
+| `approved_categories.json` | Final approved categories |
+
+**For complete usage documentation, see [USAGE.md](USAGE.md) and [QUICK_REFERENCE.md](QUICK_REFERENCE.md)**
+
+---
+
 ## 🎯 Project Status
 
 **Current Phase**: Initial Implementation (Phase 3.1-3.3 Complete)
@@ -116,39 +168,20 @@ This project follows the **Email Corpus Analysis Constitution v1.0.0**:
 6. ✅ **Error Resilience** - Debug logging, graceful degradation
 7. ✅ **Performance Transparency** - Progress indicators for ops >10 seconds
 
-## 🚀 Quick Start
+## 🛠️ Development
 
 ### Prerequisites
 - Python 3.10 or higher
 - M365 MCP server configured and authenticated (for email extraction)
 
-### Installation
+### Testing & Quality
 
 ```bash
-# Clone the repository
-cd /path/to/email-processor/initial-learning
-
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Linux/Mac
-# or
-venv\Scripts\activate  # On Windows
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Development
-
-```bash
-# Run tests (when implemented)
+# Run tests
 pytest
 
 # Run with coverage
 pytest --cov=src --cov-report=html
-
-# Type checking (future)
-mypy src/
 
 # Linting
 ruff check src/

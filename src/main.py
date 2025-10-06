@@ -12,23 +12,22 @@ Commands:
   pipeline  - Run complete pipeline (extract → analyze → suggest → review → cleanup)
 """
 import argparse
-import sys
-from pathlib import Path
-from typing import Optional
-
-from src.extractors.m365_extractor import EmailExtractor
-from src.analyzers import run_full_analysis
-from src.generators.category_generator import CategoryGenerator
-from src.ui.category_review import review_categories, cleanup_intermediate_files
-from src.utils.logger import get_logger, setup_logger
-from src.utils.file_manager import ensure_output_dir, save_json, load_json
-from src.utils.progress import ProgressTracker
-from src.models.corpus import Corpus
-from src.models.analysis_results import AnalysisResults
-from src.models.category import Category
 
 # Setup root logger
 import logging
+import sys
+from pathlib import Path
+
+from src.analyzers import run_full_analysis
+from src.extractors.m365_extractor import EmailExtractor
+from src.generators.category_generator import CategoryGenerator
+from src.models.analysis_results import AnalysisResults
+from src.models.category import Category
+from src.models.corpus import Corpus
+from src.ui.category_review import cleanup_intermediate_files, review_categories
+from src.utils.file_manager import ensure_output_dir, load_json, save_json
+from src.utils.logger import setup_logger
+
 logger = setup_logger(
     __name__,
     log_file=Path("outputs/errors.log"),
@@ -265,12 +264,14 @@ class EmailProcessorCLI:
         try:
             # Load suggestions
             suggestions_path = self.output_dir / "category_suggestions.json"
+            suggestions_data = load_json(str(suggestions_path))
+            categories = [Category(**cat) for cat in suggestions_data]
 
-            # Run interactive review (returns approval data dict)
-            approval_data = review_categories(
-                category_suggestions_path=str(suggestions_path),
-                output_dir=str(self.output_dir)
-            )
+            # Determine approved output path
+            approved_path = self.output_dir / "approved_categories.json"
+
+            # Run interactive review
+            approved = review_categories(categories, output_path=approved_path)
 
             # Optional cleanup
             if enable_cleanup:

@@ -4,14 +4,12 @@ Category Generator implementation.
 Per contracts/generator_contract.md, generates category suggestions from
 analysis results using clusters, senders, and templates.
 """
-from typing import List
-from collections import defaultdict
 
+from src.generators.confidence_scorer import calculate_confidence
+from src.generators.template_matcher import match_templates
 from src.models.analysis_results import AnalysisResults
 from src.models.category import Category, CategorySource
-from src.models.category_template import PREDEFINED_TEMPLATES, CategoryTemplate
-from src.generators.template_matcher import match_templates
-from src.generators.confidence_scorer import calculate_confidence
+from src.models.category_template import PREDEFINED_TEMPLATES
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +23,7 @@ class CategoryGenerator:
         analysis_results: AnalysisResults,
         min_cluster_percentage: float = 5.0,
         min_sender_count: int = 20
-    ) -> List[Category]:
+    ) -> list[Category]:
         """
         Generate category suggestions from analysis.
 
@@ -38,7 +36,7 @@ class CategoryGenerator:
             List of Category objects sorted by confidence (highest first)
         """
         logger.info("Generating category suggestions...")
-        all_categories: List[Category] = []
+        all_categories: list[Category] = []
         total_emails = analysis_results.volume_stats.total_emails
 
         # FR-022: Generate from content clusters
@@ -50,7 +48,7 @@ class CategoryGenerator:
                 logger.debug(f"Created cluster-based category: {category.category_name} ({cluster.percentage:.1f}%)")
 
         # FR-023: Generate from high-volume senders
-        logger.debug(f"Generating categories from top senders")
+        logger.debug("Generating categories from top senders")
         for sender in analysis_results.sender_analysis.top_senders[:20]:  # Top 20 only
             if sender.frequency_count >= min_sender_count:
                 category = self._category_from_sender(sender, total_emails)
@@ -121,7 +119,7 @@ class CategoryGenerator:
             example_email_ids=sender.email_ids[:10]
         )
 
-    def _generate_cluster_name(self, subjects: List[str], domains: List[tuple]) -> str:
+    def _generate_cluster_name(self, subjects: list[str], domains: list[tuple]) -> str:
         """Generate descriptive name for cluster."""
         # Try to use common domain
         if domains:
@@ -136,7 +134,7 @@ class CategoryGenerator:
 
         return "Miscellaneous"
 
-    def _merge_similar(self, categories: List[Category]) -> List[Category]:
+    def _merge_similar(self, categories: list[Category]) -> list[Category]:
         """Merge categories with similar names and overlapping emails."""
         merged = []
         merged_indices = set()
@@ -186,7 +184,7 @@ class CategoryGenerator:
         union = len(set1 | set2)
         return intersection / union if union > 0 else 0.0
 
-    def _merge_categories(self, categories: List[Category]) -> Category:
+    def _merge_categories(self, categories: list[Category]) -> Category:
         """Merge multiple categories into one."""
         # Keep the one with highest confidence
         categories.sort(key=lambda c: c.confidence, reverse=True)
@@ -201,7 +199,7 @@ class CategoryGenerator:
         primary.example_email_ids = list(all_email_ids)[:10]
         return primary
 
-    def apply_templates(self, analysis_results: AnalysisResults) -> List[Category]:
+    def apply_templates(self, analysis_results: AnalysisResults) -> list[Category]:
         """Apply predefined category templates."""
         return match_templates(analysis_results, PREDEFINED_TEMPLATES)
 
@@ -209,7 +207,7 @@ class CategoryGenerator:
         """Calculate confidence score for category."""
         return calculate_confidence(category, total_emails)
 
-    def generate_report(self, categories: List[Category]) -> str:
+    def generate_report(self, categories: list[Category]) -> str:
         """
         Generate human-readable markdown report.
 

@@ -5,20 +5,18 @@ Implements FR-024: Template Application
 Per generator_contract.md lines 32-45 and 79-82.
 """
 import logging
-from typing import List
-from collections import defaultdict
 
-from src.models.category_template import CategoryTemplate, PREDEFINED_TEMPLATES
-from src.models.category import Category, CategorySource
 from src.models.analysis_results import AnalysisResults
+from src.models.category import Category, CategorySource
+from src.models.category_template import PREDEFINED_TEMPLATES, CategoryTemplate
 
 logger = logging.getLogger(__name__)
 
 
 def match_templates(
     analysis_results: AnalysisResults,
-    templates: List[CategoryTemplate] = None
-) -> List[Category]:
+    templates: list[CategoryTemplate] = None
+) -> list[Category]:
     """
     Apply predefined category templates to analysis results.
 
@@ -102,7 +100,7 @@ def match_templates(
 
 def _match_by_keywords(
     analysis_results: AnalysisResults,
-    keywords: List[str]
+    keywords: list[str]
 ) -> set:
     """
     Match emails by keywords in subject lines and cluster samples.
@@ -151,7 +149,7 @@ def _match_by_keywords(
 
 def _match_by_domains(
     analysis_results: AnalysisResults,
-    domains: List[str]
+    domains: list[str]
 ) -> set:
     """
     Match emails by sender domains.

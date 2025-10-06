@@ -5,12 +5,11 @@ Implements volume statistics analysis per analyzer_contract.md lines 282-316.
 Contract compliance: FR-019
 """
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable
 
-from ..models.corpus import Corpus
 from ..models.analysis_results import VolumeStats
-
+from ..models.corpus import Corpus
 
 logger = logging.getLogger(__name__)
 

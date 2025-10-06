@@ -8,7 +8,6 @@ import logging
 
 from ..models.category import Category, CategorySource
 
-
 logger = logging.getLogger(__name__)
 
 

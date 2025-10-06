@@ -5,16 +5,16 @@ Performs semantic clustering of email corpus using sentence transformers and KMe
 Per analyzer_contract.md lines 153-221 and research.md lines 15-68.
 """
 import logging
-from typing import List, Callable, Optional
 from collections import Counter
+from collections.abc import Callable
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_distances
 
-from ..models.corpus import Corpus
 from ..models.content_cluster import ContentCluster, RepresentativeSample
+from ..models.corpus import Corpus
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +33,23 @@ class SemanticAnalyzer:
         Args:
             model_name: Hugging Face model identifier
         """
-        logger.info(f"Loading sentence transformer model: {model_name}")
-        self.model = SentenceTransformer(model_name)
-        logger.info(f"Model loaded successfully: {model_name}")
+        self.model_name = model_name
+        self.model = None
+        logger.debug("SemanticAnalyzer initialized (model will load on first use)")
+
+    def _ensure_model_loaded(self):
+        """Lazy load the sentence transformer model."""
+        if self.model is None:
+            logger.info(f"Loading sentence transformer model: {self.model_name}")
+            self.model = SentenceTransformer(self.model_name)
+            logger.info(f"Model loaded successfully: {self.model_name}")
 
     def analyze(
         self,
         corpus: Corpus,
         num_clusters: int = 10,
-        progress_callback: Optional[Callable[[int, int], None]] = None
-    ) -> List[ContentCluster]:
+        progress_callback: Callable[[int, int], None] | None = None
+    ) -> list[ContentCluster]:
         """
         Perform semantic clustering of email corpus.
 
@@ -81,6 +88,9 @@ class SemanticAnalyzer:
 
         total_emails = len(corpus.emails)
         logger.info(f"Starting semantic analysis of {total_emails} emails into {effective_clusters} clusters")
+
+        # Ensure model is loaded before analysis
+        self._ensure_model_loaded()
 
         # Step 1: Generate embeddings (FR-015)
         # Combine subject + first 500 chars of body using Email.combined_text property

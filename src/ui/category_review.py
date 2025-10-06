@@ -4,14 +4,13 @@ Interactive category review CLI module.
 Per quickstart.md Scenario 4 (lines 172-243), FR-032, and Clarification Q5.
 Allows users to review, approve, modify, merge, or delete suggested categories.
 """
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-import uuid
 
 from src.models.category import Category, CategorySource
 from src.models.email import Email
-from src.utils.file_manager import load_json, save_json, ensure_output_dir
+from src.utils.file_manager import load_json, save_json
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +19,7 @@ logger = get_logger(__name__)
 class CategoryReview:
     """Interactive CLI for reviewing and approving category suggestions."""
 
-    def __init__(self, categories: List[Category], email_lookup: Dict[str, Email] = None):
+    def __init__(self, categories: list[Category], email_lookup: dict[str, Email] = None):
         """
         Initialize category review.
 
@@ -30,14 +29,14 @@ class CategoryReview:
         """
         self.categories = categories
         self.email_lookup = email_lookup or {}
-        self.approved: List[Category] = []
+        self.approved: list[Category] = []
         self.modified_count = 0
         self.merged_count = 0
         self.deleted_count = 0
         self.custom_count = 0
-        self.skipped: List[Category] = []
+        self.skipped: list[Category] = []
 
-    def run_interactive_review(self) -> List[Category]:
+    def run_interactive_review(self) -> list[Category]:
         """
         Run interactive review session.
 
@@ -151,7 +150,7 @@ class CategoryReview:
                 print()
                 return 'accept'
 
-            elif choice == 'R':
+            if choice == 'R':
                 new_name = input("Enter new category name: ").strip()
                 if new_name:
                     old_name = category.category_name
@@ -163,9 +162,8 @@ class CategoryReview:
                     logger.info(f"Category renamed: '{old_name}' -> '{new_name}'")
                     print()
                     return 'rename'
-                else:
-                    print("Invalid name. Category not modified.")
-                    logger.debug("Invalid category name provided for rename")
+                print("Invalid name. Category not modified.")
+                logger.debug("Invalid category name provided for rename")
 
             elif choice == 'M':
                 print("\nAvailable categories to merge with:")
@@ -204,8 +202,7 @@ class CategoryReview:
                     logger.info(f"Category deleted: {category.category_name}")
                     print()
                     return 'delete'
-                else:
-                    logger.debug(f"Category deletion cancelled for: {category.category_name}")
+                logger.debug(f"Category deletion cancelled for: {category.category_name}")
 
             elif choice == 'S':
                 if not is_retry:
@@ -214,12 +211,11 @@ class CategoryReview:
                     logger.debug(f"Category skipped: {category.category_name}")
                     print()
                     return 'skip'
-                else:
-                    # On retry, skip means we'll auto-accept later
-                    print(f"⊙ Category '{category.category_name}' skipped (will auto-accept)")
-                    logger.debug(f"Category skipped on retry (will auto-accept): {category.category_name}")
-                    print()
-                    return 'skip'
+                # On retry, skip means we'll auto-accept later
+                print(f"⊙ Category '{category.category_name}' skipped (will auto-accept)")
+                logger.debug(f"Category skipped on retry (will auto-accept): {category.category_name}")
+                print()
+                return 'skip'
 
             else:
                 print("Invalid choice. Please enter A, R, M, D, or S.")
@@ -293,9 +289,9 @@ class CategoryReview:
 
 
 def review_categories(
-    category_suggestions_path: str,
-    output_dir: str = "outputs"
-) -> dict:
+    categories: list[Category],
+    output_path: Path | None = None
+) -> list[Category]:
     """
     Interactive review of suggested categories.
 
@@ -303,31 +299,22 @@ def review_categories(
     - Accept, Rename, Merge, Delete, or Skip categories
     - Re-presents skipped categories at end (per Clarification Q5)
     - Add custom categories
-    - Saves approved categories to approved_categories.json
 
     Args:
-        category_suggestions_path: Path to category_suggestions.json
-        output_dir: Output directory for approved_categories.json (default: "outputs")
+        categories: List of Category objects to review
+        output_path: Optional path to save approved categories (if None, no save)
 
     Returns:
-        Dictionary containing approved categories data with:
-        - approval_date: ISO timestamp
-        - total_categories: Count of approved categories
-        - processing_stats: Dict with approved, modified, merged, deleted, custom counts
-        - categories: List of approved Category objects as dicts
+        List of approved Category objects
 
     Raises:
-        FileNotFoundError: If category_suggestions.json not found
-        ValueError: If suggestions data is invalid
+        ValueError: If categories data is invalid
     """
     logger.info("Starting interactive category review")
 
-    # Load category suggestions
-    suggestions_data = load_json(category_suggestions_path)
-    categories = [Category(**cat) for cat in suggestions_data.get("categories", [])]
-
     # Load email corpus for sample display
-    corpus_path = Path(output_dir) / "email_corpus.json"
+    from src.utils.paths import PathConfig
+    corpus_path = PathConfig.get_corpus_path()
     email_lookup = {}
     if corpus_path.exists():
         corpus_data = load_json(corpus_path)
@@ -342,16 +329,16 @@ def review_categories(
         if not category.category_id or category.category_id.startswith("temp_") or category.category_id.startswith("custom_"):
             category.category_id = f"cat_{uuid.uuid4().hex[:12]}"
 
-    # Save approved categories
-    output_path = Path(output_dir) / "approved_categories.json"
-    approval_data = reviewer.save_approved_categories(output_path)
+    # Save approved categories if output path provided
+    if output_path:
+        reviewer.save_approved_categories(output_path)
+        print(f"\nSaved to: {output_path}")
 
-    print(f"\nReview complete!")
+    print("\nReview complete!")
     print(f"Approved {len(approved)} categories")
-    print(f"Saved to: {output_path}")
     logger.info(f"Category review complete. Approved {len(approved)} categories")
 
-    return approval_data
+    return approved
 
 
 def cleanup_intermediate_files(output_dir: str = "outputs") -> None:
@@ -425,6 +412,6 @@ def cleanup_intermediate_files(output_dir: str = "outputs") -> None:
             print(f"Error deleting {file_path}: {e}")
             logger.error(f"Failed to delete {file_path}: {e}")
 
-    print(f"\nCleanup complete!")
+    print("\nCleanup complete!")
     print(f"Kept: {', '.join(keep_files)}")
     logger.info(f"Cleanup complete. Deleted {deleted_count} intermediate files")

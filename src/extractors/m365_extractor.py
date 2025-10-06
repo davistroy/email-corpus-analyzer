@@ -5,15 +5,15 @@ Per contracts/extractor_contract.md, extracts emails from M365 MCP server
 with pagination, retry logic, and checkpoint support.
 """
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, List, Optional
 
-from src.models.email import Email
-from src.models.corpus import Corpus, CorpusMetadata
-from src.extractors.html_parser import extract_plain_text
 from src.extractors.checkpoint_manager import CheckpointManager
+from src.extractors.html_parser import extract_plain_text
 from src.extractors.m365_mcp_client import M365MCPClient
+from src.models.corpus import Corpus, CorpusMetadata
+from src.models.email import Email
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +32,7 @@ class ExtractionError:
 class ExtractionResult:
     """Result of email extraction operation."""
     corpus: Corpus
-    failed_emails: List[ExtractionError]
+    failed_emails: list[ExtractionError]
     success_count: int
     failure_count: int
     total_attempted: int
@@ -56,10 +56,15 @@ class EmailExtractor:
 
         Args:
             user_email: User's M365 email address
-            checkpoint_dir: Directory for checkpoints
+            checkpoint_dir: Directory for checkpoints (will use extraction_checkpoint.json)
         """
+        from pathlib import Path
+
         self.user_email = user_email
-        self.checkpoint_manager = CheckpointManager(checkpoint_dir)
+
+        # Convert directory to checkpoint file path
+        checkpoint_path = Path(checkpoint_dir) / "extraction_checkpoint.json"
+        self.checkpoint_manager = CheckpointManager(checkpoint_path=checkpoint_path)
         self.mcp_client = M365MCPClient(user_email)
         self.logger = get_logger(__name__)
 
@@ -67,7 +72,7 @@ class EmailExtractor:
         self,
         max_batch_size: int = 500,
         checkpoint_interval: int = 100,
-        progress_callback: Optional[Callable[[int, int], None]] = None
+        progress_callback: Callable[[int, int], None] | None = None
     ) -> ExtractionResult:
         """
         Extract all emails from M365 inbox.
@@ -91,8 +96,8 @@ class EmailExtractor:
         if emails_processed > 0:
             self.logger.info(f"Resuming from checkpoint: {emails_processed} emails already processed")
 
-        failed_emails: List[ExtractionError] = []
-        all_emails: List[Email] = []
+        failed_emails: list[ExtractionError] = []
+        all_emails: list[Email] = []
 
         # Reconstruct emails from checkpoint
         for email_dict in extracted_emails:
@@ -243,7 +248,7 @@ class EmailExtractor:
             self.logger.error(f"Failed to get email count: {e}")
             raise ConnectionError(f"M365 MCP server unreachable: {e}")
 
-    def _fetch_batch(self, start: int, end: int, last_id: str = "") -> List[dict]:
+    def _fetch_batch(self, start: int, end: int, last_id: str = "") -> list[dict]:
         """
         Fetch a batch of emails from M365.
 

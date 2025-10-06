@@ -5,11 +5,12 @@ This module provides a direct extraction interface that uses MCP tools
 when executed by Claude Code. It bypasses the M365MCPClient stub and
 directly invokes MCP tools via Claude's execution context.
 """
-from typing import List, Dict, Any, Optional, Callable
+from collections.abc import Callable
 from datetime import datetime
-from src.models.email import Email
-from src.models.corpus import Corpus, CorpusMetadata
+
 from src.extractors.html_parser import extract_plain_text
+from src.models.corpus import Corpus, CorpusMetadata
+from src.models.email import Email
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,8 +19,8 @@ logger = get_logger(__name__)
 def extract_emails_via_mcp(
     user_email: str,
     batch_size: int = 100,
-    max_emails: Optional[int] = None,
-    progress_callback: Optional[Callable[[int, int], None]] = None
+    max_emails: int | None = None,
+    progress_callback: Callable[[int, int], None] | None = None
 ) -> Corpus:
     """
     Extract emails using Claude Code's M365 MCP integration.
@@ -44,7 +45,7 @@ def extract_emails_via_mcp(
     logger.info(f"Starting email extraction for {user_email}")
     logger.info(f"Batch size: {batch_size}, Max emails: {max_emails or 'all'}")
 
-    all_emails: List[Email] = []
+    all_emails: list[Email] = []
     skip = 0
     extraction_start = datetime.now()
 
@@ -151,9 +152,9 @@ def extract_emails_via_mcp(
     # Create corpus metadata
     metadata = CorpusMetadata(
         extraction_date=extraction_start,
-        source_email=user_email,
         total_emails=len(all_emails),
-        extraction_duration_seconds=extraction_duration
+        source="M365/Hotmail",
+        user_email=user_email
     )
 
     corpus = Corpus(

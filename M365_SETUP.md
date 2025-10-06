@@ -71,7 +71,7 @@ Your Azure AD app registration needs:
 For personal accounts, the MCP server needs to:
 
 1. **Redirect user to Microsoft login** (OAuth 2.0 authorization code flow)
-2. **User logs in** with troy.davis@hotmail.com
+2. **User logs in** with user@hotmail.com
 3. **User grants consent** to Mail.Read permission
 4. **MCP server receives access token**
 5. **Token is used for API calls** to `/me/messages`
@@ -139,7 +139,7 @@ Try this command to verify MCP authentication status:
 **When working correctly:**
 
 1. First run: Browser opens for Microsoft login
-2. You login with troy.davis@hotmail.com
+2. You login with user@hotmail.com
 3. You grant Mail.Read permission
 4. MCP server stores refresh token
 5. Subsequent calls use stored token
@@ -149,7 +149,7 @@ Try this command to verify MCP authentication status:
 
 The MCP server is trying:
 ```
-GET /users/troy.davis@hotmail.com/messages
+GET /users/user@hotmail.com/messages
 → 404 Not Found (personal accounts not accessible via /users endpoint)
 ```
 
@@ -189,7 +189,7 @@ cat > outputs/test_emails.json <<'EOF'
       "sender_email": "deals@store.com",
       "sender_name": "Store Deals",
       "sender_domain": "store.com",
-      "recipient_email": "troy.davis@hotmail.com",
+      "recipient_email": "user@hotmail.com",
       "recipient_name": "Troy Davis",
       "subject": "50% Off Sale Today Only!",
       "body_text": "Amazing deals! Click to shop now. Unsubscribe at bottom.",
@@ -201,7 +201,7 @@ cat > outputs/test_emails.json <<'EOF'
       "sender_email": "noreply@github.com",
       "sender_name": "GitHub",
       "sender_domain": "github.com",
-      "recipient_email": "troy.davis@hotmail.com",
+      "recipient_email": "user@hotmail.com",
       "recipient_name": "Troy Davis",
       "subject": "Security Alert: New SSH Key Added",
       "body_text": "A new SSH key was added to your account.",
@@ -213,7 +213,7 @@ cat > outputs/test_emails.json <<'EOF'
       "sender_email": "friend@gmail.com",
       "sender_name": "Friend Name",
       "sender_domain": "gmail.com",
-      "recipient_email": "troy.davis@hotmail.com",
+      "recipient_email": "user@hotmail.com",
       "recipient_name": "Troy Davis",
       "subject": "Hey, want to grab coffee?",
       "body_text": "Let me know when you're free this week!",

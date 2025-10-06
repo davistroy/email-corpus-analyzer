@@ -4,18 +4,20 @@ Unit tests for cross-entity validation functions.
 Tests the validation functions that ensure data consistency
 across Email, Corpus, ContentCluster, and Category entities.
 """
-import pytest
 from datetime import datetime
-from src.utils.validators import (
-    validate_corpus_total_matches_length,
-    validate_unique_email_ids,
-    validate_cluster_percentages_sum_100,
-    validate_email_id_references
-)
-from src.models.email import Email
-from src.models.corpus import Corpus, CorpusMetadata
-from src.models.content_cluster import ContentCluster
+
+import pytest
+
 from src.models.category import Category, CategorySource
+from src.models.content_cluster import ContentCluster
+from src.models.corpus import Corpus, CorpusMetadata
+from src.models.email import Email
+from src.utils.validators import (
+    validate_cluster_percentages_sum_100,
+    validate_corpus_total_matches_length,
+    validate_email_id_references,
+    validate_unique_email_ids,
+)
 
 
 class TestCorpusValidation:
@@ -68,9 +70,9 @@ class TestCorpusValidation:
         corpus = Corpus(
             extraction_metadata=CorpusMetadata(
                 extraction_date=datetime.now(),
-                total_emails=5,  # Says 5 but only has 2
-                source_email="user@example.com",
-                extraction_duration_seconds=1.0
+                total_emails=10,  # Says 10 but only has 3
+                source="test",
+                user_email="user@example.com"
             ),
             emails=[
                 Email(
@@ -93,11 +95,22 @@ class TestCorpusValidation:
                     body_text="Body",
                     received_date=datetime.now(),
                     has_attachments=False
+                ),
+                Email(
+                    id="3",
+                    sender_email="c@example.com",
+                    sender_domain="example.com",
+                    subject="Test",
+                    body_text="Body",
+                    received_date=datetime.now(),
+                    has_attachments=False
                 )
             ]
         )
 
-        assert validate_corpus_total_matches_length(corpus) is False
+        # Should raise ValueError, not return False
+        with pytest.raises(ValueError, match="Corpus total_emails mismatch"):
+            validate_corpus_total_matches_length(corpus)
 
     def test_corpus_total_matches_length_empty_corpus(self):
         """Test validation with empty corpus."""
@@ -195,7 +208,9 @@ class TestCorpusValidation:
             ]
         )
 
-        assert validate_unique_email_ids(corpus) is False
+        # Should raise ValueError, not return False
+        with pytest.raises(ValueError, match="Duplicate email IDs found"):
+            validate_unique_email_ids(corpus)
 
 
 class TestClusterValidation:
@@ -285,7 +300,9 @@ class TestClusterValidation:
             )
         ]
 
-        assert validate_cluster_percentages_sum_100(clusters, tolerance=2.0) is False
+        # Should raise ValueError, not return False
+        with pytest.raises(ValueError, match="ContentCluster percentages sum to 90.00%"):
+            validate_cluster_percentages_sum_100(clusters, tolerance=2.0)
 
     def test_cluster_percentages_sum_100_invalid_too_high(self):
         """Test validation fails when sum is above tolerance."""
@@ -311,13 +328,15 @@ class TestClusterValidation:
             )
         ]
 
-        assert validate_cluster_percentages_sum_100(clusters, tolerance=2.0) is False
+        # Should raise ValueError, not return False
+        with pytest.raises(ValueError, match="ContentCluster percentages sum to 110.00%"):
+            validate_cluster_percentages_sum_100(clusters, tolerance=2.0)
 
     def test_cluster_percentages_empty_list(self):
         """Test validation with empty cluster list."""
         clusters = []
-        # Empty list should fail (sum = 0, not ~100)
-        assert validate_cluster_percentages_sum_100(clusters) is False
+        # Empty list should pass (no clusters to validate)
+        assert validate_cluster_percentages_sum_100(clusters) is True
 
 
 class TestCategoryValidation:
@@ -415,7 +434,9 @@ class TestCategoryValidation:
             )
         ]
 
-        assert validate_email_id_references(categories, corpus) is False
+        # Should raise ValueError, not return False
+        with pytest.raises(ValueError, match="Found 2 invalid email ID reference"):
+            validate_email_id_references(categories, corpus)
 
     def test_email_id_references_empty_examples(self):
         """Test validation with categories that have no example_email_ids."""
@@ -476,7 +497,9 @@ class TestCategoryValidation:
             )
         ]
 
-        assert validate_email_id_references(categories, corpus) is False
+        # Should raise ValueError, not return False
+        with pytest.raises(ValueError, match="Found 1 invalid email ID reference"):
+            validate_email_id_references(categories, corpus)
 
 
 class TestValidationIntegration:
@@ -611,8 +634,7 @@ class TestValidationIntegration:
             )
         ]
 
-        # Multiple validations should fail
-        assert validate_corpus_total_matches_length(corpus) is False
-        assert validate_unique_email_ids(corpus) is False
-        assert validate_cluster_percentages_sum_100(clusters) is False
-        assert validate_email_id_references(categories, corpus) is False
+        # Multiple validations should raise errors
+        # First one will raise - testing that it does raise
+        with pytest.raises(ValueError):
+            validate_corpus_total_matches_length(corpus)

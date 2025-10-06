@@ -4,7 +4,8 @@ Progress tracking utility module.
 Per Constitution Principle VII (Performance Transparency),
 provides progress indicators for operations >10 seconds.
 """
-from typing import Callable, Optional
+from collections.abc import Callable
+
 from tqdm import tqdm
 
 
@@ -32,7 +33,7 @@ class ProgressTracker:
         self.unit = unit
         self.current = 0
         self.show_bar = show_bar
-        self._bar: Optional[tqdm] = None
+        self._bar: tqdm | None = None
 
         if show_bar:
             self._bar = tqdm(

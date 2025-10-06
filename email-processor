@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""
+Email Processor CLI Entry Point
+
+Convenience wrapper for src/cli.py that can be symlinked or added to PATH.
+"""
+import sys
+from pathlib import Path
+
+# Add src directory to Python path
+src_dir = Path(__file__).parent / "src"
+sys.path.insert(0, str(src_dir))
+
+from cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())

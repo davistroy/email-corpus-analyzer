@@ -4,6 +4,7 @@ Email data model.
 Per data-model.md lines 75-91.
 """
 from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
 
 

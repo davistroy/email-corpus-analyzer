@@ -4,7 +4,7 @@ Category data model.
 Per data-model.md lines 320-355.
 """
 from enum import Enum
-from typing import List
+
 from pydantic import BaseModel, Field
 
 
@@ -29,5 +29,5 @@ class Category(BaseModel):
     source: CategorySource
     source_id: str | None = None
     user_modified: bool = False
-    distinguishing_features: List[str] = Field(default_factory=list)
-    example_email_ids: List[str] = Field(default_factory=list, max_length=10)
+    distinguishing_features: list[str] = Field(default_factory=list)
+    example_email_ids: list[str] = Field(default_factory=list, max_length=10)

@@ -7,11 +7,10 @@ Per data-model.md lines 416-425, implements validators for cross-entity constrai
 3. Category.example_email_ids must reference valid Email.id values
 4. Sum of all ContentCluster.percentage values should ≈ 100% (within rounding)
 """
-from typing import List
 
-from src.models.corpus import Corpus
 from src.models.category import Category
 from src.models.content_cluster import ContentCluster
+from src.models.corpus import Corpus
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -92,7 +91,7 @@ def validate_unique_email_ids(corpus: Corpus) -> bool:
 
 
 def validate_cluster_percentages_sum_100(
-    clusters: List[ContentCluster],
+    clusters: list[ContentCluster],
     tolerance: float = 2.0
 ) -> bool:
     """
@@ -138,7 +137,7 @@ def validate_cluster_percentages_sum_100(
 
 
 def validate_email_id_references(
-    categories: List[Category],
+    categories: list[Category],
     corpus: Corpus
 ) -> bool:
     """

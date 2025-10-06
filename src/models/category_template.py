@@ -3,7 +3,7 @@ CategoryTemplate data model.
 
 Per data-model.md lines 389-411.
 """
-from typing import List
+
 from pydantic import BaseModel, Field
 
 
@@ -11,8 +11,8 @@ class CategoryTemplate(BaseModel):
     """Predefined category pattern for matching."""
 
     name: str = Field(..., min_length=1)
-    keywords: List[str] = Field(..., min_length=1)
-    domains: List[str] = Field(default_factory=list)
+    keywords: list[str] = Field(..., min_length=1)
+    domains: list[str] = Field(default_factory=list)
     description: str
 
 

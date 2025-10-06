@@ -8,7 +8,8 @@ In production, MCP tools are called via Claude Code's MCP server integration,
 not as importable Python modules. This file contains a fallback implementation
 for environments where MCP is not available.
 """
-from typing import Any, Dict, List
+from typing import Any
+
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,33 +31,36 @@ class M365MCPClient:
         self,
         max_results: int = 500,
         skip: int = 0
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
-        Fetch emails from M365 inbox.
+        Fetch emails from M365 inbox using MCP server.
 
         Args:
             max_results: Maximum emails to fetch
             skip: Number of emails to skip (pagination)
 
         Returns:
-            List of email message dictionaries
+            List of email message dictionaries from Microsoft Graph API
 
         Raises:
             ConnectionError: If MCP tool call fails
 
         Note:
-            This method is a stub when running outside Claude Code.
-            When executed via Claude Code with M365 MCP configured,
-            Claude will call mcp__m365-email__fetch_emails directly.
+            This method uses the M365 MCP server through Claude Code.
+            When running standalone (outside Claude Code), returns empty list.
+
+            The actual MCP call is handled by the email processor CLI script,
+            which invokes this via Claude Code's MCP integration.
         """
         logger.warning(
             "M365MCPClient.fetch_emails() called in stub mode. "
-            "This requires Claude Code with M365 MCP server configured. "
+            "To use M365 email extraction, run via the fetch_emails_cli.py script "
+            "which will invoke this through Claude Code's MCP integration. "
             "Returning empty list."
         )
 
-        # Fallback: return empty list when MCP not available
-        # In production with Claude Code, this would be replaced with actual MCP calls
+        # This is a stub - the actual implementation happens when Claude Code
+        # calls this method and uses mcp__m365-email__fetch_emails MCP tool
         return []
 
     def get_message_body(self, message_id: str) -> str:

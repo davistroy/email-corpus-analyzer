@@ -4,7 +4,7 @@ Sender data model.
 Per data-model.md lines 174-205.
 """
 from enum import Enum
-from typing import List
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -25,5 +25,5 @@ class Sender(BaseModel):
     domain: str
     type: SenderType
     frequency_count: int = Field(..., ge=1)
-    sample_subjects: List[str] = Field(default_factory=list, max_length=5)
-    email_ids: List[str] = Field(default_factory=list)
+    sample_subjects: list[str] = Field(default_factory=list, max_length=5)
+    email_ids: list[str] = Field(default_factory=list)

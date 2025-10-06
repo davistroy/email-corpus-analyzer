@@ -5,6 +5,7 @@ Tests the extract_plain_text function with various HTML scenarios
 including malformed HTML, scripts, styles, and edge cases.
 """
 import pytest
+
 from src.extractors.html_parser import extract_plain_text
 
 

@@ -4,7 +4,7 @@ Corpus data model.
 Per data-model.md lines 132-150.
 """
 from datetime import datetime
-from typing import List
+
 from pydantic import BaseModel, EmailStr, Field
 
 from .email import Email
@@ -23,7 +23,7 @@ class Corpus(BaseModel):
     """Complete collection of extracted emails with metadata."""
 
     extraction_metadata: CorpusMetadata
-    emails: List[Email] = Field(default_factory=list)
+    emails: list[Email] = Field(default_factory=list)
 
     @property
     def date_range(self) -> tuple[datetime, datetime]:
