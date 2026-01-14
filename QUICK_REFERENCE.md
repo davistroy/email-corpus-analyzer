@@ -1,186 +1,208 @@
-# Email Processor - Quick Reference
+# Email Corpus Analyzer - Quick Reference
 
-## Installation & Setup
+## Installation
 
 ```bash
-# Clone and setup
-cd /home/davistroy/dev/email-processor/initial-learning
-source venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/davistroy/email-corpus-analyzer.git
+cd email-corpus-analyzer
+python3 -m venv venv && source venv/bin/activate
+pip install -e .
 ```
-
-## Default Output Location
-**`~/data/outputs`** (automatically created with secure permissions)
-
----
 
 ## Common Commands
 
-### Extract Emails
-```bash
-# Default location (~/data/outputs)
-python -m src.cli extract --user-email your.email@hotmail.com
+### Add Mailbox
 
-# Custom location
-python -m src.cli --output-dir ~/my-emails extract --user-email your.email@hotmail.com
+```bash
+# M365 (personal)
+email-analyzer mailbox add -n "Work" -p m365 -e you@outlook.com
+
+# Gmail
+email-analyzer mailbox add -n "Personal" -p gmail -e you@gmail.com --credentials ~/creds.json
+
+# IMAP
+email-analyzer mailbox add -n "Legacy" -p imap -e you@example.com --host imap.example.com
 ```
 
-### Analyze Corpus
+### Manage Mailboxes
+
 ```bash
-# Default location
-python -m src.cli analyze
-
-# With 15 clusters
-python -m src.cli analyze --num-clusters 15
-
-# Custom corpus
-python -m src.cli analyze --corpus ~/path/to/email_corpus.json
+email-analyzer mailbox list                    # List all
+email-analyzer mailbox list --provider gmail   # Filter by provider
+email-analyzer mailbox auth Work               # Authenticate
+email-analyzer mailbox info Work               # Show details
+email-analyzer mailbox remove Work             # Remove
 ```
 
-### Generate Suggestions
-```bash
-# Default location
-python -m src.cli suggest
+### Extract & Analyze
 
-# Lower threshold (more categories)
-python -m src.cli suggest --min-cluster-percentage 3.0
+```bash
+email-analyzer extract                         # Extract all
+email-analyzer extract --mailbox Work          # Specific mailbox
+email-analyzer analyze                         # Analyze
+email-analyzer analyze --llm                   # With LLM naming
+email-analyzer suggest                         # Generate suggestions
+email-analyzer review                          # Interactive review
 ```
 
-### Review Categories
-```bash
-# Interactive review
-python -m src.cli review
+### Reports
 
-# Skip cleanup prompt
-python -m src.cli review --no-cleanup
+```bash
+email-analyzer report --format table           # Console table
+email-analyzer report --format html            # HTML report
+email-analyzer report --format json --pretty   # JSON (formatted)
+email-analyzer report --format csv             # CSV zip
+email-analyzer report --format all             # All formats
+email-analyzer report --cross-mailbox          # Compare mailboxes
 ```
 
-### Complete Pipeline
-```bash
-# One command - does everything
-python -m src.cli pipeline --user-email your.email@hotmail.com
+### Pipeline
 
-# Custom location
-python -m src.cli --output-dir ~/analysis pipeline --user-email your.email@hotmail.com
+```bash
+email-analyzer pipeline                        # Full workflow
+email-analyzer pipeline --llm                  # With LLM
+email-analyzer pipeline --skip-extract         # Skip extraction
+email-analyzer pipeline --skip-review          # Skip review
+```
+
+### Utilities
+
+```bash
+email-analyzer status                          # System status
+email-analyzer version                         # Version info
+email-analyzer --help                          # Help
+email-analyzer <command> --help                # Command help
 ```
 
 ---
 
-## Output Files
+## Command Reference
 
-| File | Location (default) |
-|------|-------------------|
-| Email corpus | `~/data/outputs/email_corpus.json` |
-| Analysis results | `~/data/outputs/corpus_analysis_results.json` |
-| Category suggestions | `~/data/outputs/category_suggestions.json` |
-| Suggestions report | `~/data/outputs/category_suggestions_report.md` |
-| Approved categories | `~/data/outputs/approved_categories.json` |
-| Error log | `~/data/outputs/extraction_errors.log` |
+### Mailbox Commands
 
----
+| Command | Options | Description |
+|---------|---------|-------------|
+| `mailbox add` | `-n, -p, -e, --tenant, --client-id, --credentials, --host, --port` | Add mailbox |
+| `mailbox list` | `--provider, --status` | List mailboxes |
+| `mailbox auth` | `<name>` | Authenticate |
+| `mailbox info` | `<name>, --format` | Show details |
+| `mailbox remove` | `<name>, --delete-data` | Remove mailbox |
 
-## CLI Flags
+### Analysis Commands
 
-### Global (before command)
-- `--output-dir DIR` - Set output directory for all files
-- `--verbose` / `-v` - Enable debug logging
-
-### Extract Command
-- `--user-email EMAIL` - (required) M365/Hotmail address
-- `--corpus-file PATH` - Custom corpus file path
-- `--batch-size N` - Emails per batch (default: 500)
-- `--checkpoint-interval N` - Checkpoint every N emails (default: 100)
-
-### Analyze Command
-- `--corpus PATH` - Input corpus file
-- `--num-clusters N` - Semantic clusters (default: 10)
-- `--analysis-file PATH` - Output analysis file
-
-### Suggest Command
-- `--analysis PATH` - Input analysis file
-- `--min-cluster-percentage PCT` - Min cluster size (default: 5.0)
-- `--min-sender-count N` - Min sender emails (default: 20)
-- `--suggestions-file PATH` - Output suggestions file
-
-### Review Command
-- `--suggestions PATH` - Input suggestions file
-- `--approved-file PATH` - Output approved categories file
-- `--no-cleanup` - Skip cleanup prompt
+| Command | Options | Description |
+|---------|---------|-------------|
+| `extract` | `--mailbox, --since, --batch-size, --max-emails` | Extract emails |
+| `analyze` | `--mailbox, --method, --clusters, --min-size, --llm` | Analyze corpus |
+| `suggest` | `--mailbox, --min-cluster, --min-sender` | Generate suggestions |
+| `review` | `--skip-cleanup` | Interactive review |
+| `report` | `--format, --output, --pretty, --cross-mailbox` | Generate reports |
 
 ### Pipeline Command
-- `--user-email EMAIL` - (required) M365/Hotmail address
-- `--num-clusters N` - Semantic clusters (default: 10)
-- `--no-cleanup` - Skip cleanup prompt
+
+| Option | Description |
+|--------|-------------|
+| `--llm` | Enable LLM naming |
+| `--skip-extract` | Skip extraction step |
+| `--skip-review` | Skip review step |
+| `--method` | Clustering method (hdbscan/kmeans) |
 
 ---
 
-## Help
+## Output Formats
+
+| Format | Command | Output |
+|--------|---------|--------|
+| Table | `--format table` | Console |
+| HTML | `--format html` | `.html` file |
+| JSON | `--format json` | `.json` file |
+| CSV | `--format csv` | `.zip` or directory |
+| Markdown | `--format markdown` | `.md` file |
+| All | `--format all` | All formats |
+
+---
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Claude API key (for `--llm`) |
+| `EMAIL_ANALYZER_DATA_DIR` | Custom data directory |
+
+---
+
+## Data Location
+
+Default: `~/.email-analyzer/`
+
+```
+~/.email-analyzer/
+├── mailboxes.json      # Registry
+├── credentials/        # OAuth tokens
+├── data/{mailbox}/     # Per-mailbox data
+└── logs/               # Logs
+```
+
+---
+
+## Providers
+
+| Provider | Auth | Command |
+|----------|------|---------|
+| M365 | Device code | `--provider m365` |
+| Gmail | OAuth browser | `--provider gmail --credentials FILE` |
+| IMAP | Password | `--provider imap --host HOST` |
+
+---
+
+## Examples
+
+### Quick Start
 
 ```bash
-# General help
-python -m src.cli --help
+email-analyzer mailbox add -n "Work" -p m365 -e you@company.com
+email-analyzer mailbox auth Work
+email-analyzer pipeline --llm
+email-analyzer report --format html
+```
 
-# Command-specific help
-python -m src.cli extract --help
-python -m src.cli analyze --help
-python -m src.cli suggest --help
-python -m src.cli review --help
-python -m src.cli pipeline --help
+### Multi-Mailbox
+
+```bash
+email-analyzer mailbox add -n "Work" -p m365 -e work@corp.com
+email-analyzer mailbox add -n "Personal" -p gmail -e me@gmail.com --credentials ~/creds.json
+email-analyzer mailbox auth Work
+email-analyzer mailbox auth Personal
+email-analyzer extract
+email-analyzer report --cross-mailbox --format html
+```
+
+### Custom Analysis
+
+```bash
+email-analyzer analyze --method hdbscan --min-size 10 --llm
+email-analyzer suggest --min-cluster 3.0 --min-sender 15
+email-analyzer report --format all --output ~/reports/
 ```
 
 ---
 
 ## Troubleshooting
 
-**"ModuleNotFoundError: No module named 'src'"**
-→ Run from project root: `python -m src.cli` (not `python src/cli.py`)
-
-**"Permission denied" creating directory**
-→ Use home directory: `--output-dir ~/my-emails`
-
-**"File not found" in analyze/suggest/review**
-→ Ensure previous step completed or specify `--output-dir` consistently
-
-**Want to see debug logs**
-→ Add `--verbose` flag before command
+| Issue | Solution |
+|-------|----------|
+| Module not found | Run `email-analyzer` not `python src/cli.py` |
+| Auth failed | Run `email-analyzer mailbox auth <name>` |
+| No mailboxes | Run `email-analyzer mailbox add ...` |
+| Permission denied | Set `EMAIL_ANALYZER_DATA_DIR=~/data` |
+| LLM error | Set `ANTHROPIC_API_KEY` env var |
 
 ---
 
-## Examples
+## Documentation
 
-```bash
-# Example 1: Quick start (default location)
-python -m src.cli pipeline --user-email user@hotmail.com
-
-# Example 2: Everything in custom directory
-python -m src.cli --output-dir ~/email-analysis pipeline --user-email user@hotmail.com
-
-# Example 3: Step by step with custom locations
-python -m src.cli --output-dir ~/project extract --user-email user@hotmail.com
-python -m src.cli --output-dir ~/project analyze --num-clusters 15
-python -m src.cli --output-dir ~/project suggest
-python -m src.cli --output-dir ~/project review
-
-# Example 4: Re-analyze existing corpus
-python -m src.cli analyze --corpus ~/old/email_corpus.json --num-clusters 20
-
-# Example 5: Resume interrupted extraction
-python -m src.cli extract --user-email user@hotmail.com
-# Automatically resumes from last checkpoint
-```
-
----
-
-## Security Notes
-
-- 📁 Directory permissions: `0700` (user only)
-- 📄 File permissions: `0600` (user read/write only)
-- 🔒 Local storage only (no cloud transmission)
-- 🏠 Default location in home directory (always safe)
-
----
-
-For detailed documentation, see:
-- `USAGE.md` - Complete usage guide
-- `OUTPUT_CONFIGURATION.md` - Technical implementation details
-- `specs/001-use-the-document/quickstart.md` - Feature scenarios
+- [USAGE.md](USAGE.md) - Full guide
+- [M365_SETUP.md](M365_SETUP.md) - Microsoft 365
+- [GMAIL_SETUP.md](GMAIL_SETUP.md) - Gmail
+- [IMAP_SETUP.md](IMAP_SETUP.md) - IMAP
+- [TESTING.md](TESTING.md) - Testing

@@ -1,231 +1,215 @@
-# Email Corpus Extraction and Analysis System
+# Email Corpus Analyzer
 
-A Python-based system for extracting emails from Hotmail/Outlook via M365 MCP, analyzing patterns, and generating AI-assisted category suggestions.
+A Python-based system for extracting emails from multiple providers (Microsoft 365, Gmail, IMAP), analyzing patterns, and generating AI-assisted category suggestions.
 
-## 🚀 Quick Start - Command Line Usage
+## Features
+
+- **Multi-Provider Support**: Connect to M365/Outlook, Gmail, or any IMAP server
+- **Multi-Mailbox Management**: Analyze multiple email accounts simultaneously
+- **Intelligent Analysis**: 5 analyzers (sender, subject, semantic, temporal, volume)
+- **LLM-Powered Categorization**: Claude AI integration for smart category naming
+- **Comprehensive Reports**: HTML, JSON, CSV, and Markdown output formats
+- **Privacy-First**: All data stored locally with secure permissions
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11 or higher
+- pip (Python package manager)
 
 ### Installation
+
 ```bash
-# Clone and navigate to the project
-cd /path/to/email-processor/initial-learning
+# Clone the repository
+git clone https://github.com/davistroy/email-corpus-analyzer.git
+cd email-corpus-analyzer
 
 # Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 # or: venv\Scripts\activate  # Windows
 
-# Install dependencies
-pip install -r requirements.txt
+# Install the package
+pip install -e .
+
+# Or install with development dependencies
+pip install -e ".[dev]"
 ```
 
-### Basic Commands
-
-**Default output location:** `~/data/outputs` (created automatically with secure permissions)
+### Verify Installation
 
 ```bash
-# Run complete pipeline (extract → analyze → suggest → review)
-python -m src.cli pipeline --user-email your.email@hotmail.com
+# Check the CLI is working
+email-analyzer --help
 
-# Or run individual steps:
-python -m src.cli extract --user-email your.email@hotmail.com  # Extract emails
-python -m src.cli analyze                                       # Analyze patterns
-python -m src.cli suggest                                       # Generate categories
-python -m src.cli review                                        # Review interactively
-
-# Use custom output directory
-python -m src.cli --output-dir ~/my-emails pipeline --user-email your.email@hotmail.com
-
-# Get help
-python -m src.cli --help
-python -m src.cli <command> --help  # For specific command help
+# Check version
+email-analyzer version
 ```
 
-### Output Files
+## Basic Usage
 
-| File | Description |
-|------|-------------|
-| `email_corpus.json` | Extracted email data |
-| `corpus_analysis_results.json` | Analysis results (5 analyzers) |
-| `category_suggestions.json` | AI-generated category suggestions |
-| `category_suggestions_report.md` | Human-readable report |
-| `approved_categories.json` | Final approved categories |
+### 1. Add a Mailbox
 
-**For complete usage documentation, see [USAGE.md](USAGE.md) and [QUICK_REFERENCE.md](QUICK_REFERENCE.md)**
+```bash
+# Microsoft 365 (personal)
+email-analyzer mailbox add --name "Work" --provider m365 --email you@outlook.com
 
----
+# Gmail
+email-analyzer mailbox add --name "Personal" --provider gmail \
+  --email you@gmail.com --credentials ~/credentials.json
 
-## 🎯 Project Status
+# IMAP
+email-analyzer mailbox add --name "Legacy" --provider imap \
+  --email you@example.com --host imap.example.com
+```
 
-**Current Phase**: Initial Implementation (Phase 3.1-3.3 Complete)
+### 2. Authenticate
 
-### ✅ Completed Tasks (18/41)
+```bash
+email-analyzer mailbox auth Work
+```
 
-#### Phase 3.1: Setup (3/3 tasks ✅)
-- **T001**: Project directory structure created
-- **T002**: Python dependencies installed (venv with Python 3.10+)
-- **T003**: Logging and progress tracking utilities configured
+### 3. Run Analysis Pipeline
 
-#### Phase 3.3: Core Data Models (7/7 tasks ✅)
-- **T012**: Email model (`src/models/email.py`)
-- **T013**: Corpus model (`src/models/corpus.py`)
-- **T014**: Sender model (`src/models/sender.py`)
-- **T015**: AnalysisResults models (`src/models/analysis_results.py`)
-- **T016**: ContentCluster model (`src/models/content_cluster.py`)
-- **T017**: Category model (`src/models/category.py`)
-- **T018**: CategoryTemplate model with 6 predefined templates (`src/models/category_template.py`)
+```bash
+# Complete workflow: extract -> analyze -> suggest -> review
+email-analyzer pipeline
 
-#### Phase 3.4: Extraction Utilities (2/4 tasks ✅)
-- **T019**: HTML parser (`src/extractors/html_parser.py`)
-- **T022**: File manager with secure permissions (`src/utils/file_manager.py`)
+# Or with LLM-powered category naming
+email-analyzer pipeline --llm
+```
 
-### 🔄 In Progress (0 tasks)
+### 4. Generate Reports
 
-### 📋 Pending (23/41 tasks)
-- Phase 3.2: Tests First (8 tasks) - Contract and integration tests
-- Phase 3.4: Core Extraction (2 remaining tasks) - Checkpoint manager, M365 extractor
-- Phase 3.5: Core Analysis (6 tasks) - 5 analyzers + orchestrator
-- Phase 3.6: Category Generation (4 tasks) - Template matcher, confidence scorer, generator
-- Phase 3.7: Interactive UI (2 tasks) - Category review CLI, cleanup utility
-- Phase 3.8: CLI Entry Point (2 tasks) - Command dispatcher, pipeline orchestrator
-- Phase 3.9: Integration (3 tasks) - Validators, error logging, progress tracking
-- Phase 3.10: Polish (2 tasks) - Unit tests, quickstart validation
+```bash
+# HTML report (interactive)
+email-analyzer report --format html
 
-## 🏗️ Architecture
+# All formats at once
+email-analyzer report --format all
+```
 
-### Technology Stack
-- **Python**: 3.10+ (type hints, pattern matching)
-- **Text Embeddings**: sentence-transformers >= 2.0.0
-- **Clustering**: scikit-learn == 1.7.1
-- **HTML Parsing**: BeautifulSoup4 >= 4.12.0 + lxml
-- **Data Validation**: Pydantic >= 2.0.0
-- **Progress Tracking**: tqdm >= 4.66.0
-- **Testing**: pytest >= 7.4.0
+## Command Overview
 
-### Project Structure
+| Command | Description |
+|---------|-------------|
+| `mailbox add` | Add a new mailbox configuration |
+| `mailbox list` | List all configured mailboxes |
+| `mailbox auth` | Authenticate a mailbox |
+| `mailbox info` | Show mailbox details |
+| `mailbox remove` | Remove a mailbox |
+| `extract` | Extract emails from mailboxes |
+| `analyze` | Analyze email corpus for patterns |
+| `suggest` | Generate category suggestions |
+| `review` | Interactively review categories |
+| `report` | Generate analysis reports |
+| `pipeline` | Run complete workflow |
+| `status` | Show system status |
+| `version` | Display version info |
+
+## Documentation
+
+- [USAGE.md](USAGE.md) - Comprehensive usage guide
+- [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Command quick reference
+- [TESTING.md](TESTING.md) - Testing instructions
+- [M365_SETUP.md](M365_SETUP.md) - Microsoft 365 configuration
+- [GMAIL_SETUP.md](GMAIL_SETUP.md) - Gmail OAuth setup
+- [IMAP_SETUP.md](IMAP_SETUP.md) - IMAP server configuration
+
+## Project Structure
 
 ```
-initial-learning/
+email-corpus-analyzer/
 ├── src/
-│   ├── models/              ✅ All 7 Pydantic models implemented
-│   │   ├── email.py
-│   │   ├── corpus.py
-│   │   ├── sender.py
-│   │   ├── analysis_results.py
-│   │   ├── content_cluster.py
-│   │   ├── category.py
-│   │   └── category_template.py
-│   ├── extractors/          🔄 2/4 utilities complete
-│   │   └── html_parser.py   ✅
-│   ├── analyzers/           ⏳ Pending
-│   ├── generators/          ⏳ Pending
-│   ├── ui/                  ⏳ Pending
-│   └── utils/               ✅ Core utilities complete
-│       ├── logger.py        ✅
-│       ├── progress.py      ✅
-│       └── file_manager.py  ✅
+│   ├── models/          # Pydantic data models
+│   ├── providers/       # Email provider implementations
+│   │   ├── m365/        # Microsoft 365/Outlook
+│   │   ├── gmail/       # Google Gmail
+│   │   └── imap/        # Generic IMAP
+│   ├── analyzers/       # 5 analysis engines
+│   ├── generators/      # Category generation
+│   ├── reports/         # Report generators
+│   ├── llm/             # Claude AI integration
+│   ├── mailbox/         # Mailbox management
+│   ├── extractors/      # Email extraction
+│   ├── ui/              # Interactive review UI
+│   ├── utils/           # Utilities
+│   └── cli_new.py       # Typer CLI application
 ├── tests/
-│   ├── contract/            ⏳ Pending
-│   ├── integration/         ⏳ Pending
-│   └── unit/                ⏳ Pending
-├── outputs/                 ✅ Created with 0700 permissions
-├── specs/001-use-the-document/  ✅ Complete design artifacts
-│   ├── spec.md
-│   ├── plan.md
-│   ├── research.md
-│   ├── data-model.md
-│   ├── contracts/           (3 contract files)
-│   ├── quickstart.md
-│   └── tasks.md
-├── requirements.txt         ✅
-├── pyproject.toml          ✅
-└── .gitignore              ✅
+│   ├── unit/            # Unit tests
+│   └── integration/     # Integration tests
+├── specs/               # Design specifications
+└── examples/            # Usage examples
 ```
 
-## 📐 Design Artifacts
+## Technology Stack
 
-All design documents located in `specs/001-use-the-document/`:
+- **Python 3.11+** - Modern Python with type hints
+- **Typer + Rich** - Beautiful CLI interface
+- **Pydantic 2.0** - Data validation
+- **sentence-transformers** - Text embeddings
+- **HDBSCAN** - Density-based clustering
+- **Anthropic Claude** - LLM integration
+- **msgraph-sdk** - Microsoft 365 API
+- **google-api-python-client** - Gmail API
 
-1. **spec.md** - 51 functional requirements, 4 acceptance scenarios
-2. **plan.md** - Implementation plan with constitutional compliance
-3. **research.md** - Context7 research for all libraries (sentence-transformers, scikit-learn, beautifulsoup4)
-4. **data-model.md** - 7 entities with Pydantic schemas
-5. **contracts/** - 3 contract files defining interfaces:
-   - `extractor_contract.md` - Email extraction from M365
-   - `analyzer_contract.md` - 5 analyzer modules
-   - `generator_contract.md` - Category generation
-6. **quickstart.md** - 5 manual validation scenarios
-7. **tasks.md** - 41 tasks with dependencies and parallel execution
+## Development
 
-## 🧪 Constitutional Principles
-
-This project follows the **Email Corpus Analysis Constitution v1.0.0**:
-
-1. ✅ **Test-Driven Development** - Tests before implementation (Phase 3.2 planned)
-2. ✅ **Documentation-First** - All design docs created before coding
-3. ✅ **Context7-Mandatory** - All libraries researched via Context7 MCP
-4. ✅ **Privacy & Data Security** - Local-only storage, 0600/0700 permissions
-5. ✅ **Modular Components** - Independent, testable modules
-6. ✅ **Error Resilience** - Debug logging, graceful degradation
-7. ✅ **Performance Transparency** - Progress indicators for ops >10 seconds
-
-## 🛠️ Development
-
-### Prerequisites
-- Python 3.10 or higher
-- M365 MCP server configured and authenticated (for email extraction)
-
-### Testing & Quality
+### Running Tests
 
 ```bash
-# Run tests
+# Run all tests
 pytest
 
 # Run with coverage
 pytest --cov=src --cov-report=html
 
-# Linting
-ruff check src/
+# Run specific test file
+pytest tests/unit/test_html_parser.py
+
+# Run integration tests
+pytest tests/integration/
 ```
 
-## 📊 Implementation Metrics
+### Code Quality
 
-- **Total Tasks**: 41
-- **Completed**: 18 (43.9%)
-- **Files Created**: 19
-- **Lines of Code**: ~1,000 (models + utilities)
-- **Constitution Compliance**: 7/7 principles ✅
-- **Coverage**: 100% of data models, 50% of utilities
+```bash
+# Linting
+ruff check src/
 
-## 🔜 Next Steps
+# Type checking
+mypy src/
 
-1. **Phase 3.2**: Implement contract tests (T004-T006) and integration tests (T007-T011)
-2. **Phase 3.4**: Complete checkpoint manager (T020) and M365 extractor (T021)
-3. **Phase 3.5**: Implement 5 analyzer modules (T023-T028)
-4. **Phase 3.6**: Implement category generation (T029-T032)
-5. **Phase 3.7-3.8**: Build interactive UI and CLI
-6. **Phase 3.9-3.10**: Integration utilities and final polish
+# Fix linting issues
+ruff check --fix src/
+```
 
-## 📝 Notes
+## Environment Variables
 
-- **Output Directory**: Using local `outputs/` instead of `/mnt/user-data/outputs/` due to permissions
-- **Virtual Environment**: Created at `venv/` (gitignored)
-- **TDD Adaptation**: Models implemented first for type safety in tests
-- **Parallel Execution**: 8 parallel task groups identified for concurrent development
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ANTHROPIC_API_KEY` | Claude API key for LLM features | For `--llm` flag |
+| `EMAIL_ANALYZER_DATA_DIR` | Custom data directory | No |
 
-## 📖 Documentation
+## Security
 
-- Full design documents: `specs/001-use-the-document/`
-- Constitution: `.specify/memory/constitution.md`
-- Analysis report: Generated after /analyze command (see previous session output)
+- All data stored locally (no cloud uploads)
+- File permissions: `0600` (user read/write only)
+- Directory permissions: `0700` (user only)
+- Credentials encrypted at rest
+- OAuth tokens stored securely
 
-## 🤝 Contributing
+## License
 
-This project follows strict TDD and constitutional principles. All contributions must:
-1. Have passing tests before implementation
-2. Follow Pydantic data models from `data-model.md`
-3. Use Context7 for all external library research
-4. Maintain local-only data storage (no cloud transmission)
+MIT License - See LICENSE file for details.
 
-## 📄 License
+## Contributing
 
-Internal project - Email Corpus Analysis System
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+For detailed contribution guidelines, see CONTRIBUTING.md.

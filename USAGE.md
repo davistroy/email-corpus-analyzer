@@ -1,415 +1,613 @@
-# Email Processor - Usage Guide
+# Email Corpus Analyzer - Usage Guide
 
-## Quick Start
+This guide covers all features of the Email Corpus Analyzer CLI.
 
-### Default Output Directory
-By default, all output files are saved to: **`~/data/outputs`**
+## Table of Contents
 
-This expands to `/home/yourusername/data/outputs` on Linux/Mac or `C:\Users\YourUsername\data\outputs` on Windows.
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Mailbox Management](#mailbox-management)
+- [Extracting Emails](#extracting-emails)
+- [Analyzing Emails](#analyzing-emails)
+- [Generating Suggestions](#generating-suggestions)
+- [Interactive Review](#interactive-review)
+- [Generating Reports](#generating-reports)
+- [Pipeline Command](#pipeline-command)
+- [Cross-Mailbox Analysis](#cross-mailbox-analysis)
+- [Output Formats](#output-formats)
+- [Troubleshooting](#troubleshooting)
 
-### Running Commands
+---
+
+## Installation
+
+### System Requirements
+
+- Python 3.11 or higher
+- 4GB RAM minimum (8GB recommended for large mailboxes)
+- Internet connection for email provider APIs
+
+### Install from Source
 
 ```bash
-# Activate virtual environment
-source venv/bin/activate  # or: venv\Scripts\activate on Windows
+# Clone repository
+git clone https://github.com/davistroy/email-corpus-analyzer.git
+cd email-corpus-analyzer
 
-# Extract emails (saves to ~/data/outputs/)
-python -m src.cli extract --user-email your.email@hotmail.com
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
 
-# View help
-python -m src.cli --help
+# Install package
+pip install -e .
+
+# Verify installation
+email-analyzer --help
+```
+
+### Install Development Dependencies
+
+```bash
+pip install -e ".[dev]"
 ```
 
 ---
 
-## Custom Output Directories
+## Getting Started
 
-### Method 1: Global --output-dir Flag
+### First-Time Setup
 
-Use `--output-dir` **before** the command name:
+1. **Add a mailbox**:
+   ```bash
+   email-analyzer mailbox add --name "Work" --provider m365 --email you@company.com
+   ```
+
+2. **Authenticate**:
+   ```bash
+   email-analyzer mailbox auth Work
+   ```
+
+3. **Run the pipeline**:
+   ```bash
+   email-analyzer pipeline
+   ```
+
+4. **View reports**:
+   ```bash
+   email-analyzer report --format html
+   ```
+
+### Check System Status
 
 ```bash
-# Extract to custom directory
-python -m src.cli --output-dir ~/my-emails extract --user-email user@hotmail.com
-
-# Analyze in custom directory
-python -m src.cli --output-dir ~/my-emails analyze
-
-# Run pipeline in custom directory
-python -m src.cli --output-dir /mnt/backup/email-analysis pipeline --user-email user@hotmail.com
+email-analyzer status
 ```
 
-### Method 2: Per-File Custom Paths
+This shows:
+- Configured mailboxes and their status
+- Authentication state
+- Extraction progress
+- Suggested next steps
 
-Override individual file paths while using default output directory:
+---
+
+## Mailbox Management
+
+### Adding Mailboxes
+
+#### Microsoft 365 (Personal Account)
 
 ```bash
-# Extract to custom corpus file
-python -m src.cli extract --user-email user@hotmail.com --corpus-file ~/custom_corpus.json
-
-# Analyze custom corpus, save to custom analysis file
-python -m src.cli analyze --corpus ~/custom_corpus.json --analysis-file ~/custom_analysis.json
+email-analyzer mailbox add \
+  --name "Outlook" \
+  --provider m365 \
+  --email you@outlook.com
 ```
 
-### Method 3: Mix Global + Per-File
+#### Microsoft 365 (Corporate Account)
 
 ```bash
-# Use custom output directory, but override specific files
-python -m src.cli --output-dir ~/emails \
-  extract --user-email user@hotmail.com --corpus-file ~/backup/emails.json
+email-analyzer mailbox add \
+  --name "Work" \
+  --provider m365 \
+  --email you@company.com \
+  --tenant YOUR_TENANT_ID \
+  --client-id YOUR_CLIENT_ID
+```
+
+#### Gmail
+
+```bash
+email-analyzer mailbox add \
+  --name "Personal" \
+  --provider gmail \
+  --email you@gmail.com \
+  --credentials ~/path/to/credentials.json
+```
+
+See [GMAIL_SETUP.md](GMAIL_SETUP.md) for obtaining credentials.
+
+#### IMAP Server
+
+```bash
+email-analyzer mailbox add \
+  --name "Legacy" \
+  --provider imap \
+  --email you@example.com \
+  --host imap.example.com \
+  --port 993
+```
+
+You'll be prompted for your password securely.
+
+### Listing Mailboxes
+
+```bash
+# List all mailboxes
+email-analyzer mailbox list
+
+# Filter by provider
+email-analyzer mailbox list --provider gmail
+
+# Filter by status
+email-analyzer mailbox list --status active
+```
+
+### Viewing Mailbox Details
+
+```bash
+# Text format
+email-analyzer mailbox info Work
+
+# JSON format
+email-analyzer mailbox info Work --format json
+```
+
+### Authenticating Mailboxes
+
+```bash
+email-analyzer mailbox auth Work
+```
+
+This opens the appropriate OAuth flow for your provider:
+- **M365**: Device code flow (displays code, open browser)
+- **Gmail**: OAuth consent screen in browser
+- **IMAP**: Password verification
+
+### Removing Mailboxes
+
+```bash
+# Remove configuration only
+email-analyzer mailbox remove Work
+
+# Remove configuration and all data
+email-analyzer mailbox remove Work --delete-data
 ```
 
 ---
 
-## Command Reference
+## Extracting Emails
 
-### 1. Extract
+### Basic Extraction
 
-Extract emails from M365/Hotmail inbox.
-
-**Basic Usage:**
 ```bash
-python -m src.cli extract --user-email your.email@hotmail.com
+# Extract from all mailboxes
+email-analyzer extract
+
+# Extract from specific mailbox
+email-analyzer extract --mailbox Work
 ```
 
-**All Options:**
+### Extraction Options
+
 ```bash
-python -m src.cli [--output-dir DIR] extract \
-  --user-email EMAIL \
-  [--corpus-file PATH] \
-  [--batch-size N] \
-  [--checkpoint-interval N]
+email-analyzer extract \
+  --mailbox Work \
+  --since 2024-01-01 \
+  --batch-size 100 \
+  --max-emails 5000
 ```
 
-**Options:**
-- `--user-email` (required): M365/Hotmail email address
-- `--corpus-file`: Custom corpus JSON path (default: `{output-dir}/email_corpus.json`)
-- `--batch-size`: Emails per API batch (default: 500)
-- `--checkpoint-interval`: Save checkpoint every N emails (default: 100)
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--mailbox` | Specific mailbox name | All mailboxes |
+| `--since` | Only emails after this date | None (all) |
+| `--batch-size` | Emails per API batch | 500 |
+| `--max-emails` | Maximum emails to extract | Unlimited |
 
-**Output Files:**
-- `email_corpus.json` - Complete email corpus
-- `extraction_errors.log` - Error log (if any failures)
-- `extraction_checkpoint.json` - Temporary (deleted on success)
+### Resume Interrupted Extraction
 
-**Example:**
+Extraction automatically saves checkpoints. If interrupted, simply run the same command again:
+
 ```bash
-# Extract with custom batch size
-python -m src.cli extract --user-email user@hotmail.com --batch-size 1000
-
-# Extract to specific location
-python -m src.cli --output-dir ~/email-backup extract --user-email user@hotmail.com
-```
-
----
-
-### 2. Analyze
-
-Analyze email corpus for patterns (5 analyzers: sender, subject, semantic, temporal, volume).
-
-**Basic Usage:**
-```bash
-python -m src.cli analyze
-```
-
-**All Options:**
-```bash
-python -m src.cli [--output-dir DIR] analyze \
-  [--corpus PATH] \
-  [--num-clusters N] \
-  [--analysis-file PATH]
-```
-
-**Options:**
-- `--corpus`: Path to corpus JSON (default: `{output-dir}/email_corpus.json`)
-- `--num-clusters`: Semantic cluster count (default: 10)
-- `--analysis-file`: Custom analysis results path (default: `{output-dir}/corpus_analysis_results.json`)
-
-**Output Files:**
-- `corpus_analysis_results.json` - Complete analysis results
-
-**Example:**
-```bash
-# Analyze with 15 semantic clusters
-python -m src.cli analyze --num-clusters 15
-
-# Analyze corpus from custom location
-python -m src.cli analyze --corpus ~/backup/email_corpus.json
+email-analyzer extract --mailbox Work
+# Resumes from last checkpoint
 ```
 
 ---
 
-### 3. Suggest
+## Analyzing Emails
 
-Generate category suggestions from analysis results.
+### Basic Analysis
 
-**Basic Usage:**
 ```bash
-python -m src.cli suggest
+# Analyze all mailboxes
+email-analyzer analyze
+
+# Analyze specific mailbox
+email-analyzer analyze --mailbox Work
 ```
 
-**All Options:**
+### Analysis Methods
+
 ```bash
-python -m src.cli [--output-dir DIR] suggest \
-  [--analysis PATH] \
-  [--min-cluster-percentage PCT] \
-  [--min-sender-count N] \
-  [--suggestions-file PATH]
+# HDBSCAN clustering (auto-detects cluster count)
+email-analyzer analyze --method hdbscan
+
+# KMeans with specific cluster count
+email-analyzer analyze --method kmeans --clusters 15
 ```
 
-**Options:**
-- `--analysis`: Path to analysis results (default: `{output-dir}/corpus_analysis_results.json`)
-- `--min-cluster-percentage`: Min cluster size % for category (default: 5.0)
-- `--min-sender-count`: Min emails from sender for category (default: 20)
-- `--suggestions-file`: Custom suggestions path (default: `{output-dir}/category_suggestions.json`)
+### LLM-Enhanced Analysis
 
-**Output Files:**
-- `category_suggestions.json` - Category suggestions (JSON)
-- `category_suggestions_report.md` - Human-readable report
+Use Claude AI for intelligent cluster naming:
 
-**Example:**
 ```bash
-# More aggressive category generation (smaller threshold)
-python -m src.cli suggest --min-cluster-percentage 3.0 --min-sender-count 10
+# Requires ANTHROPIC_API_KEY environment variable
+export ANTHROPIC_API_KEY="your-api-key"
+email-analyzer analyze --llm
+```
+
+### Analysis Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--mailbox` | Specific mailbox | All |
+| `--method` | Clustering method (hdbscan/kmeans) | hdbscan |
+| `--clusters` | Number of clusters (kmeans only) | 10 |
+| `--min-size` | Minimum cluster size | 5 |
+| `--llm` | Use LLM for naming | False |
+
+---
+
+## Generating Suggestions
+
+Generate category suggestions from analysis results:
+
+```bash
+# Basic suggestions
+email-analyzer suggest
+
+# With custom thresholds
+email-analyzer suggest \
+  --min-cluster 10.0 \
+  --min-sender 50
+```
+
+### Suggestion Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--mailbox` | Specific mailbox | All |
+| `--min-cluster` | Minimum cluster size % | 5.0 |
+| `--min-sender` | Minimum emails from sender | 20 |
+
+---
+
+## Interactive Review
+
+Review and approve category suggestions interactively:
+
+```bash
+email-analyzer review
+```
+
+### Review Actions
+
+During review, you can:
+
+| Action | Key | Description |
+|--------|-----|-------------|
+| Accept | `a` | Approve category as-is |
+| Rename | `r` | Change name/description |
+| Merge | `m` | Combine with another category |
+| Delete | `d` | Discard category |
+| Skip | `s` | Review later |
+
+### Skip Cleanup
+
+```bash
+email-analyzer review --skip-cleanup
 ```
 
 ---
 
-### 4. Review
+## Generating Reports
 
-Interactively review and approve category suggestions.
+### Available Formats
 
-**Basic Usage:**
+| Format | Description | Output |
+|--------|-------------|--------|
+| `html` | Interactive HTML with styling | Single file |
+| `json` | Complete JSON data | Single file |
+| `csv` | Tabular CSV files | Zip archive or directory |
+| `markdown` | Human-readable report | Single file |
+| `table` | Rich console table | Terminal output |
+| `all` | Generate all formats | Multiple files |
+
+### Basic Report Generation
+
 ```bash
-python -m src.cli review
+# HTML report
+email-analyzer report --format html
+
+# JSON report
+email-analyzer report --format json
+
+# All formats
+email-analyzer report --format all
 ```
 
-**All Options:**
+### Report Options
+
 ```bash
-python -m src.cli [--output-dir DIR] review \
-  [--suggestions PATH] \
-  [--approved-file PATH] \
-  [--no-cleanup]
+email-analyzer report \
+  --format json \
+  --pretty \
+  --output ~/reports/analysis.json
 ```
 
-**Options:**
-- `--suggestions`: Path to suggestions JSON (default: `{output-dir}/category_suggestions.json`)
-- `--approved-file`: Custom approved categories path (default: `{output-dir}/approved_categories.json`)
-- `--no-cleanup`: Skip optional cleanup of intermediate files
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--format` | Output format | table |
+| `--output` | Custom output path | Auto-generated |
+| `--pretty` | Pretty-print JSON | False |
+| `--compact` | Minify JSON | False |
+| `--zip` | Package CSV as zip | True |
+| `--no-zip` | CSV as directory | False |
 
-**Output Files:**
-- `approved_categories.json` - Final approved categories
+### Cross-Mailbox Reports
 
-**Interactive Actions:**
-- `[A]ccept` - Approve category as-is
-- `[R]ename` - Change category name/description
-- `[M]erge` - Combine with another category
-- `[D]elete` - Discard category
-- `[S]kip` - Review later (will re-present at end)
+Compare patterns across multiple mailboxes:
 
-**Example:**
 ```bash
-# Review without cleanup prompt
-python -m src.cli review --no-cleanup
-```
-
----
-
-### 5. Pipeline
-
-Run complete end-to-end workflow: extract → analyze → suggest → review → optional cleanup.
-
-**Basic Usage:**
-```bash
-python -m src.cli pipeline --user-email your.email@hotmail.com
-```
-
-**All Options:**
-```bash
-python -m src.cli [--output-dir DIR] pipeline \
-  --user-email EMAIL \
-  [--num-clusters N] \
-  [--no-cleanup]
-```
-
-**Options:**
-- `--user-email` (required): M365/Hotmail email address
-- `--num-clusters`: Semantic cluster count (default: 10)
-- `--no-cleanup`: Skip optional cleanup of intermediate files
-
-**Output Files:**
-- `approved_categories.json` - Final approved categories
-- `extraction_errors.log` - Error log (if any failures)
-- (Intermediate files optionally deleted during cleanup)
-
-**Example:**
-```bash
-# Complete pipeline in custom directory
-python -m src.cli --output-dir ~/my-email-analysis \
-  pipeline --user-email user@hotmail.com --num-clusters 12
+email-analyzer report --cross-mailbox --format html
 ```
 
 ---
 
-## File Locations Summary
+## Pipeline Command
 
-### Default (~/data/outputs/)
-
-| File | Description | Created By |
-|------|-------------|------------|
-| `email_corpus.json` | Email corpus | extract |
-| `corpus_analysis_results.json` | Analysis results | analyze |
-| `category_suggestions.json` | Category suggestions | suggest |
-| `category_suggestions_report.md` | Human-readable report | suggest |
-| `approved_categories.json` | Final categories | review |
-| `extraction_errors.log` | Error log | extract |
-| `extraction_checkpoint.json` | Temp checkpoint | extract (auto-deleted) |
-
-### Custom Directory Example
+Run the complete workflow with a single command:
 
 ```bash
-# Set custom directory
-python -m src.cli --output-dir /mnt/backup/emails pipeline --user-email user@hotmail.com
+email-analyzer pipeline
+```
 
-# All files created in /mnt/backup/emails/
-ls /mnt/backup/emails/
-# email_corpus.json
-# corpus_analysis_results.json
-# category_suggestions.json
-# ...
+### Pipeline Steps
+
+1. Extract emails from all authenticated mailboxes
+2. Analyze corpus (sender, subject, semantic, temporal, volume)
+3. Generate category suggestions
+4. Interactive review (optional)
+5. Generate final report
+
+### Pipeline Options
+
+```bash
+email-analyzer pipeline \
+  --llm \
+  --skip-extract \
+  --skip-review
+```
+
+| Option | Description |
+|--------|-------------|
+| `--llm` | Enable LLM-powered category naming |
+| `--skip-extract` | Skip extraction (use existing data) |
+| `--skip-review` | Skip interactive review |
+| `--method` | Clustering method (hdbscan/kmeans) |
+
+---
+
+## Cross-Mailbox Analysis
+
+Analyze patterns across multiple email accounts:
+
+### Setup Multiple Mailboxes
+
+```bash
+email-analyzer mailbox add --name "Work" --provider m365 --email work@company.com
+email-analyzer mailbox add --name "Personal" --provider gmail --email me@gmail.com
+email-analyzer mailbox auth Work
+email-analyzer mailbox auth Personal
+```
+
+### Extract and Analyze
+
+```bash
+# Extract from all
+email-analyzer extract
+
+# Analyze each mailbox
+email-analyzer analyze --mailbox Work
+email-analyzer analyze --mailbox Personal
+```
+
+### Generate Comparison Report
+
+```bash
+email-analyzer report --cross-mailbox --format table
 ```
 
 ---
 
-## Common Workflows
+## Output Formats
 
-### Workflow 1: Standard Full Pipeline
-
-```bash
-# One command, default location (~/data/outputs)
-python -m src.cli pipeline --user-email your.email@hotmail.com
-```
-
-### Workflow 2: Custom Output Directory
+### Console Table (default)
 
 ```bash
-# Everything in ~/my-emails/
-python -m src.cli --output-dir ~/my-emails \
-  pipeline --user-email your.email@hotmail.com
+email-analyzer report --format table
 ```
 
-### Workflow 3: Step-by-Step with Custom Locations
+Interactive table displayed in terminal with Rich formatting.
+
+### HTML Report
 
 ```bash
-# Step 1: Extract to custom location
-python -m src.cli --output-dir ~/email-project extract --user-email user@hotmail.com
-
-# Step 2: Analyze (uses ~/email-project/email_corpus.json automatically)
-python -m src.cli --output-dir ~/email-project analyze --num-clusters 15
-
-# Step 3: Generate suggestions
-python -m src.cli --output-dir ~/email-project suggest
-
-# Step 4: Review
-python -m src.cli --output-dir ~/email-project review
+email-analyzer report --format html
 ```
 
-### Workflow 4: Re-analyze Existing Corpus
+Features:
+- Interactive collapsible sections
+- Color-coded badges
+- Progress bars
+- Print-friendly styling
+
+### JSON Export
 
 ```bash
-# You already extracted emails, now analyze differently
-python -m src.cli analyze --corpus ~/data/outputs/email_corpus.json --num-clusters 20
+# Pretty-printed
+email-analyzer report --format json --pretty
 
-# Or in different location
-python -m src.cli --output-dir ~/new-analysis \
-  analyze --corpus ~/old-analysis/email_corpus.json --num-clusters 20
+# Compact/minified
+email-analyzer report --format json --compact
 ```
 
-### Workflow 5: Resume Interrupted Extraction
+### CSV Export
 
 ```bash
-# Extraction was interrupted at email 3,456 / 5,000
-# Just run extract again - it automatically resumes from checkpoint
-python -m src.cli extract --user-email user@hotmail.com
-# Resumes from last checkpoint (e.g., email 3,400)
+# As zip archive
+email-analyzer report --format csv
+
+# As directory
+email-analyzer report --format csv --no-zip
 ```
+
+Generated CSV files:
+- `summary.csv` - Overall statistics
+- `senders.csv` - Top senders
+- `domains.csv` - Domain frequencies
+- `clusters.csv` - Content clusters
+- `categories.csv` - Category suggestions
+
+### Markdown Report
+
+```bash
+email-analyzer report --format markdown
+```
+
+Human-readable report suitable for documentation.
 
 ---
 
 ## Troubleshooting
 
-### Issue: "ModuleNotFoundError: No module named 'src'"
+### "ModuleNotFoundError: No module named 'src'"
 
-**Solution:** Run as a module from project root:
+Run as module from project root:
+
 ```bash
-# Wrong
-cd src && python cli.py --help
-
 # Correct
-python -m src.cli --help
+email-analyzer report
+
+# Or if not installed
+python -m src.cli_new report
 ```
 
-### Issue: "Permission denied" when creating output directory
+### "ANTHROPIC_API_KEY not set"
 
-**Solution:** Check directory permissions or use a custom directory:
+Set the environment variable for LLM features:
+
 ```bash
-# Use home directory subdirectory (always writable)
-python -m src.cli --output-dir ~/my-emails extract --user-email user@hotmail.com
+export ANTHROPIC_API_KEY="your-api-key"
+email-analyzer analyze --llm
 ```
 
-### Issue: "File not found" when running analyze/suggest/review
+### "Authentication failed"
 
-**Solution:** Ensure previous step completed and files exist:
+Re-authenticate the mailbox:
+
 ```bash
-# Check if corpus exists
-ls ~/data/outputs/email_corpus.json
-
-# If using custom directory, specify it consistently
-python -m src.cli --output-dir ~/my-dir analyze
+email-analyzer mailbox auth <mailbox-name>
 ```
 
-### Issue: Want to see debug logs
+### "No mailboxes configured"
 
-**Solution:** Use `--verbose` flag:
+Add a mailbox first:
+
 ```bash
-python -m src.cli --verbose extract --user-email user@hotmail.com
+email-analyzer mailbox add --name "Work" --provider m365 --email you@company.com
 ```
+
+### "Permission denied" creating files
+
+Use a directory you have write access to:
+
+```bash
+export EMAIL_ANALYZER_DATA_DIR=~/email-analyzer-data
+email-analyzer extract
+```
+
+### Viewing Debug Logs
+
+Enable verbose output:
+
+```bash
+email-analyzer --verbose extract
+```
+
+Or check log files in `~/.email-analyzer/logs/`.
 
 ---
 
-## Environment Variables
+## Data Storage
 
-Currently, the system uses CLI arguments for configuration. Environment variables are not supported, but you can create shell aliases:
+Default location: `~/.email-analyzer/`
+
+```
+~/.email-analyzer/
+├── mailboxes.json           # Mailbox registry
+├── credentials/             # Encrypted credentials
+├── data/
+│   ├── {mailbox_id}/       # Per-mailbox data
+│   │   ├── corpus.json
+│   │   ├── analysis.json
+│   │   ├── suggestions.json
+│   │   └── checkpoints/
+│   └── aggregated/         # Cross-mailbox data
+└── logs/                   # Application logs
+```
+
+### Custom Data Directory
 
 ```bash
-# In ~/.bashrc or ~/.zshrc
-alias email-processor='python -m src.cli --output-dir ~/my-emails'
-
-# Then use:
-email-processor extract --user-email user@hotmail.com
-email-processor analyze
+export EMAIL_ANALYZER_DATA_DIR=/path/to/custom/directory
+email-analyzer extract
 ```
 
 ---
 
 ## Security Notes
 
-1. **File Permissions**: All output files are created with mode `0600` (user read/write only)
-2. **Directory Permissions**: Output directories are created with mode `0700` (user read/write/execute only)
-3. **Local Storage Only**: No data is transmitted to external services without explicit consent
-4. **Secure Defaults**: Default directory (`~/data/outputs`) is in your home directory (protected)
+1. **Local Storage Only**: No data transmitted to external services (except email providers and optional LLM)
+2. **Secure Permissions**: Files created with `0600`, directories with `0700`
+3. **Credential Protection**: OAuth tokens encrypted at rest
+4. **No Plaintext Passwords**: IMAP passwords stored securely
 
 ---
 
 ## Next Steps
 
-After approving categories, you can:
-1. Use `approved_categories.json` for Phase 1 (email-by-email categorization - future feature)
-2. Export to your email client (future feature)
-3. Re-run analysis with different parameters
-4. Archive the analysis results for record-keeping
+After completing analysis:
 
-For more information, see:
-- `specs/001-use-the-document/quickstart.md` - Detailed scenarios
-- `specs/001-use-the-document/spec.md` - Complete feature specification
-- `README.md` - Project overview
+1. Review generated reports in `~/.email-analyzer/data/`
+2. Use approved categories for email organization
+3. Re-run analysis periodically for updated insights
+4. Try different clustering methods for varied results
+
+For provider-specific setup, see:
+- [M365_SETUP.md](M365_SETUP.md)
+- [GMAIL_SETUP.md](GMAIL_SETUP.md)
+- [IMAP_SETUP.md](IMAP_SETUP.md)
