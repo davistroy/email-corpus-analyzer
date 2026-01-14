@@ -12,3 +12,7 @@ numpy>=1.24.0                 # Array operations (dep of above)
 # Testing
 pytest>=7.4.0                 # Test framework
 pytest-cov>=4.1.0             # Coverage reporting
+
+# M365 authentication (for scripts/fetch_emails_cli.py)
+msal>=1.24.0                  # Microsoft Authentication Library
+requests>=2.31.0              # HTTP client
