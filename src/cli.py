@@ -13,6 +13,7 @@ All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
 """
 import argparse
+import logging
 import sys
 from pathlib import Path
 
