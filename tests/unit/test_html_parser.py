@@ -4,6 +4,8 @@ Unit tests for HTML parser.
 Tests the extract_plain_text function with various HTML scenarios
 including malformed HTML, scripts, styles, and edge cases.
 """
+from unittest.mock import patch, MagicMock
+
 import pytest
 
 from src.extractors.html_parser import extract_plain_text
@@ -102,3 +104,72 @@ class TestHTMLParser:
         assert "Meeting Reminder" in result
         assert "Hi Team" in result
         assert "trackOpen" not in result
+
+
+class TestHTMLParserFallback:
+    """Test cases for HTML parser fallback behavior when parsers fail."""
+
+    def test_lxml_failure_falls_back_to_html_parser(self):
+        """Test that lxml failure triggers html.parser fallback."""
+        html = "<p>Test content</p>"
+
+        # Mock BeautifulSoup to fail on first call (lxml), succeed on second (html.parser)
+        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+            # Create a mock soup object for successful html.parser parsing
+            mock_soup = MagicMock()
+            mock_soup.return_value = []  # For soup(['script', 'style'])
+            mock_soup.get_text.return_value = "Test content"
+
+            # First call (lxml) raises, second call (html.parser) succeeds
+            mock_bs.side_effect = [
+                Exception("lxml not available"),
+                mock_soup
+            ]
+
+            result = extract_plain_text(html)
+
+            # Verify both parsers were tried
+            assert mock_bs.call_count == 2
+            assert mock_bs.call_args_list[0][0][1] == "lxml"
+            assert mock_bs.call_args_list[1][0][1] == "html.parser"
+
+    def test_both_parsers_fail_returns_stripped_content(self):
+        """Test that when both parsers fail, raw text with stripped tags is returned."""
+        html = "<div>Important content</div>"
+
+        # Mock BeautifulSoup to always fail
+        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+            mock_bs.side_effect = Exception("Parser failed")
+
+            result = extract_plain_text(html)
+
+            # Should return content with HTML tags manually stripped
+            # The fallback adds spaces around tags: "< div>Important content< /div>"
+            assert "Important content" in result
+
+    def test_fallback_with_complex_html_both_fail(self):
+        """Test fallback behavior with more complex HTML when both parsers fail."""
+        html = "<html><body><p>First</p><p>Second</p></body></html>"
+
+        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+            mock_bs.side_effect = Exception("All parsers unavailable")
+
+            result = extract_plain_text(html)
+
+            # Content should still be extractable in some form
+            assert "First" in result
+            assert "Second" in result
+
+    def test_fallback_strips_angle_brackets_properly(self):
+        """Test that fallback strips HTML tags by adding spaces around brackets."""
+        html = "<span>Hello</span><strong>World</strong>"
+
+        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+            mock_bs.side_effect = Exception("Parser failure")
+
+            result = extract_plain_text(html)
+
+            # The fallback replaces < with " <" and > with "> "
+            # This effectively separates tag content from text
+            assert "Hello" in result
+            assert "World" in result

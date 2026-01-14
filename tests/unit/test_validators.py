@@ -638,3 +638,170 @@ class TestValidationIntegration:
         # First one will raise - testing that it does raise
         with pytest.raises(ValueError):
             validate_corpus_total_matches_length(corpus)
+
+
+class TestCorpusDateRange:
+    """Test cases for Corpus.date_range property."""
+
+    def test_date_range_empty_corpus_returns_extraction_date(self):
+        """Test that empty corpus returns extraction_date for both min and max."""
+        extraction_time = datetime(2024, 6, 15, 12, 0, 0)
+        corpus = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=extraction_time,
+                total_emails=0,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[]
+        )
+
+        min_date, max_date = corpus.date_range
+
+        assert min_date == extraction_time
+        assert max_date == extraction_time
+
+    def test_date_range_single_email(self):
+        """Test date_range with single email returns same date for min and max."""
+        email_date = datetime(2024, 3, 10, 9, 30, 0)
+        corpus = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=1,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[
+                Email(
+                    id="single_email",
+                    sender_email="sender@example.com",
+                    sender_domain="example.com",
+                    subject="Single email",
+                    body_text="Body",
+                    received_date=email_date,
+                    has_attachments=False
+                )
+            ]
+        )
+
+        min_date, max_date = corpus.date_range
+
+        assert min_date == email_date
+        assert max_date == email_date
+
+    def test_date_range_multiple_emails(self):
+        """Test date_range with multiple emails returns correct min and max."""
+        oldest_date = datetime(2024, 1, 1, 10, 0, 0)
+        middle_date = datetime(2024, 6, 15, 14, 30, 0)
+        newest_date = datetime(2024, 12, 31, 23, 59, 59)
+
+        corpus = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=3,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[
+                Email(
+                    id="middle",
+                    sender_email="b@example.com",
+                    sender_domain="example.com",
+                    subject="Middle email",
+                    body_text="Body",
+                    received_date=middle_date,
+                    has_attachments=False
+                ),
+                Email(
+                    id="oldest",
+                    sender_email="a@example.com",
+                    sender_domain="example.com",
+                    subject="Oldest email",
+                    body_text="Body",
+                    received_date=oldest_date,
+                    has_attachments=False
+                ),
+                Email(
+                    id="newest",
+                    sender_email="c@example.com",
+                    sender_domain="example.com",
+                    subject="Newest email",
+                    body_text="Body",
+                    received_date=newest_date,
+                    has_attachments=False
+                )
+            ]
+        )
+
+        min_date, max_date = corpus.date_range
+
+        assert min_date == oldest_date
+        assert max_date == newest_date
+
+    def test_date_range_returns_tuple(self):
+        """Test that date_range returns a tuple."""
+        corpus = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=1,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[
+                Email(
+                    id="test",
+                    sender_email="test@example.com",
+                    sender_domain="example.com",
+                    subject="Test",
+                    body_text="Body",
+                    received_date=datetime.now(),
+                    has_attachments=False
+                )
+            ]
+        )
+
+        result = corpus.date_range
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+
+    def test_date_range_chronological_order(self):
+        """Test that date_range returns dates in chronological order (oldest, newest)."""
+        earlier = datetime(2023, 1, 1)
+        later = datetime(2025, 12, 31)
+
+        corpus = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=2,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[
+                Email(
+                    id="later",
+                    sender_email="later@example.com",
+                    sender_domain="example.com",
+                    subject="Later",
+                    body_text="Body",
+                    received_date=later,
+                    has_attachments=False
+                ),
+                Email(
+                    id="earlier",
+                    sender_email="earlier@example.com",
+                    sender_domain="example.com",
+                    subject="Earlier",
+                    body_text="Body",
+                    received_date=earlier,
+                    has_attachments=False
+                )
+            ]
+        )
+
+        min_date, max_date = corpus.date_range
+
+        # min_date should be earlier, max_date should be later
+        assert min_date < max_date
+        assert min_date == earlier
+        assert max_date == later

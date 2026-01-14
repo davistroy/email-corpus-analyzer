@@ -5,7 +5,7 @@ Per quickstart.md Scenario 4 (lines 172-243), FR-032, and Clarification Q5.
 Allows users to review, approve, modify, merge, or delete suggested categories.
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.models.category import Category, CategorySource
@@ -269,7 +269,7 @@ class CategoryReview:
         approved_base = len(self.approved) - self.custom_count
 
         approval_data = {
-            "approval_date": datetime.utcnow().isoformat() + "Z",  # ISO 8601 with Z suffix
+            "approval_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),  # ISO 8601
             "total_categories": len(self.approved),
             "processing_stats": {
                 "suggested": suggested_count,
