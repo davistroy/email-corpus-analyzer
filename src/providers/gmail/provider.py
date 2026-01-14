@@ -6,7 +6,6 @@ Supports both personal Gmail and Google Workspace accounts.
 """
 import asyncio
 import base64
-import email
 from collections.abc import AsyncIterator
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -130,14 +129,14 @@ class GmailProvider(BaseEmailProvider):
                 f"Gmail dependencies not installed. Run: pip install google-api-python-client google-auth-oauthlib. Error: {e}",
                 provider=ProviderType.GMAIL,
                 recoverable=False,
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Gmail authentication failed: {e}")
             raise AuthenticationError(
                 f"Gmail authentication failed: {e}",
                 provider=ProviderType.GMAIL,
                 recoverable=True,
-            )
+            ) from e
 
     async def fetch_emails(
         self,
@@ -192,11 +191,11 @@ class GmailProvider(BaseEmailProvider):
             while True:
                 # List message IDs
                 result = await asyncio.to_thread(
-                    lambda: self._service.users().messages().list(
+                    lambda token=page_token: self._service.users().messages().list(
                         userId="me",
                         q=query,
                         maxResults=min(batch_size, 500),
-                        pageToken=page_token,
+                        pageToken=token,
                     ).execute()
                 )
 
@@ -221,7 +220,7 @@ class GmailProvider(BaseEmailProvider):
 
         except Exception as e:
             if "rateLimitExceeded" in str(e) or "quotaExceeded" in str(e):
-                raise RateLimitError(f"Rate limited by Gmail: {e}", retry_after=60)
+                raise RateLimitError(f"Rate limited by Gmail: {e}", retry_after=60) from e
             raise
 
     async def _fetch_message(self, message_id: str, include_body: bool) -> dict:
