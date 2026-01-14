@@ -161,8 +161,8 @@ Consider patterns in senders, content, timing, and required actions."""
         vol = results.volume_stats
         lines.append(f"Total emails: {vol.total_emails}")
         lines.append(f"Unique senders: {vol.unique_senders}")
-        lines.append(f"Unique domains: {vol.unique_domains}")
-        lines.append(f"Emails with attachments: {vol.emails_with_attachments}")
+        lines.append(f"Unique domains: {results.sender_analysis.unique_domains}")
+        lines.append(f"Emails with attachments: {vol.with_attachments}")
         lines.append("")
 
         # Top senders
@@ -173,8 +173,8 @@ Consider patterns in senders, content, timing, and required actions."""
 
         # Top domains
         lines.append("### Top Domains:")
-        for domain, count in results.sender_analysis.top_domains[:10]:
-            lines.append(f"- {domain}: {count} emails")
+        for domain_count in results.sender_analysis.top_domains[:10]:
+            lines.append(f"- {domain_count.domain}: {domain_count.count} emails")
         lines.append("")
 
         # Content clusters
@@ -189,17 +189,17 @@ Consider patterns in senders, content, timing, and required actions."""
         lines.append("### Subject Patterns:")
         patterns = results.subject_patterns
         if patterns.common_prefixes:
-            lines.append(f"- Common prefixes: {patterns.common_prefixes[:5]}")
-        if patterns.keywords:
-            lines.append(f"- Keywords: {patterns.keywords[:10]}")
+            lines.append(f"- Common prefixes: {list(patterns.common_prefixes.items())[:5]}")
+        if patterns.top_keywords:
+            lines.append(f"- Keywords: {[kw[0] for kw in patterns.top_keywords[:10]]}")
         lines.append("")
 
         # Temporal patterns
         lines.append("### Temporal Patterns:")
         temp = results.temporal_patterns
-        lines.append(f"- Daily senders: {len(temp.frequency_distribution.get('daily', []))}")
-        lines.append(f"- Weekly senders: {len(temp.frequency_distribution.get('weekly', []))}")
-        lines.append(f"- One-time senders: {len(temp.frequency_distribution.get('one_time', []))}")
+        lines.append(f"- Daily senders: {temp.frequency_distribution.get('daily', 0)}")
+        lines.append(f"- Weekly senders: {temp.frequency_distribution.get('weekly', 0)}")
+        lines.append(f"- One-time senders: {temp.frequency_distribution.get('one_time', 0)}")
 
         return "\n".join(lines)
 
