@@ -4,8 +4,11 @@
 
 ```bash
 # Clone and setup
-cd /home/davistroy/dev/email-processor/initial-learning
-source venv/bin/activate
+git clone https://github.com/davistroy/email-corpus-analyzer.git
+cd email-corpus-analyzer
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or: venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 ```
 
@@ -48,11 +51,38 @@ python -m src.cli suggest --min-cluster-percentage 3.0
 
 ### Review Categories
 ```bash
-# Interactive review
+# Interactive TUI review (default)
 python -m src.cli review
+
+# CLI-based review
+python -m src.cli review --no-tui
 
 # Skip cleanup prompt
 python -m src.cli review --no-cleanup
+```
+
+### Export Results
+```bash
+# Export to CSV
+python -m src.cli export --format csv
+
+# Export to HTML
+python -m src.cli export --format html
+```
+
+### Configuration
+```bash
+# Show resolved configuration
+python -m src.cli config show
+
+# Generate config template
+python -m src.cli config init
+```
+
+### Corpus Info
+```bash
+# Show corpus statistics
+python -m src.cli info
 ```
 
 ### Complete Pipeline
@@ -75,7 +105,10 @@ python -m src.cli --output-dir ~/analysis pipeline --user-email your.email@hotma
 | Category suggestions | `~/data/outputs/category_suggestions.json` |
 | Suggestions report | `~/data/outputs/category_suggestions_report.md` |
 | Approved categories | `~/data/outputs/approved_categories.json` |
+| Embeddings cache | `~/data/outputs/embeddings_cache.npz` |
 | Error log | `~/data/outputs/extraction_errors.log` |
+| Global config | `~/.email-analyzer/config.yaml` |
+| Decision history | `~/.email-analyzer/decisions.jsonl` |
 
 ---
 
@@ -84,16 +117,24 @@ python -m src.cli --output-dir ~/analysis pipeline --user-email your.email@hotma
 ### Global (before command)
 - `--output-dir DIR` - Set output directory for all files
 - `--verbose` / `-v` - Enable debug logging
+- `--quiet` - Suppress INFO output
+- `--json` - JSON output for automation
+- `--config PATH` - Custom config file path
+- `--dry-run` - Preview without executing
+- `--version` - Show version
 
 ### Extract Command
 - `--user-email EMAIL` - (required) M365/Hotmail address
 - `--corpus-file PATH` - Custom corpus file path
 - `--batch-size N` - Emails per batch (default: 500)
 - `--checkpoint-interval N` - Checkpoint every N emails (default: 100)
+- `--since-last` - Only extract emails since last extraction
 
 ### Analyze Command
 - `--corpus PATH` - Input corpus file
 - `--num-clusters N` - Semantic clusters (default: 10)
+- `--auto-clusters` - Automatically determine optimal cluster count
+- `--incremental` - Only process new emails using cached embeddings
 - `--analysis-file PATH` - Output analysis file
 
 ### Suggest Command
@@ -126,6 +167,9 @@ python -m src.cli analyze --help
 python -m src.cli suggest --help
 python -m src.cli review --help
 python -m src.cli pipeline --help
+python -m src.cli info --help
+python -m src.cli config --help
+python -m src.cli export --help
 ```
 
 ---

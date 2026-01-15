@@ -73,14 +73,19 @@ email-corpus-analyzer/
 ├── src/
 │   ├── models/              # 7 Pydantic data models
 │   ├── extractors/          # Email extraction (M365, HTML parsing)
-│   ├── analyzers/           # 5 analysis modules
+│   ├── analyzers/           # 7 analysis modules (semantic, hierarchical, etc.)
 │   ├── generators/          # Category suggestion generation
-│   ├── ui/                  # Interactive category review
+│   ├── ui/                  # Interactive review (CLI + TUI)
+│   ├── cache/               # Embedding cache for incremental analysis
+│   ├── config/              # YAML configuration system
+│   ├── exporters/           # CSV and HTML export
+│   ├── learning/            # Feedback learning system
+│   ├── preview/             # Dry-run estimators
 │   └── utils/               # Logging, file management, paths
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests
+│   └── unit/                # Unit tests (1144 tests, 84% coverage)
 ├── docs/                    # Documentation
 ├── scripts/                 # Standalone scripts
 ├── specs/                   # Design specifications

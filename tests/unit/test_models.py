@@ -1,0 +1,344 @@
+"""
+Unit tests for data models.
+
+Tests the Category model and its hierarchical extensions.
+"""
+import pytest
+
+from src.models.category import Category, CategorySource
+
+
+# -----------------------------------------------------------------------------
+# Test Fixtures - Sample Data Builders
+# -----------------------------------------------------------------------------
+
+
+def create_test_category(
+    category_id: str = "test_cat_1",
+    name: str = "Test Category",
+    description: str = "A test category",
+    confidence: float = 0.85,
+    email_count: int = 100,
+    percentage: float = 10.0,
+    source: CategorySource = CategorySource.CONTENT_CLUSTER,
+    parent_category_id: str | None = None,
+    level: int = 0,
+    subcategories: list | None = None,
+) -> Category:
+    """Create a test Category object."""
+    return Category(
+        category_id=category_id,
+        category_name=name,
+        description=description,
+        confidence=confidence,
+        email_count=email_count,
+        percentage=percentage,
+        source=source,
+        parent_category_id=parent_category_id,
+        level=level,
+        subcategories=subcategories or [],
+    )
+
+
+# -----------------------------------------------------------------------------
+# Category Model Base Tests
+# -----------------------------------------------------------------------------
+
+
+class TestCategoryModel:
+    """Test cases for the base Category model."""
+
+    def test_category_required_fields(self):
+        """Test that Category requires essential fields."""
+        category = Category(
+            category_id="cat_1",
+            category_name="Test",
+            description="Test category",
+            confidence=0.8,
+            source=CategorySource.CONTENT_CLUSTER,
+        )
+
+        assert category.category_id == "cat_1"
+        assert category.category_name == "Test"
+        assert category.confidence == 0.8
+
+    def test_category_id_validation(self):
+        """Test that category_id must be non-empty."""
+        with pytest.raises(ValueError):
+            Category(
+                category_id="",
+                category_name="Test",
+                description="Test",
+                confidence=0.5,
+                source=CategorySource.TEMPLATE,
+            )
+
+    def test_category_name_validation(self):
+        """Test that category_name must be non-empty."""
+        with pytest.raises(ValueError):
+            Category(
+                category_id="cat_1",
+                category_name="",
+                description="Test",
+                confidence=0.5,
+                source=CategorySource.TEMPLATE,
+            )
+
+    def test_confidence_range_validation(self):
+        """Test that confidence must be between 0 and 1."""
+        with pytest.raises(ValueError):
+            Category(
+                category_id="cat_1",
+                category_name="Test",
+                description="Test",
+                confidence=1.5,  # Invalid: > 1
+                source=CategorySource.TEMPLATE,
+            )
+
+        with pytest.raises(ValueError):
+            Category(
+                category_id="cat_2",
+                category_name="Test",
+                description="Test",
+                confidence=-0.1,  # Invalid: < 0
+                source=CategorySource.TEMPLATE,
+            )
+
+    def test_category_optional_fields_defaults(self):
+        """Test that optional fields have correct defaults."""
+        category = Category(
+            category_id="cat_1",
+            category_name="Test",
+            description="Test",
+            confidence=0.5,
+            source=CategorySource.CUSTOM,
+        )
+
+        assert category.email_count is None
+        assert category.percentage is None
+        assert category.source_id is None
+        assert category.user_modified is False
+        assert category.distinguishing_features == []
+        assert category.example_email_ids == []
+
+
+# -----------------------------------------------------------------------------
+# Hierarchical Category Model Tests (Task 4A.1)
+# -----------------------------------------------------------------------------
+
+
+class TestCategoryHierarchicalFields:
+    """Test cases for hierarchical Category fields (Task 4A.1)."""
+
+    def test_parent_category_id_default_none(self):
+        """Test that parent_category_id defaults to None."""
+        category = create_test_category()
+
+        assert category.parent_category_id is None
+
+    def test_parent_category_id_can_be_set(self):
+        """Test that parent_category_id can be set to a valid ID."""
+        category = create_test_category(parent_category_id="parent_cat_1")
+
+        assert category.parent_category_id == "parent_cat_1"
+
+    def test_level_default_zero(self):
+        """Test that level defaults to 0 (top-level category)."""
+        category = create_test_category()
+
+        assert category.level == 0
+
+    def test_level_can_be_set(self):
+        """Test that level can be set to different values."""
+        category_level_0 = create_test_category(level=0)
+        category_level_1 = create_test_category(level=1)
+        category_level_2 = create_test_category(level=2)
+
+        assert category_level_0.level == 0
+        assert category_level_1.level == 1
+        assert category_level_2.level == 2
+
+    def test_level_validation_non_negative(self):
+        """Test that level must be non-negative."""
+        with pytest.raises(ValueError):
+            create_test_category(level=-1)
+
+    def test_subcategories_default_empty_list(self):
+        """Test that subcategories defaults to empty list."""
+        category = create_test_category()
+
+        assert category.subcategories == []
+        assert isinstance(category.subcategories, list)
+
+    def test_subcategories_can_contain_categories(self):
+        """Test that subcategories can contain Category objects."""
+        child1 = create_test_category(category_id="child_1", name="Child 1", level=1)
+        child2 = create_test_category(category_id="child_2", name="Child 2", level=1)
+
+        parent = create_test_category(
+            category_id="parent_1",
+            name="Parent",
+            level=0,
+            subcategories=[child1, child2],
+        )
+
+        assert len(parent.subcategories) == 2
+        assert parent.subcategories[0].category_name == "Child 1"
+        assert parent.subcategories[1].category_name == "Child 2"
+
+    def test_nested_hierarchy_three_levels(self):
+        """Test that categories can have nested subcategories."""
+        grandchild = create_test_category(
+            category_id="grandchild_1",
+            name="Grandchild",
+            level=2,
+            parent_category_id="child_1",
+        )
+        child = create_test_category(
+            category_id="child_1",
+            name="Child",
+            level=1,
+            parent_category_id="parent_1",
+            subcategories=[grandchild],
+        )
+        parent = create_test_category(
+            category_id="parent_1",
+            name="Parent",
+            level=0,
+            subcategories=[child],
+        )
+
+        assert parent.level == 0
+        assert parent.subcategories[0].level == 1
+        assert parent.subcategories[0].subcategories[0].level == 2
+
+    def test_backward_compatibility_existing_categories_work(self):
+        """Test that existing category creation still works (backward compatible)."""
+        # Create category without any new hierarchical fields
+        category = Category(
+            category_id="cat_1",
+            category_name="Legacy Category",
+            description="Created without new fields",
+            confidence=0.75,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.SENDER,
+            source_id="sender@example.com",
+            user_modified=False,
+            distinguishing_features=["feature1", "feature2"],
+            example_email_ids=["email_1", "email_2"],
+        )
+
+        # Should work and have defaults for new fields
+        assert category.parent_category_id is None
+        assert category.level == 0
+        assert category.subcategories == []
+
+    def test_hierarchical_fields_in_model_dump(self):
+        """Test that hierarchical fields are included in model_dump output."""
+        child = create_test_category(
+            category_id="child_1",
+            name="Child",
+            level=1,
+            parent_category_id="parent_1",
+        )
+        parent = create_test_category(
+            category_id="parent_1",
+            name="Parent",
+            level=0,
+            subcategories=[child],
+        )
+
+        parent_dict = parent.model_dump()
+
+        assert "parent_category_id" in parent_dict
+        assert "level" in parent_dict
+        assert "subcategories" in parent_dict
+        assert parent_dict["level"] == 0
+        assert len(parent_dict["subcategories"]) == 1
+        assert parent_dict["subcategories"][0]["level"] == 1
+
+    def test_hierarchical_category_from_dict(self):
+        """Test that Category can be recreated from dict with hierarchy."""
+        parent_dict = {
+            "category_id": "parent_1",
+            "category_name": "Parent",
+            "description": "Parent category",
+            "confidence": 0.9,
+            "source": "content_cluster",
+            "level": 0,
+            "parent_category_id": None,
+            "subcategories": [
+                {
+                    "category_id": "child_1",
+                    "category_name": "Child",
+                    "description": "Child category",
+                    "confidence": 0.85,
+                    "source": "content_cluster",
+                    "level": 1,
+                    "parent_category_id": "parent_1",
+                    "subcategories": [],
+                }
+            ],
+        }
+
+        category = Category(**parent_dict)
+
+        assert category.category_id == "parent_1"
+        assert len(category.subcategories) == 1
+        assert category.subcategories[0].category_id == "child_1"
+        assert category.subcategories[0].parent_category_id == "parent_1"
+
+
+class TestCategoryHierarchyHelpers:
+    """Test cases for Category hierarchy helper properties."""
+
+    def test_is_top_level_property(self):
+        """Test is_top_level returns True for level 0 categories."""
+        top_level = create_test_category(level=0)
+        sub_level = create_test_category(level=1)
+
+        assert top_level.is_top_level is True
+        assert sub_level.is_top_level is False
+
+    def test_has_children_property(self):
+        """Test has_children returns True when subcategories exist."""
+        child = create_test_category(category_id="child")
+        parent = create_test_category(subcategories=[child])
+        leaf = create_test_category()
+
+        assert parent.has_children is True
+        assert leaf.has_children is False
+
+    def test_children_count_property(self):
+        """Test children_count returns correct count."""
+        child1 = create_test_category(category_id="child_1")
+        child2 = create_test_category(category_id="child_2")
+        parent = create_test_category(subcategories=[child1, child2])
+        leaf = create_test_category()
+
+        assert parent.children_count == 2
+        assert leaf.children_count == 0
+
+
+class TestCategorySourceEnum:
+    """Test cases for CategorySource enum."""
+
+    def test_category_source_values(self):
+        """Test all CategorySource enum values exist."""
+        assert CategorySource.CONTENT_CLUSTER.value == "content_cluster"
+        assert CategorySource.SENDER.value == "sender"
+        assert CategorySource.TEMPLATE.value == "template"
+        assert CategorySource.CUSTOM.value == "custom"
+
+    def test_category_source_string_conversion(self):
+        """Test CategorySource can be created from string."""
+        category = Category(
+            category_id="cat_1",
+            category_name="Test",
+            description="Test",
+            confidence=0.5,
+            source="content_cluster",  # String value
+        )
+
+        assert category.source == CategorySource.CONTENT_CLUSTER

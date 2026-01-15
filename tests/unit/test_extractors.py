@@ -222,6 +222,24 @@ class TestCheckpointManager:
         assert emails == []
 
 
+class TestCLIExtractSinceLastFlag:
+    """Test cases for --since-last CLI flag (Task 4B.2)."""
+
+    def test_extract_command_has_since_last_flag(self):
+        """Test that extract command has --since-last flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Without flag - default should be False
+        args = parser.parse_args(["extract", "--user-email", "test@test.com"])
+        assert args.since_last is False
+
+        # With flag - should be True
+        args = parser.parse_args(["extract", "--user-email", "test@test.com", "--since-last"])
+        assert args.since_last is True
+
+
 class TestM365MCPClient:
     """Test cases for M365MCPClient class."""
 
@@ -815,6 +833,172 @@ class TestEmailExtractorRetryLogic:
                 extractor._get_total_email_count()
 
 
+class TestIncrementalExtraction:
+    """Test cases for Task 4B.2: Incremental extraction functionality."""
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create EmailExtractor with temp directory."""
+        return EmailExtractor(
+            user_email="incremental@example.com",
+            checkpoint_dir=str(tmp_path)
+        )
+
+    @pytest.fixture
+    def existing_corpus(self):
+        """Create an existing corpus for incremental extraction tests."""
+        return Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime(2024, 1, 1, 10, 0),
+                total_emails=2,
+                source="Hotmail/M365",
+                user_email="incremental@example.com",
+                last_extraction_date=datetime(2024, 1, 1, 10, 0),
+                email_ids_hash="existing_hash",
+                extraction_params={"batch_size": 500}
+            ),
+            emails=[
+                Email(
+                    id="existing_001",
+                    sender_email="old1@example.com",
+                    sender_name="Old Sender 1",
+                    sender_domain="example.com",
+                    subject="Old Email 1",
+                    body_text="Old body 1",
+                    received_date=datetime(2024, 1, 1, 8, 0),
+                    has_attachments=False
+                ),
+                Email(
+                    id="existing_002",
+                    sender_email="old2@example.com",
+                    sender_name="Old Sender 2",
+                    sender_domain="example.com",
+                    subject="Old Email 2",
+                    body_text="Old body 2",
+                    received_date=datetime(2024, 1, 1, 9, 0),
+                    has_attachments=False
+                )
+            ]
+        )
+
+    @pytest.fixture
+    def new_email_data(self):
+        """Create mock M365 data for a new email."""
+        return {
+            "id": "new_001",
+            "subject": "New Email",
+            "from": {
+                "emailAddress": {
+                    "address": "new@example.com",
+                    "name": "New Sender"
+                }
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": "me@example.com", "name": "Me"}}
+            ],
+            "body": {"content": "<p>New email body</p>"},
+            "receivedDateTime": "2024-01-15T10:00:00Z",
+            "hasAttachments": False
+        }
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extract_incremental_only_fetches_new_emails(
+        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+    ):
+        """Test that incremental extraction only fetches emails since last extraction."""
+        mock_get_count.return_value = 1
+        mock_fetch_batch.return_value = [new_email_data]
+
+        result = extractor.extract_incremental(existing_corpus)
+
+        # Should have 3 emails total (2 existing + 1 new)
+        assert result.corpus.extraction_metadata.total_emails == 3
+        assert len(result.corpus.emails) == 3
+        assert result.new_emails_count == 1
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extract_incremental_deduplicates_by_message_id(
+        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus
+    ):
+        """Test that duplicate emails are not added (deduplication by message_id)."""
+        mock_get_count.return_value = 1
+        # Return an email with ID that already exists in corpus
+        duplicate_email = {
+            "id": "existing_001",  # Same ID as existing email
+            "subject": "Duplicate Email",
+            "from": {"emailAddress": {"address": "dup@example.com", "name": "Dup"}},
+            "toRecipients": [{"emailAddress": {"address": "me@example.com", "name": "Me"}}],
+            "body": {"content": "Duplicate body"},
+            "receivedDateTime": "2024-01-15T10:00:00Z",
+            "hasAttachments": False
+        }
+        mock_fetch_batch.return_value = [duplicate_email]
+
+        result = extractor.extract_incremental(existing_corpus)
+
+        # Should still have 2 emails (no duplicates added)
+        assert len(result.corpus.emails) == 2
+        assert result.new_emails_count == 0
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extract_incremental_updates_metadata(
+        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+    ):
+        """Test that metadata is updated after incremental extraction."""
+        mock_get_count.return_value = 1
+        mock_fetch_batch.return_value = [new_email_data]
+
+        old_extraction_date = existing_corpus.extraction_metadata.last_extraction_date
+        result = extractor.extract_incremental(existing_corpus)
+
+        # Metadata should be updated
+        assert result.corpus.extraction_metadata.last_extraction_date > old_extraction_date
+        assert result.corpus.extraction_metadata.email_ids_hash != existing_corpus.extraction_metadata.email_ids_hash
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extract_incremental_empty_result(
+        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus
+    ):
+        """Test incremental extraction when there are no new emails."""
+        mock_get_count.return_value = 0
+        mock_fetch_batch.return_value = []
+
+        result = extractor.extract_incremental(existing_corpus)
+
+        # Should still have original 2 emails, no new ones
+        assert len(result.corpus.emails) == 2
+        assert result.new_emails_count == 0
+
+    def test_extract_incremental_result_has_new_emails_count(self, extractor):
+        """Test that IncrementalExtractionResult has new_emails_count attribute."""
+        # Just verify the dataclass/result class has the expected attribute
+        from src.extractors.m365_extractor import IncrementalExtractionResult
+        assert hasattr(IncrementalExtractionResult, '__annotations__')
+        assert 'new_emails_count' in IncrementalExtractionResult.__annotations__
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extract_incremental_reports_statistics(
+        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+    ):
+        """Test that incremental extraction provides statistics about added emails."""
+        mock_get_count.return_value = 2
+        new_email_2 = new_email_data.copy()
+        new_email_2["id"] = "new_002"
+        mock_fetch_batch.return_value = [new_email_data, new_email_2]
+
+        result = extractor.extract_incremental(existing_corpus)
+
+        # Statistics should be correct
+        assert result.previous_count == 2  # Old corpus had 2
+        assert result.new_emails_count == 2  # Added 2 new
+        assert result.total_count == 4  # Total is now 4
+
+
 class TestEmailExtractorEdgeCases:
     """Test edge cases for EmailExtractor."""
 
@@ -981,6 +1165,196 @@ class TestM365MCPExtractorWithMockedBatches:
         )
         # Even if there were more emails, max_emails would limit
         assert len(corpus.emails) <= 50
+
+
+class TestCorpusMetadataEnhancements:
+    """Test cases for Task 4B.1: Enhanced CorpusMetadata fields."""
+
+    def test_corpus_metadata_has_last_extraction_date_field(self):
+        """Test CorpusMetadata model has last_extraction_date field."""
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=10,
+            source="test",
+            user_email="user@example.com",
+            last_extraction_date=datetime(2024, 1, 15, 10, 0)
+        )
+        assert metadata.last_extraction_date == datetime(2024, 1, 15, 10, 0)
+
+    def test_corpus_metadata_last_extraction_date_defaults_to_none(self):
+        """Test that last_extraction_date defaults to None."""
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=0,
+            source="test",
+            user_email="user@example.com"
+        )
+        assert metadata.last_extraction_date is None
+
+    def test_corpus_metadata_has_email_ids_hash_field(self):
+        """Test CorpusMetadata model has email_ids_hash field."""
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=5,
+            source="test",
+            user_email="user@example.com",
+            email_ids_hash="abc123def456"
+        )
+        assert metadata.email_ids_hash == "abc123def456"
+
+    def test_corpus_metadata_email_ids_hash_defaults_to_none(self):
+        """Test that email_ids_hash defaults to None."""
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=0,
+            source="test",
+            user_email="user@example.com"
+        )
+        assert metadata.email_ids_hash is None
+
+    def test_corpus_metadata_has_extraction_params_field(self):
+        """Test CorpusMetadata model has extraction_params field."""
+        params = {"batch_size": 500, "max_emails": 1000}
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=100,
+            source="test",
+            user_email="user@example.com",
+            extraction_params=params
+        )
+        assert metadata.extraction_params == params
+        assert metadata.extraction_params["batch_size"] == 500
+
+    def test_corpus_metadata_extraction_params_defaults_to_none(self):
+        """Test that extraction_params defaults to None."""
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=0,
+            source="test",
+            user_email="user@example.com"
+        )
+        assert metadata.extraction_params is None
+
+    def test_corpus_metadata_all_new_fields_in_model_dump(self):
+        """Test that all new metadata fields are included in model_dump output."""
+        metadata = CorpusMetadata(
+            extraction_date=datetime.now(),
+            total_emails=50,
+            source="test",
+            user_email="user@example.com",
+            last_extraction_date=datetime(2024, 6, 1),
+            email_ids_hash="hash123",
+            extraction_params={"batch_size": 100}
+        )
+        dumped = metadata.model_dump()
+
+        assert "last_extraction_date" in dumped
+        assert "email_ids_hash" in dumped
+        assert "extraction_params" in dumped
+        assert dumped["email_ids_hash"] == "hash123"
+
+
+class TestExtractionMetadataUpdate:
+    """Test cases for updating metadata during extraction."""
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create EmailExtractor for metadata update tests."""
+        return EmailExtractor(
+            user_email="test@example.com",
+            checkpoint_dir=str(tmp_path)
+        )
+
+    @pytest.fixture
+    def mock_email_data(self):
+        """Create mock M365 email data."""
+        return {
+            "id": "msg123",
+            "subject": "Test Email",
+            "from": {
+                "emailAddress": {
+                    "address": "sender@example.com",
+                    "name": "Test Sender"
+                }
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": "recipient@example.com", "name": "Recipient"}}
+            ],
+            "body": {"content": "<p>Test body</p>"},
+            "receivedDateTime": "2024-01-15T10:30:00Z",
+            "hasAttachments": False
+        }
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extraction_result_includes_extraction_params(
+        self, mock_fetch_batch, mock_get_count, extractor, mock_email_data
+    ):
+        """Test that extraction result corpus includes extraction parameters."""
+        mock_get_count.return_value = 1
+        mock_fetch_batch.return_value = [mock_email_data]
+
+        result = extractor.extract_all(max_batch_size=250, checkpoint_interval=50)
+
+        # Verify extraction_params is populated
+        assert result.corpus.extraction_metadata.extraction_params is not None
+        params = result.corpus.extraction_metadata.extraction_params
+        assert params["batch_size"] == 250
+        assert params["checkpoint_interval"] == 50
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extraction_result_includes_email_ids_hash(
+        self, mock_fetch_batch, mock_get_count, extractor, mock_email_data
+    ):
+        """Test that extraction result corpus includes email_ids_hash."""
+        mock_get_count.return_value = 1
+        mock_fetch_batch.return_value = [mock_email_data]
+
+        result = extractor.extract_all(max_batch_size=100)
+
+        # Verify email_ids_hash is populated
+        assert result.corpus.extraction_metadata.email_ids_hash is not None
+        assert len(result.corpus.extraction_metadata.email_ids_hash) > 0
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_email_ids_hash_changes_with_different_emails(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Test that email_ids_hash changes when emails are different."""
+        mock_get_count.return_value = 1
+
+        # First extraction
+        email1 = {
+            "id": "msg_001",
+            "subject": "Email 1",
+            "from": {"emailAddress": {"address": "a@example.com", "name": "A"}},
+            "toRecipients": [{"emailAddress": {"address": "r@example.com", "name": "R"}}],
+            "body": {"content": "Body 1"},
+            "receivedDateTime": "2024-01-01T00:00:00Z",
+            "hasAttachments": False
+        }
+        mock_fetch_batch.return_value = [email1]
+        result1 = extractor.extract_all()
+        hash1 = result1.corpus.extraction_metadata.email_ids_hash
+
+        # Second extraction with different email
+        email2 = {
+            "id": "msg_002",  # Different ID
+            "subject": "Email 2",
+            "from": {"emailAddress": {"address": "b@example.com", "name": "B"}},
+            "toRecipients": [{"emailAddress": {"address": "r@example.com", "name": "R"}}],
+            "body": {"content": "Body 2"},
+            "receivedDateTime": "2024-01-02T00:00:00Z",
+            "hasAttachments": False
+        }
+        mock_fetch_batch.return_value = [email2]
+        result2 = extractor.extract_all()
+        hash2 = result2.corpus.extraction_metadata.email_ids_hash
+
+        # Hashes should be different
+        assert hash1 != hash2
 
 
 class TestIntegrationScenarios:

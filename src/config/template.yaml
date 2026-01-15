@@ -1,0 +1,82 @@
+# Email Corpus Analyzer Configuration
+# =====================================
+# This file configures the email extraction and analysis pipeline.
+# Copy this file to one of these locations:
+#   - ~/.config/email-analyzer/config.yaml (global)
+#   - ./.email-analyzer.yaml (project-specific)
+#
+# Project config overrides global config.
+# CLI arguments override both config files.
+#
+# Uncomment and modify values as needed.
+
+# Global Settings
+# ---------------
+# Output directory for all generated files
+# output_dir: ~/data/outputs
+
+# Your M365/Hotmail email address (required for extraction)
+# user_email: your@email.com
+
+# Enable verbose debug logging
+# verbose: false
+
+# Extract Command Settings
+# ------------------------
+extract:
+  # Number of emails to fetch per batch
+  batch_size: 500
+
+  # Save checkpoint every N emails
+  checkpoint_interval: 100
+
+  # Custom path for corpus JSON (optional)
+  # corpus_file: /path/to/corpus.json
+
+# Analyze Command Settings
+# ------------------------
+analyze:
+  # Number of semantic clusters for content analysis
+  num_clusters: 10
+
+  # Path to corpus JSON file (optional, uses default if not set)
+  # corpus_file: /path/to/corpus.json
+
+  # Custom path for analysis results (optional)
+  # analysis_file: /path/to/analysis.json
+
+# Suggest Command Settings
+# ------------------------
+suggest:
+  # Minimum cluster size percentage for category generation
+  min_cluster_percentage: 5.0
+
+  # Minimum email count for sender-based categories
+  min_sender_count: 20
+
+  # Path to analysis results JSON (optional)
+  # analysis_file: /path/to/analysis.json
+
+  # Custom path for suggestions JSON (optional)
+  # suggestions_file: /path/to/suggestions.json
+
+# Review Command Settings
+# -----------------------
+review:
+  # Path to suggestions JSON (optional)
+  # suggestions_file: /path/to/suggestions.json
+
+  # Custom path for approved categories (optional)
+  # approved_file: /path/to/approved.json
+
+  # Skip cleanup of intermediate files
+  no_cleanup: false
+
+# Pipeline Command Settings
+# -------------------------
+pipeline:
+  # Number of semantic clusters
+  num_clusters: 10
+
+  # Skip cleanup of intermediate files
+  no_cleanup: false

@@ -3,11 +3,15 @@ Interactive category review CLI module.
 
 Per quickstart.md Scenario 4 (lines 172-243), FR-032, and Clarification Q5.
 Allows users to review, approve, modify, merge, or delete suggested categories.
+Task 5A.3: Enhanced confidence display with breakdown.
+Task 5B.3: Integration with feedback learning to log decisions and apply patterns.
 """
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.learning.decision_logger import DecisionAction, DecisionLogger
+from src.learning.pattern_detector import DetectedPattern, PatternDetector, PatternType
 from src.models.category import Category, CategorySource
 from src.models.email import Email
 from src.utils.file_manager import load_json, save_json
@@ -16,16 +20,60 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def format_confidence_display(category: Category) -> str:
+    """
+    Format confidence score for display in CLI review.
+
+    Task 5A.3: Shows overall confidence and breakdown if available.
+
+    Args:
+        category: Category to display confidence for
+
+    Returns:
+        Formatted string with confidence information
+    """
+    confidence_pct = category.confidence * 100
+    lines = [f"{confidence_pct:.1f}%"]
+
+    # Add breakdown if available
+    if category.confidence_breakdown:
+        breakdown_parts = []
+        for component, score in category.confidence_breakdown.items():
+            score_pct = int(score * 100)
+            # Short names for CLI display
+            short_names = {
+                "cohesion": "Coh",
+                "volume": "Vol",
+                "source": "Src",
+                "percentage": "Pct",
+                "name_quality": "Name",
+                "distinctiveness": "Dist"
+            }
+            short_name = short_names.get(component, component[:4].title())
+            breakdown_parts.append(f"{short_name}:{score_pct}")
+        lines.append(f"  ({', '.join(breakdown_parts)})")
+
+    return "\n".join(lines)
+
+
 class CategoryReview:
     """Interactive CLI for reviewing and approving category suggestions."""
 
-    def __init__(self, categories: list[Category], email_lookup: dict[str, Email] = None):
+    def __init__(
+        self,
+        categories: list[Category],
+        email_lookup: dict[str, Email] = None,
+        decision_logger: DecisionLogger | None = None,
+        enable_learning: bool = True,
+    ):
         """
         Initialize category review.
 
         Args:
             categories: List of suggested categories to review
             email_lookup: Optional dictionary mapping email IDs to Email objects for sample display
+            decision_logger: Optional DecisionLogger for feedback learning (Task 5B.3)
+            enable_learning: Whether to log decisions and apply patterns (default: True)
         """
         self.categories = categories
         self.email_lookup = email_lookup or {}
@@ -35,6 +83,110 @@ class CategoryReview:
         self.deleted_count = 0
         self.custom_count = 0
         self.skipped: list[Category] = []
+        self.enable_learning = enable_learning
+        self.decision_logger = decision_logger if enable_learning else None
+        self.auto_applied_actions: list[dict] = []  # Track auto-applied patterns
+
+    def _apply_learned_patterns(self) -> tuple[list[Category], list[dict]]:
+        """
+        Apply high-confidence learned patterns to categories before review.
+
+        Task 5B.3: Pre-apply learned preferences before user review.
+
+        Returns:
+            Tuple of (categories_to_review, auto_applied_actions)
+            - categories_to_review: Categories that still need manual review
+            - auto_applied_actions: List of actions that were auto-applied
+        """
+        if not self.decision_logger or not self.enable_learning:
+            return self.categories, []
+
+        detector = PatternDetector(decision_logger=self.decision_logger)
+        patterns = detector.get_high_confidence_patterns(min_confidence=0.8)
+
+        if not patterns:
+            return self.categories, []
+
+        auto_applied = []
+        categories_to_review = []
+
+        for category in self.categories:
+            applied = False
+
+            for pattern in patterns:
+                if pattern.pattern_type == PatternType.ALWAYS_ACCEPT:
+                    # Auto-accept categories with matching names
+                    if category.category_name == pattern.parameters.get("category_name"):
+                        self.approved.append(category)
+                        auto_applied.append({
+                            "action": "accept",
+                            "category_name": category.category_name,
+                            "pattern": pattern.to_dict(),
+                        })
+                        applied = True
+                        break
+
+                elif pattern.pattern_type == PatternType.RENAME:
+                    # Auto-rename categories matching old name
+                    if category.category_name == pattern.parameters.get("old_name"):
+                        new_name = pattern.parameters.get("new_name")
+                        old_name = category.category_name
+                        category.category_name = new_name
+                        category.user_modified = True
+                        self.approved.append(category)
+                        self.modified_count += 1
+                        auto_applied.append({
+                            "action": "rename",
+                            "old_name": old_name,
+                            "new_name": new_name,
+                            "pattern": pattern.to_dict(),
+                        })
+                        applied = True
+                        break
+
+                elif pattern.pattern_type == PatternType.DELETE_LOW_CONFIDENCE:
+                    # Auto-delete low confidence categories
+                    threshold = pattern.parameters.get("threshold", 0.3)
+                    if category.confidence < threshold:
+                        self.deleted_count += 1
+                        auto_applied.append({
+                            "action": "delete",
+                            "category_name": category.category_name,
+                            "confidence": category.confidence,
+                            "threshold": threshold,
+                            "pattern": pattern.to_dict(),
+                        })
+                        applied = True
+                        break
+
+            if not applied:
+                categories_to_review.append(category)
+
+        return categories_to_review, auto_applied
+
+    def _show_auto_applied_actions(self) -> None:
+        """Display summary of auto-applied patterns to user."""
+        if not self.auto_applied_actions:
+            return
+
+        print("=" * 60)
+        print("AUTO-APPLIED LEARNED PREFERENCES")
+        print("=" * 60)
+        print()
+        print(f"Based on your previous review patterns, {len(self.auto_applied_actions)} actions were auto-applied:")
+        print()
+
+        for action in self.auto_applied_actions:
+            if action["action"] == "accept":
+                print(f"  [A] Accepted: '{action['category_name']}'")
+            elif action["action"] == "rename":
+                print(f"  [R] Renamed: '{action['old_name']}' -> '{action['new_name']}'")
+            elif action["action"] == "delete":
+                print(f"  [D] Deleted: '{action['category_name']}' (confidence: {action['confidence']:.0%})")
+
+        print()
+        print("You can override these during the review by re-adding categories.")
+        print()
 
     def run_interactive_review(self) -> list[Category]:
         """
@@ -44,15 +196,22 @@ class CategoryReview:
             List of approved categories with user modifications
 
         Based on quickstart.md lines 178-217
+        Task 5B.3: Applies learned patterns before review.
         """
         print("=" * 60)
         print("CATEGORY REVIEW - Interactive Mode")
         print("=" * 60)
         print()
 
-        # First pass - review all categories
-        for idx, category in enumerate(self.categories, 1):
-            self._review_category(category, idx, len(self.categories))
+        # Apply learned patterns (Task 5B.3)
+        categories_to_review, self.auto_applied_actions = self._apply_learned_patterns()
+
+        # Show what was auto-applied
+        self._show_auto_applied_actions()
+
+        # First pass - review remaining categories
+        for idx, category in enumerate(categories_to_review, 1):
+            self._review_category(category, idx, len(categories_to_review))
 
         # Second pass - re-present skipped categories
         if self.skipped:
@@ -147,6 +306,12 @@ class CategoryReview:
                 self.approved.append(category)
                 print(f"✓ Category '{category.category_name}' approved")
                 logger.info(f"Category accepted: {category.category_name}")
+                # Log decision for learning (Task 5B.3)
+                if self.decision_logger:
+                    self.decision_logger.log_decision(
+                        category.category_name,
+                        DecisionAction.ACCEPT,
+                    )
                 print()
                 return 'accept'
 
@@ -160,6 +325,14 @@ class CategoryReview:
                     self.modified_count += 1
                     print(f"✓ Category renamed to '{new_name}' and approved")
                     logger.info(f"Category renamed: '{old_name}' -> '{new_name}'")
+                    # Log decision for learning (Task 5B.3)
+                    if self.decision_logger:
+                        self.decision_logger.log_decision(
+                            new_name,
+                            DecisionAction.RENAME,
+                            old_name=old_name,
+                            new_name=new_name,
+                        )
                     print()
                     return 'rename'
                 print("Invalid name. Category not modified.")
@@ -188,6 +361,13 @@ class CategoryReview:
                         self.merged_count += 1
                         print(f"✓ Merged into '{target.category_name}'")
                         logger.info(f"Category merged: '{category.category_name}' into '{target.category_name}'")
+                        # Log decision for learning (Task 5B.3)
+                        if self.decision_logger:
+                            self.decision_logger.log_decision(
+                                category.category_name,
+                                DecisionAction.MERGE,
+                                merge_target=target.category_name,
+                            )
                         print()
                         return 'merge'
                 except (ValueError, IndexError):
@@ -200,6 +380,13 @@ class CategoryReview:
                     self.deleted_count += 1
                     print(f"✓ Category '{category.category_name}' deleted")
                     logger.info(f"Category deleted: {category.category_name}")
+                    # Log decision for learning (Task 5B.3)
+                    if self.decision_logger:
+                        self.decision_logger.log_decision(
+                            category.category_name,
+                            DecisionAction.DELETE,
+                            confidence=category.confidence,
+                        )
                     print()
                     return 'delete'
                 logger.debug(f"Category deletion cancelled for: {category.category_name}")
@@ -290,7 +477,8 @@ class CategoryReview:
 
 def review_categories(
     categories: list[Category],
-    output_path: Path | None = None
+    output_path: Path | None = None,
+    enable_learning: bool = True,
 ) -> list[Category]:
     """
     Interactive review of suggested categories.
@@ -300,9 +488,13 @@ def review_categories(
     - Re-presents skipped categories at end (per Clarification Q5)
     - Add custom categories
 
+    Task 5B.3: Integrates with feedback learning to log decisions and
+    apply learned patterns.
+
     Args:
         categories: List of Category objects to review
         output_path: Optional path to save approved categories (if None, no save)
+        enable_learning: Whether to use feedback learning (default: True)
 
     Returns:
         List of approved Category objects
@@ -320,8 +512,16 @@ def review_categories(
         corpus_data = load_json(corpus_path)
         email_lookup = {email["id"]: Email(**email) for email in corpus_data.get("emails", [])}
 
+    # Initialize decision logger for learning (Task 5B.3)
+    decision_logger = DecisionLogger() if enable_learning else None
+
     # Run interactive review
-    reviewer = CategoryReview(categories, email_lookup)
+    reviewer = CategoryReview(
+        categories,
+        email_lookup,
+        decision_logger=decision_logger,
+        enable_learning=enable_learning,
+    )
     approved = reviewer.run_interactive_review()
 
     # Assign unique category IDs to all approved categories (FR-035)
@@ -415,3 +615,125 @@ def cleanup_intermediate_files(output_dir: str = "outputs") -> None:
     print("\nCleanup complete!")
     print(f"Kept: {', '.join(keep_files)}")
     logger.info(f"Cleanup complete. Deleted {deleted_count} intermediate files")
+
+
+def is_tui_supported() -> bool:
+    """
+    Check if the TUI is supported in the current terminal environment.
+
+    Returns:
+        True if TUI is supported, False otherwise
+    """
+    import sys
+    import os
+
+    # Check if we're in an interactive terminal
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return False
+
+    # Check if we can import textual
+    try:
+        from textual.app import App
+        return True
+    except ImportError:
+        return False
+
+    # Additional checks could go here for specific terminal types
+
+
+def run_tui_review(
+    categories: list[Category],
+    email_lookup: dict[str, Email] | None = None,
+    output_path: Path | None = None
+) -> list[Category]:
+    """
+    Run the TUI-based category review.
+
+    Args:
+        categories: List of Category objects to review
+        email_lookup: Optional dictionary mapping email IDs to Email objects
+        output_path: Optional path to save approved categories
+
+    Returns:
+        List of approved Category objects
+    """
+    from src.ui.tui import ReviewApp
+
+    logger.info("Starting TUI category review")
+
+    # Create and run the app
+    app = ReviewApp(categories=categories, email_lookup=email_lookup or {})
+
+    try:
+        app.run()
+    except Exception as e:
+        logger.error(f"TUI review failed: {e}", exc_info=True)
+        raise
+
+    # Get approved categories from the app
+    approved = app.get_approved_categories()
+
+    # Assign unique category IDs to all approved categories (FR-035)
+    for category in approved:
+        if not category.category_id or category.category_id.startswith("temp_") or category.category_id.startswith("custom_"):
+            category.category_id = f"cat_{uuid.uuid4().hex[:12]}"
+
+    # Save approved categories if output path provided
+    if output_path:
+        # Create reviewer for saving stats
+        reviewer = CategoryReview(categories)
+        reviewer.approved = approved
+        reviewer.modified_count = app.modified_count
+        reviewer.merged_count = app.merged_count
+        reviewer.deleted_count = app.deleted_count
+        reviewer.save_approved_categories(output_path)
+
+    logger.info(f"TUI category review complete. Approved {len(approved)} categories")
+
+    return approved
+
+
+def review_categories_with_ui(
+    categories: list[Category],
+    output_path: Path | None = None,
+    use_tui: bool = True,
+    enable_learning: bool = True,
+) -> list[Category]:
+    """
+    Review categories with either TUI or legacy CLI interface.
+
+    This is the main entry point for category review that chooses between
+    the TUI and legacy CLI based on configuration and terminal support.
+
+    Task 5B.3: Supports --no-learning flag to disable feedback learning.
+
+    Args:
+        categories: List of Category objects to review
+        output_path: Optional path to save approved categories
+        use_tui: Whether to use TUI (default: True)
+        enable_learning: Whether to use feedback learning (default: True)
+
+    Returns:
+        List of approved Category objects
+    """
+    # Load email corpus for sample display
+    from src.utils.paths import PathConfig
+    corpus_path = PathConfig.get_corpus_path()
+    email_lookup = {}
+    try:
+        if corpus_path.exists():
+            corpus_data = load_json(corpus_path)
+            email_lookup = {email["id"]: Email(**email) for email in corpus_data.get("emails", [])}
+    except Exception as e:
+        logger.warning(f"Could not load email corpus for display: {e}")
+
+    # Determine if we should use TUI
+    if use_tui and is_tui_supported():
+        try:
+            return run_tui_review(categories, email_lookup, output_path)
+        except Exception as e:
+            logger.warning(f"TUI failed, falling back to legacy CLI: {e}")
+            # Fall through to legacy CLI
+
+    # Use legacy CLI
+    return review_categories(categories, output_path, enable_learning=enable_learning)

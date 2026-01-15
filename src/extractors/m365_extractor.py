@@ -3,7 +3,10 @@ M365 Email Extractor.
 
 Per contracts/extractor_contract.md, extracts emails from M365 MCP server
 with pagination, retry logic, and checkpoint support.
+
+Task 4B.1/4B.2: Enhanced with incremental extraction support and metadata tracking.
 """
+import hashlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -41,6 +44,22 @@ class ExtractionResult:
     def success_rate(self) -> float:
         """Calculate success rate."""
         return self.success_count / self.total_attempted if self.total_attempted > 0 else 0.0
+
+
+@dataclass
+class IncrementalExtractionResult:
+    """Result of incremental email extraction operation (Task 4B.2)."""
+    corpus: Corpus
+    failed_emails: list[ExtractionError]
+    new_emails_count: int  # Number of newly added emails
+    previous_count: int  # Number of emails before extraction
+    total_count: int  # Total emails after extraction
+
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate for new emails."""
+        total_attempted = self.new_emails_count + len(self.failed_emails)
+        return self.new_emails_count / total_attempted if total_attempted > 0 else 1.0
 
 
 class EmailExtractor:
@@ -180,12 +199,24 @@ class EmailExtractor:
 
             current_batch += 1
 
-        # Create corpus
+        # Create corpus with enhanced metadata (Task 4B.1)
+        # Compute email IDs hash for change detection
+        email_ids_hash = self._compute_email_ids_hash(all_emails)
+
+        # Store extraction parameters
+        extraction_params = {
+            "batch_size": max_batch_size,
+            "checkpoint_interval": checkpoint_interval,
+        }
+
         metadata = CorpusMetadata(
             extraction_date=datetime.now(),
             total_emails=len(all_emails),
             source="Hotmail/M365",
-            user_email=self.user_email
+            user_email=self.user_email,
+            last_extraction_date=datetime.now(),
+            email_ids_hash=email_ids_hash,
+            extraction_params=extraction_params,
         )
         corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
 
@@ -218,6 +249,143 @@ class EmailExtractor:
         """
         # Use existing checkpoint manager
         return self.extract_all()
+
+    def extract_incremental(
+        self,
+        existing_corpus: Corpus,
+        max_batch_size: int = 500,
+        checkpoint_interval: int = 100,
+        progress_callback: Callable[[int, int], None] | None = None
+    ) -> IncrementalExtractionResult:
+        """
+        Perform incremental extraction - only fetch new emails since last extraction.
+
+        Task 4B.2: Implements --since-last functionality.
+
+        Args:
+            existing_corpus: Existing corpus to merge new emails into
+            max_batch_size: Maximum emails per API request (default 500)
+            checkpoint_interval: Save checkpoint every N emails (default 100)
+            progress_callback: Optional callback(current, total) for progress
+
+        Returns:
+            IncrementalExtractionResult with merged corpus and statistics
+        """
+        self.logger.info("Starting incremental email extraction...")
+
+        # Track existing email IDs for deduplication
+        existing_ids = {email.id for email in existing_corpus.emails}
+        previous_count = len(existing_corpus.emails)
+
+        self.logger.info(f"Existing corpus has {previous_count} emails")
+
+        # Get the last extraction date for filtering
+        since_date = existing_corpus.extraction_metadata.last_extraction_date
+        if since_date:
+            self.logger.info(f"Fetching emails since: {since_date.isoformat()}")
+
+        failed_emails: list[ExtractionError] = []
+        new_emails: list[Email] = []
+
+        # Fetch new emails from M365
+        try:
+            total_available = self._get_total_email_count()
+            self.logger.info(f"Server reports {total_available} emails available")
+        except Exception as e:
+            self.logger.error(f"Failed to get email count: {e}")
+            raise ConnectionError(f"M365 MCP server unreachable: {e}")
+
+        # Process in batches (similar to extract_all but with deduplication)
+        current_batch = 0
+        emails_processed = 0
+
+        while True:
+            batch_start = current_batch * max_batch_size
+            batch_end = batch_start + max_batch_size
+
+            self.logger.debug(f"Processing batch {current_batch + 1}: emails {batch_start}-{batch_end}")
+
+            try:
+                batch_emails = self._fetch_batch(batch_start, batch_end)
+
+                if not batch_emails:
+                    self.logger.info("No more emails to fetch, stopping pagination")
+                    break
+
+                for email_data in batch_emails:
+                    try:
+                        email_id = email_data.get("id", "")
+
+                        # Skip if already in existing corpus (deduplication)
+                        if email_id in existing_ids:
+                            self.logger.debug(f"Skipping duplicate email: {email_id}")
+                            continue
+
+                        email = self._process_email(email_data)
+                        new_emails.append(email)
+                        existing_ids.add(email_id)  # Track to avoid duplicates in same batch
+                        emails_processed += 1
+
+                        if progress_callback:
+                            progress_callback(emails_processed, emails_processed)
+
+                    except Exception as e:
+                        self.logger.warning(f"Failed to process email: {e}")
+                        failed_emails.append(ExtractionError(
+                            email_id=email_data.get("id", "unknown"),
+                            error_type="malformed",
+                            error_message=str(e),
+                            timestamp=datetime.now()
+                        ))
+
+                # If we got fewer emails than requested, we've reached the end
+                if len(batch_emails) < max_batch_size:
+                    self.logger.info(f"Received {len(batch_emails)} emails (less than requested), stopping pagination")
+                    break
+
+            except Exception as e:
+                self.logger.error(f"Batch fetch failed: {e}")
+                if "rate limit" in str(e).lower():
+                    self._handle_rate_limit(current_batch)
+                else:
+                    break
+
+            current_batch += 1
+
+        # Merge new emails with existing corpus
+        all_emails = list(existing_corpus.emails) + new_emails
+        new_emails_count = len(new_emails)
+        total_count = len(all_emails)
+
+        self.logger.info(f"Added {new_emails_count} new emails ({previous_count} -> {total_count} total)")
+
+        # Create updated corpus with new metadata
+        email_ids_hash = self._compute_email_ids_hash(all_emails)
+        extraction_params = {
+            "batch_size": max_batch_size,
+            "checkpoint_interval": checkpoint_interval,
+            "incremental": True,
+        }
+
+        metadata = CorpusMetadata(
+            extraction_date=existing_corpus.extraction_metadata.extraction_date,  # Keep original
+            total_emails=total_count,
+            source="Hotmail/M365",
+            user_email=self.user_email,
+            last_extraction_date=datetime.now(),  # Update to now
+            email_ids_hash=email_ids_hash,
+            extraction_params=extraction_params,
+        )
+
+        merged_corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
+
+        return IncrementalExtractionResult(
+            corpus=merged_corpus,
+            failed_emails=failed_emails,
+            new_emails_count=new_emails_count,
+            previous_count=previous_count,
+            total_count=total_count
+        )
 
     def _get_total_email_count(self) -> int:
         """
@@ -336,3 +504,23 @@ class EmailExtractor:
         backoff_seconds = min(2 ** attempt, 8)  # Max 8 seconds
         self.logger.warning(f"Rate limited, backing off for {backoff_seconds} seconds")
         time.sleep(backoff_seconds)
+
+    def _compute_email_ids_hash(self, emails: list[Email]) -> str:
+        """
+        Compute a hash of all email IDs for change detection.
+
+        Task 4B.1: Used to detect if corpus has changed between extractions.
+
+        Args:
+            emails: List of Email objects
+
+        Returns:
+            SHA256 hash of sorted email IDs
+        """
+        if not emails:
+            return ""
+
+        # Sort IDs for consistent hashing regardless of extraction order
+        sorted_ids = sorted(email.id for email in emails)
+        combined = "|".join(sorted_ids)
+        return hashlib.sha256(combined.encode()).hexdigest()

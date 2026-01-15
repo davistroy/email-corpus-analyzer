@@ -38,6 +38,9 @@ env/
 htmlcov/
 .tox/
 
+# Linting
+.ruff_cache/
+
 # Output directory (local-only data)
 outputs/
 /mnt/user-data/outputs/
@@ -47,3 +50,8 @@ outputs/
 
 # Logs
 *.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini

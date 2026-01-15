@@ -779,6 +779,207 @@ class TestSubjectAnalyzer:
 
 
 # ============================================================================
+# Test Incremental Analysis (Task 4B.4)
+# ============================================================================
+
+
+class TestIncrementalAnalysis:
+    """Test cases for Task 4B.4: Incremental analysis functionality."""
+
+    @pytest.fixture
+    def analyzer(self):
+        """Create SemanticAnalyzer instance for tests."""
+        return SemanticAnalyzer()
+
+    @pytest.fixture
+    def mock_embedding_cache(self, tmp_path):
+        """Create mock embedding cache with some cached embeddings."""
+        from src.cache.embedding_cache import EmbeddingCache
+
+        cache = EmbeddingCache(cache_path=tmp_path / "test_cache.npz")
+        # Add cached embeddings for email_1 and email_2
+        cache.add(
+            ["email_1", "email_2"],
+            np.random.rand(2, 1024)  # mxbai-embed-large has 1024 dimensions
+        )
+        return cache
+
+    @pytest.fixture
+    def test_corpus(self):
+        """Create test corpus with 4 emails."""
+        return Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=4,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[
+                Email(
+                    id="email_1",
+                    sender_email="sender1@example.com",
+                    sender_domain="example.com",
+                    subject="Cached email 1",
+                    body_text="This is cached email 1",
+                    received_date=datetime(2024, 1, 1),
+                    has_attachments=False
+                ),
+                Email(
+                    id="email_2",
+                    sender_email="sender2@example.com",
+                    sender_domain="example.com",
+                    subject="Cached email 2",
+                    body_text="This is cached email 2",
+                    received_date=datetime(2024, 1, 2),
+                    has_attachments=False
+                ),
+                Email(
+                    id="email_3",
+                    sender_email="sender3@example.com",
+                    sender_domain="example.com",
+                    subject="New email 3",
+                    body_text="This is new email 3",
+                    received_date=datetime(2024, 1, 3),
+                    has_attachments=False
+                ),
+                Email(
+                    id="email_4",
+                    sender_email="sender4@example.com",
+                    sender_domain="example.com",
+                    subject="New email 4",
+                    body_text="This is new email 4",
+                    received_date=datetime(2024, 1, 4),
+                    has_attachments=False
+                )
+            ]
+        )
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    def test_analyze_incremental_uses_cached_embeddings(
+        self, mock_ensure, analyzer, mock_embedding_cache, test_corpus
+    ):
+        """Test that incremental analysis uses cached embeddings."""
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(2, 1024)
+        analyzer.model = mock_model
+
+        result = analyzer.analyze_incremental(
+            corpus=test_corpus,
+            embedding_cache=mock_embedding_cache,
+            num_clusters=2
+        )
+
+        # Should have generated stats
+        assert hasattr(result, 'stats')
+        assert result.stats['cached_count'] == 2
+        assert result.stats['generated_count'] == 2
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    def test_analyze_incremental_updates_cache(
+        self, mock_ensure, analyzer, mock_embedding_cache, test_corpus
+    ):
+        """Test that new embeddings are added to cache."""
+        initial_size = mock_embedding_cache.size
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(2, 1024)
+        analyzer.model = mock_model
+
+        analyzer.analyze_incremental(
+            corpus=test_corpus,
+            embedding_cache=mock_embedding_cache,
+            num_clusters=2
+        )
+
+        # Cache should have grown by 2 (the new emails)
+        assert mock_embedding_cache.size == initial_size + 2
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    def test_analyze_incremental_returns_clusters(
+        self, mock_ensure, analyzer, mock_embedding_cache, test_corpus
+    ):
+        """Test that incremental analysis returns ContentCluster list."""
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(2, 1024)
+        analyzer.model = mock_model
+
+        result = analyzer.analyze_incremental(
+            corpus=test_corpus,
+            embedding_cache=mock_embedding_cache,
+            num_clusters=2
+        )
+
+        assert hasattr(result, 'clusters')
+        assert isinstance(result.clusters, list)
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    def test_analyze_incremental_all_cached(self, mock_ensure, analyzer, tmp_path):
+        """Test incremental analysis when all emails are cached."""
+        from src.cache.embedding_cache import EmbeddingCache
+
+        # Create cache with all emails
+        cache = EmbeddingCache(cache_path=tmp_path / "full_cache.npz")
+        cache.add(["e1", "e2", "e3"], np.random.rand(3, 1024))
+
+        corpus = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=3,
+                source="test",
+                user_email="user@example.com"
+            ),
+            emails=[
+                Email(
+                    id="e1", sender_email="a@example.com", sender_domain="example.com",
+                    subject="Test", body_text="Test", received_date=datetime(2024, 1, 1),
+                    has_attachments=False
+                ),
+                Email(
+                    id="e2", sender_email="b@example.com", sender_domain="example.com",
+                    subject="Test", body_text="Test", received_date=datetime(2024, 1, 2),
+                    has_attachments=False
+                ),
+                Email(
+                    id="e3", sender_email="c@example.com", sender_domain="example.com",
+                    subject="Test", body_text="Test", received_date=datetime(2024, 1, 3),
+                    has_attachments=False
+                )
+            ]
+        )
+
+        mock_model = MagicMock()
+        analyzer.model = mock_model
+
+        result = analyzer.analyze_incremental(
+            corpus=corpus, embedding_cache=cache, num_clusters=2
+        )
+
+        # Model.encode should not be called (all cached)
+        mock_model.encode.assert_not_called()
+        assert result.stats['cached_count'] == 3
+        assert result.stats['generated_count'] == 0
+
+
+class TestCLIAnalyzeIncrementalFlag:
+    """Test cases for --incremental CLI flag (Task 4B.4)."""
+
+    def test_analyze_command_has_incremental_flag(self):
+        """Test that analyze command has --incremental flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Without flag - default should be False
+        args = parser.parse_args(["analyze"])
+        assert args.incremental is False
+
+        # With flag - should be True
+        args = parser.parse_args(["analyze", "--incremental"])
+        args = parser.parse_args(["analyze", "--incremental"])
+        assert args.incremental is True
+
+
+# ============================================================================
 # Test SemanticAnalyzer
 # ============================================================================
 
@@ -1329,3 +1530,198 @@ class TestEdgeCases:
         assert result.total_emails == 500
         assert result.unique_senders == 100
         assert result.with_attachments > 0
+
+
+# ============================================================================
+# Test Per-Cluster Quality Metrics (Task 2A.4)
+# ============================================================================
+
+
+class TestClusterQualityMetrics:
+    """Test cases for per-cluster quality metrics."""
+
+    def test_content_cluster_has_silhouette_score_field(self):
+        """Test ContentCluster model has silhouette_score field."""
+        from src.models.content_cluster import ContentCluster, RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Test",
+            sender="test@example.com",
+            body_preview="Test body"
+        )
+
+        cluster = ContentCluster(
+            cluster_id=0,
+            size=10,
+            percentage=50.0,
+            representative_samples=[sample],
+            common_domains=[("example.com", 5)],
+            email_ids=["1", "2"],
+            silhouette_score=0.75
+        )
+
+        assert cluster.silhouette_score == 0.75
+
+    def test_content_cluster_silhouette_score_default_none(self):
+        """Test ContentCluster silhouette_score defaults to None."""
+        from src.models.content_cluster import ContentCluster, RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Test",
+            sender="test@example.com",
+            body_preview="Test body"
+        )
+
+        cluster = ContentCluster(
+            cluster_id=0,
+            size=10,
+            percentage=50.0,
+            representative_samples=[sample],
+            common_domains=[],
+            email_ids=["1"]
+        )
+
+        assert cluster.silhouette_score is None
+
+    def test_content_cluster_has_cohesion_score_field(self):
+        """Test ContentCluster model has cohesion_score field."""
+        from src.models.content_cluster import ContentCluster, RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Test",
+            sender="test@example.com",
+            body_preview="Test body"
+        )
+
+        cluster = ContentCluster(
+            cluster_id=0,
+            size=10,
+            percentage=50.0,
+            representative_samples=[sample],
+            common_domains=[],
+            email_ids=["1"],
+            cohesion_score=0.85
+        )
+
+        assert cluster.cohesion_score == 0.85
+
+    def test_content_cluster_cohesion_score_default_none(self):
+        """Test ContentCluster cohesion_score defaults to None."""
+        from src.models.content_cluster import ContentCluster, RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Test",
+            sender="test@example.com",
+            body_preview="Test body"
+        )
+
+        cluster = ContentCluster(
+            cluster_id=0,
+            size=10,
+            percentage=50.0,
+            representative_samples=[sample],
+            common_domains=[],
+            email_ids=["1"]
+        )
+
+        assert cluster.cohesion_score is None
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_semantic_analyzer_calculates_quality_metrics(self, mock_st_class, mock_ensure_model):
+        """Test that semantic analyzer calculates quality metrics for clusters."""
+        analyzer = SemanticAnalyzer()
+
+        # Create distinct clusters for better silhouette scores
+        np.random.seed(42)
+        cluster1 = np.random.randn(10, 20) * 0.1 + np.array([0] * 20)
+        cluster2 = np.random.randn(10, 20) * 0.1 + np.array([10] * 20)
+        embeddings = np.vstack([cluster1, cluster2])
+
+        emails = [
+            create_email(
+                id=str(i),
+                sender_email=f"sender{i % 2}@example.com",
+                sender_domain="example.com",
+                subject=f"Subject {i}",
+                body_text=f"Body content {i}"
+            )
+            for i in range(20)
+        ]
+        corpus = create_corpus(emails)
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = embeddings
+        analyzer.model = mock_model
+
+        result = analyzer.analyze(corpus, num_clusters=2)
+
+        # Clusters should have quality metrics populated
+        assert len(result) > 0
+        for cluster in result:
+            # silhouette_score should be set for k >= 2
+            assert cluster.silhouette_score is not None
+            assert -1.0 <= cluster.silhouette_score <= 1.0
+            # cohesion_score should be set
+            assert cluster.cohesion_score is not None
+            assert cluster.cohesion_score >= 0.0
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_semantic_analyzer_single_cluster_no_silhouette(self, mock_st_class, mock_ensure_model):
+        """Test that silhouette is None for single cluster (k=1)."""
+        analyzer = SemanticAnalyzer()
+
+        np.random.seed(42)
+        embeddings = np.random.rand(5, 10)
+
+        emails = [
+            create_email(
+                id=str(i),
+                sender_email="sender@example.com",
+                sender_domain="example.com"
+            )
+            for i in range(5)
+        ]
+        corpus = create_corpus(emails)
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = embeddings
+        analyzer.model = mock_model
+
+        result = analyzer.analyze(corpus, num_clusters=1)
+
+        # With k=1, silhouette cannot be calculated
+        assert len(result) == 1
+        assert result[0].silhouette_score is None
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_quality_metrics_included_in_json_output(self, mock_st_class, mock_ensure_model):
+        """Test that quality metrics are included in model_dump output."""
+        analyzer = SemanticAnalyzer()
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 10)
+
+        emails = [
+            create_email(
+                id=str(i),
+                sender_email="sender@example.com",
+                sender_domain="example.com"
+            )
+            for i in range(10)
+        ]
+        corpus = create_corpus(emails)
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = embeddings
+        analyzer.model = mock_model
+
+        result = analyzer.analyze(corpus, num_clusters=2)
+
+        # Check that model_dump includes quality metrics
+        for cluster in result:
+            cluster_dict = cluster.model_dump()
+            assert "silhouette_score" in cluster_dict
+            assert "cohesion_score" in cluster_dict

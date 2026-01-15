@@ -1,0 +1,386 @@
+"""
+Category table widget for the TUI application.
+
+A scrollable, navigable table displaying categories with their properties.
+Supports hierarchical categories with expand/collapse functionality (Task 4A.4).
+"""
+from textual.reactive import reactive
+from textual.widgets import DataTable
+
+from src.models.category import Category, CategorySource
+
+# Table column definitions
+TABLE_COLUMNS = ["#", "Name", "Confidence", "Emails", "Source"]
+
+# Hierarchy indicators
+EXPAND_INDICATOR = "+"
+COLLAPSE_INDICATOR = "-"
+INDENT_CHAR = "  "  # Two spaces per level
+CHILD_INDICATOR = "|--"
+
+
+def format_confidence_bar(confidence: float, width: int = 10) -> str:
+    """
+    Format confidence as a visual bar.
+
+    Args:
+        confidence: Confidence value between 0 and 1
+        width: Width of the bar in characters
+
+    Returns:
+        String representing the confidence bar
+    """
+    filled = int(confidence * width)
+    empty = width - filled
+    bar = "\u2588" * filled + "\u2591" * empty
+    percentage = f"{confidence * 100:.0f}%"
+    return f"{bar} {percentage}"
+
+
+def format_source(source: CategorySource) -> str:
+    """
+    Format category source for display.
+
+    Args:
+        source: CategorySource enum value
+
+    Returns:
+        Human-readable source string
+    """
+    source_labels = {
+        CategorySource.CONTENT_CLUSTER: "Cluster",
+        CategorySource.SENDER: "Sender",
+        CategorySource.TEMPLATE: "Template",
+        CategorySource.CUSTOM: "Custom",
+    }
+    return source_labels.get(source, str(source.value))
+
+
+def format_email_count(count: int | None) -> str:
+    """
+    Format email count for display.
+
+    Args:
+        count: Email count or None
+
+    Returns:
+        Formatted count string
+    """
+    if count is None:
+        return "-"
+    return str(count)
+
+
+def format_hierarchy_indicator(
+    level: int,
+    has_children: bool,
+    expanded: bool,
+) -> str:
+    """
+    Format hierarchy indicator for tree view display.
+
+    Args:
+        level: Category hierarchy level (0=top, 1=sub, etc.)
+        has_children: Whether category has subcategories
+        expanded: Whether category is expanded (shows children)
+
+    Returns:
+        Hierarchy indicator string
+    """
+    if level == 0:
+        # Top-level category
+        if has_children:
+            return COLLAPSE_INDICATOR if expanded else EXPAND_INDICATOR
+        return " "  # No indicator for leaf at top level
+    else:
+        # Child category - show indentation
+        indent = INDENT_CHAR * (level - 1)
+        return f"{indent}{CHILD_INDICATOR}"
+
+
+class CategoryTable(DataTable):
+    """
+    A table widget for displaying and selecting categories.
+
+    Supports keyboard navigation with j/k and arrow keys,
+    row selection with highlighting, color-coded confidence,
+    and hierarchical category display with expand/collapse.
+    """
+
+    BINDINGS = [
+        ("j", "cursor_down", "Down"),
+        ("k", "cursor_up", "Up"),
+        ("down", "cursor_down", "Down"),
+        ("up", "cursor_up", "Up"),
+        ("enter", "select", "Select"),
+    ]
+
+    selected_row: reactive[int] = reactive(0)
+
+    def __init__(
+        self,
+        categories: list[Category],
+        *args,
+        **kwargs
+    ):
+        """
+        Initialize the category table.
+
+        Args:
+            categories: List of categories to display (may include hierarchical)
+        """
+        super().__init__(*args, cursor_type="row", **kwargs)
+        self.categories = list(categories)  # Make a copy
+        self._table_initialized = False
+        # Track expanded state for hierarchical categories
+        self._expanded_ids: set[str] = set()
+        # Initialize all top-level categories as collapsed by default
+
+    def on_mount(self) -> None:
+        """Set up the table when mounted."""
+        if not self._table_initialized:
+            self._setup_table()
+            self._table_initialized = True
+
+    def _setup_table(self) -> None:
+        """Set up table columns and populate with data."""
+        # Add columns
+        self.add_column("#", key="index", width=4)
+        self.add_column("Name", key="name", width=30)
+        self.add_column("Confidence", key="confidence", width=18)
+        self.add_column("Emails", key="emails", width=8)
+        self.add_column("Source", key="source", width=10)
+
+        # Add rows
+        self._populate_rows()
+
+    def _populate_rows(self) -> None:
+        """Populate table with category data, respecting hierarchy and expansion."""
+        self.clear()
+        visible_categories = self.get_visible_categories()
+
+        for idx, category in enumerate(visible_categories, 1):
+            # Format name with hierarchy indicator
+            indicator = format_hierarchy_indicator(
+                level=category.level,
+                has_children=category.has_children,
+                expanded=self.is_expanded(category.category_id),
+            )
+            display_name = f"{indicator} {category.category_name}"
+
+            confidence_bar = format_confidence_bar(category.confidence)
+            self.add_row(
+                str(idx),
+                display_name[:28],  # Truncate long names
+                confidence_bar,
+                format_email_count(category.email_count),
+                format_source(category.source),
+                key=category.category_id,
+            )
+
+    def get_visible_categories(self) -> list[Category]:
+        """
+        Get list of categories currently visible (respecting expanded state).
+
+        Returns:
+            List of Category objects that should be displayed
+        """
+        visible = []
+        for category in self.categories:
+            visible.append(category)
+            # Add children if expanded
+            if category.has_children and self.is_expanded(category.category_id):
+                visible.extend(category.subcategories)
+        return visible
+
+    def is_expanded(self, category_id: str) -> bool:
+        """
+        Check if a category is expanded.
+
+        Args:
+            category_id: ID of category to check
+
+        Returns:
+            True if expanded, False if collapsed
+        """
+        return category_id in self._expanded_ids
+
+    def toggle_expand(self, category_id: str) -> None:
+        """
+        Toggle expand/collapse state for a category.
+
+        Args:
+            category_id: ID of category to toggle
+        """
+        if category_id in self._expanded_ids:
+            self._expanded_ids.remove(category_id)
+        else:
+            self._expanded_ids.add(category_id)
+        self._populate_rows()
+
+    def expand_category(self, category_id: str) -> None:
+        """
+        Expand a category to show its children.
+
+        Args:
+            category_id: ID of category to expand
+        """
+        self._expanded_ids.add(category_id)
+        self._populate_rows()
+
+    def collapse_category(self, category_id: str) -> None:
+        """
+        Collapse a category to hide its children.
+
+        Args:
+            category_id: ID of category to collapse
+        """
+        self._expanded_ids.discard(category_id)
+        self._populate_rows()
+
+    def get_selected_category(self) -> Category | None:
+        """
+        Get the currently selected category.
+
+        Returns:
+            Selected Category or None if no selection
+        """
+        visible = self.get_visible_categories()
+        if not visible or self.selected_row < 0:
+            return None
+        if self.selected_row >= len(visible):
+            return None
+        return visible[self.selected_row]
+
+    def move_down(self) -> None:
+        """Move selection down one row."""
+        visible = self.get_visible_categories()
+        if not visible:
+            return
+        self.selected_row = (self.selected_row + 1) % len(visible)
+        self.move_cursor(row=self.selected_row)
+
+    def move_up(self) -> None:
+        """Move selection up one row."""
+        visible = self.get_visible_categories()
+        if not visible:
+            return
+        self.selected_row = (self.selected_row - 1) % len(visible)
+        self.move_cursor(row=self.selected_row)
+
+    def remove_category(self, category: Category) -> None:
+        """
+        Remove a category from the table.
+
+        Args:
+            category: Category to remove
+        """
+        if category in self.categories:
+            idx = self.categories.index(category)
+            self.categories.remove(category)
+
+            # Adjust selection if needed
+            visible = self.get_visible_categories()
+            if visible:
+                if self.selected_row >= len(visible):
+                    self.selected_row = len(visible) - 1
+                elif self.selected_row > idx:
+                    self.selected_row -= 1
+            else:
+                self.selected_row = 0
+
+            # Rebuild table
+            self._populate_rows()
+
+    def update_category(self, old_category: Category, new_category: Category) -> None:
+        """
+        Update a category in the table.
+
+        Args:
+            old_category: Category to replace
+            new_category: New category data
+        """
+        if old_category in self.categories:
+            idx = self.categories.index(old_category)
+            self.categories[idx] = new_category
+            self._populate_rows()
+
+    def refresh_display(self) -> None:
+        """Refresh the table display."""
+        self._populate_rows()
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Handle row highlight event."""
+        if event.cursor_row is not None:
+            self.selected_row = event.cursor_row
+
+    # -------------------------------------------------------------------------
+    # Hierarchical Actions (Task 4A.4)
+    # -------------------------------------------------------------------------
+
+    def promote_to_top_level(self, category: Category) -> None:
+        """
+        Promote a subcategory to top level.
+
+        Args:
+            category: Subcategory to promote
+        """
+        if category.level == 0:
+            return  # Already top level
+
+        # Find parent and remove from its subcategories
+        for parent in self.categories:
+            if category in parent.subcategories:
+                parent.subcategories.remove(category)
+                break
+
+        # Update category properties
+        category.level = 0
+        category.parent_category_id = None
+
+        # Add to main categories list
+        self.categories.append(category)
+        self._populate_rows()
+
+    def demote_to_subcategory(
+        self,
+        category: Category,
+        new_parent: Category
+    ) -> None:
+        """
+        Demote a top-level category to subcategory of another.
+
+        Args:
+            category: Category to demote
+            new_parent: Category that will become the parent
+        """
+        if category.level != 0:
+            return  # Already a subcategory
+        if category == new_parent:
+            return  # Cannot demote to self
+        if new_parent not in self.categories:
+            return  # Parent must be top-level
+
+        # Remove from top-level
+        if category in self.categories:
+            self.categories.remove(category)
+
+        # Update category properties
+        category.level = 1
+        category.parent_category_id = new_parent.category_id
+
+        # Add to new parent's subcategories
+        new_parent.subcategories.append(category)
+        self._populate_rows()
+
+    def expand_all(self) -> None:
+        """Expand all hierarchical categories."""
+        for category in self.categories:
+            if category.has_children:
+                self._expanded_ids.add(category.category_id)
+        self._populate_rows()
+
+    def collapse_all(self) -> None:
+        """Collapse all hierarchical categories."""
+        self._expanded_ids.clear()
+        self._populate_rows()

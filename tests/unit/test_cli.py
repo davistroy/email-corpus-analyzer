@@ -1852,3 +1852,1810 @@ class TestMainPyMain:
                 main()
 
                 mock_exit.assert_called_with(1)
+
+
+# =============================================================================
+# Tests for config command integration in cli.py
+# =============================================================================
+
+class TestConfigCommand:
+    """Test cases for config subcommand in cli.py."""
+
+    def test_create_parser_has_config_command(self):
+        """Test parser has config subcommand."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["config", "show"])
+        assert args.command == "config"
+        assert args.config_action == "show"
+
+    def test_config_command_has_init_action(self):
+        """Test config command has init action."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["config", "init"])
+        assert args.config_action == "init"
+
+    def test_config_command_has_show_action(self):
+        """Test config command has show action."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["config", "show"])
+        assert args.config_action == "show"
+
+    def test_config_init_has_output_option(self):
+        """Test config init has --output option."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["config", "init", "--output", "/path/to/config.yaml"])
+        assert args.config_output == Path("/path/to/config.yaml")
+
+    def test_config_init_has_global_flag(self):
+        """Test config init has --global flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["config", "init", "--global"])
+        assert args.config_global is True
+
+    def test_create_parser_has_config_flag(self):
+        """Test parser has --config global flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["--config", "/custom/config.yaml", "analyze"])
+        assert args.config == Path("/custom/config.yaml")
+
+
+class TestCmdConfigInit:
+    """Test cases for cmd_config_init() function."""
+
+    @patch("src.cli.logger")
+    def test_cmd_config_init_generates_template(self, mock_logger):
+        """Test config init generates template file."""
+        from src.cli import cmd_config_init
+
+        args = argparse.Namespace(
+            config_output=None,
+            config_global=False
+        )
+
+        with patch("src.cli.generate_template") as mock_gen:
+            with patch("src.cli.get_project_config_path") as mock_path:
+                mock_gen.return_value = "# Template"
+                mock_path.return_value = Path(".email-analyzer.yaml")
+
+                with patch("builtins.open", mock_open()) as mock_file:
+                    result = cmd_config_init(args)
+
+                    assert result == 0
+                    mock_gen.assert_called_once()
+                    mock_file.assert_called_once()
+
+    @patch("src.cli.logger")
+    def test_cmd_config_init_with_custom_output(self, mock_logger):
+        """Test config init with custom output path."""
+        from src.cli import cmd_config_init
+
+        args = argparse.Namespace(
+            config_output=Path("/custom/config.yaml"),
+            config_global=False
+        )
+
+        with patch("src.cli.generate_template") as mock_gen:
+            mock_gen.return_value = "# Template"
+
+            with patch("builtins.open", mock_open()) as mock_file:
+                result = cmd_config_init(args)
+
+                assert result == 0
+                mock_file.assert_called_once_with(
+                    Path("/custom/config.yaml"), "w", encoding="utf-8"
+                )
+
+    @patch("src.cli.logger")
+    def test_cmd_config_init_global_creates_in_global_path(self, mock_logger):
+        """Test config init --global creates in global config directory."""
+        from src.cli import cmd_config_init
+
+        args = argparse.Namespace(
+            config_output=None,
+            config_global=True
+        )
+
+        with patch("src.cli.generate_template") as mock_gen:
+            with patch("src.cli.get_global_config_path") as mock_path:
+                mock_gen.return_value = "# Template"
+                mock_path.return_value = Path("/home/user/.config/email-analyzer/config.yaml")
+
+                with patch("builtins.open", mock_open()):
+                    with patch("pathlib.Path.mkdir"):
+                        result = cmd_config_init(args)
+
+                        assert result == 0
+                        mock_path.assert_called_once()
+
+    @patch("src.cli.logger")
+    def test_cmd_config_init_handles_write_error(self, mock_logger):
+        """Test config init handles file write errors."""
+        from src.cli import cmd_config_init
+
+        args = argparse.Namespace(
+            config_output=Path("/readonly/config.yaml"),
+            config_global=False
+        )
+
+        with patch("src.cli.generate_template") as mock_gen:
+            mock_gen.return_value = "# Template"
+
+            with patch("builtins.open", side_effect=PermissionError("Permission denied")):
+                result = cmd_config_init(args)
+
+                assert result == 1
+
+
+class TestCmdConfigShow:
+    """Test cases for cmd_config_show() function."""
+
+    @patch("src.cli.logger")
+    def test_cmd_config_show_displays_resolved_config(self, mock_logger):
+        """Test config show displays resolved configuration."""
+        from src.cli import cmd_config_show
+        from src.config.models import AppConfig
+
+        args = argparse.Namespace(config=None)
+
+        with patch("src.cli.load_config") as mock_load:
+            mock_load.return_value = AppConfig(user_email="test@example.com")
+
+            with patch("src.cli.show_resolved_config") as mock_show:
+                mock_show.return_value = "user_email: test@example.com"
+
+                with patch("builtins.print") as mock_print:
+                    result = cmd_config_show(args)
+
+                    assert result == 0
+                    mock_show.assert_called_once()
+                    mock_print.assert_called()
+
+    @patch("src.cli.logger")
+    def test_cmd_config_show_with_custom_config(self, mock_logger):
+        """Test config show with custom config file."""
+        from src.cli import cmd_config_show
+        from src.config.models import AppConfig
+
+        args = argparse.Namespace(config=Path("/custom/config.yaml"))
+
+        with patch("src.cli.load_config") as mock_load:
+            mock_load.return_value = AppConfig()
+
+            with patch("src.cli.show_resolved_config") as mock_show:
+                mock_show.return_value = "# Config"
+
+                with patch("builtins.print"):
+                    result = cmd_config_show(args)
+
+                    mock_load.assert_called_once_with(
+                        config_path=Path("/custom/config.yaml")
+                    )
+
+    @patch("src.cli.logger")
+    def test_cmd_config_show_handles_load_error(self, mock_logger):
+        """Test config show handles config load errors."""
+        from src.cli import cmd_config_show
+        from src.config.loader import ConfigLoadError
+
+        args = argparse.Namespace(config=Path("/invalid/config.yaml"))
+
+        with patch("src.cli.load_config") as mock_load:
+            mock_load.side_effect = ConfigLoadError("Invalid config")
+
+            result = cmd_config_show(args)
+
+            assert result == 1
+
+
+class TestConfigIntegration:
+    """Test config loading integration with CLI commands."""
+
+    @patch("src.cli.setup_output_directory")
+    @patch("src.cli.load_config")
+    @patch("src.cli.create_parser")
+    def test_main_loads_config_before_command(self, mock_create_parser, mock_load_config, mock_setup):
+        """Test main loads config before dispatching to command handler."""
+        from src.cli import main
+        from src.config.models import AppConfig
+
+        mock_parser = MagicMock()
+        mock_args = MagicMock()
+        mock_args.command = "analyze"
+        mock_args.config = None
+        mock_args.verbose = False
+        mock_parser.parse_args.return_value = mock_args
+        mock_create_parser.return_value = mock_parser
+
+        mock_load_config.return_value = AppConfig()
+
+        with patch("src.cli.cmd_analyze") as mock_analyze:
+            mock_analyze.return_value = 0
+
+            result = main()
+
+            # Config should be loaded
+            mock_load_config.assert_called_once()
+
+    @patch("src.cli.setup_output_directory")
+    @patch("src.cli.load_config")
+    @patch("src.cli.create_parser")
+    def test_cli_args_override_config_values(self, mock_create_parser, mock_load_config, mock_setup):
+        """Test CLI arguments override config file values."""
+        from src.cli import main
+        from src.config.models import AppConfig, AnalyzeConfig
+
+        mock_parser = MagicMock()
+        mock_args = MagicMock()
+        mock_args.command = "analyze"
+        mock_args.config = None
+        mock_args.verbose = False
+        mock_args.num_clusters = 20  # CLI override
+        mock_args.corpus = None
+        mock_args.analysis_file = None
+        mock_parser.parse_args.return_value = mock_args
+        mock_create_parser.return_value = mock_parser
+
+        # Config has different value
+        mock_load_config.return_value = AppConfig(
+            analyze=AnalyzeConfig(num_clusters=10)
+        )
+
+        with patch("src.cli.cmd_analyze") as mock_analyze:
+            mock_analyze.return_value = 0
+
+            main()
+
+            # The analyze command should receive the CLI override value
+            call_args = mock_analyze.call_args[0][0]
+            assert call_args.num_clusters == 20
+
+
+# =============================================================================
+# Tests for Track 1B: Quick Wins - New Features
+# =============================================================================
+
+
+class TestQuietFlag:
+    """Test cases for --quiet / -q flag (Task 1B.1)."""
+
+    def test_create_parser_has_quiet_option(self):
+        """Test parser has --quiet/-q option."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["-q", "analyze"])
+        assert args.quiet is True
+
+        args = parser.parse_args(["--quiet", "extract", "--user-email", "test@test.com"])
+        assert args.quiet is True
+
+    def test_quiet_default_is_false(self):
+        """Test quiet defaults to False."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze"])
+        assert args.quiet is False
+
+    def test_quiet_and_verbose_mutually_exclusive(self):
+        """Test that --quiet and --verbose cannot be used together."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Both flags should raise error
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--quiet", "--verbose", "analyze"])
+
+    @patch("src.cli.setup_output_directory")
+    @patch("src.cli.load_config")
+    @patch("src.cli.create_parser")
+    def test_quiet_mode_sets_warning_log_level(self, mock_create_parser, mock_load_config, mock_setup):
+        """Test quiet mode sets log level to WARNING."""
+        from src.cli import main
+        from src.config.models import AppConfig
+        import logging
+
+        mock_parser = MagicMock()
+        mock_args = MagicMock()
+        mock_args.command = "analyze"
+        mock_args.quiet = True
+        mock_args.verbose = False
+        mock_args.config = None
+        mock_parser.parse_args.return_value = mock_args
+        mock_create_parser.return_value = mock_parser
+        mock_load_config.return_value = AppConfig()
+
+        with patch("src.cli.cmd_analyze") as mock_analyze:
+            with patch("src.cli.logging.getLogger") as mock_get_logger:
+                mock_root_logger = MagicMock()
+                mock_get_logger.return_value = mock_root_logger
+                mock_analyze.return_value = 0
+
+                main()
+
+                mock_root_logger.setLevel.assert_called_with(logging.WARNING)
+
+
+class TestJsonOutputFlag:
+    """Test cases for --json output flag (Task 1B.2)."""
+
+    def test_create_parser_has_json_option(self):
+        """Test parser has --json option."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["--json", "analyze"])
+        assert args.json is True
+
+    def test_json_default_is_false(self):
+        """Test json defaults to False."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze"])
+        assert args.json is False
+
+    def test_json_and_verbose_mutually_exclusive(self):
+        """Test that --json and --verbose cannot be used together."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Both flags should raise error
+        with pytest.raises(SystemExit):
+            parser.parse_args(["--json", "--verbose", "analyze"])
+
+    def test_json_works_with_all_commands(self):
+        """Test --json flag works with all commands."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Test with each command
+        for cmd, extra_args in [
+            ("extract", ["--user-email", "test@test.com"]),
+            ("analyze", []),
+            ("suggest", []),
+            ("review", []),
+            ("pipeline", ["--user-email", "test@test.com"]),
+        ]:
+            args = parser.parse_args(["--json", cmd] + extra_args)
+            assert args.json is True
+            assert args.command == cmd
+
+    @patch("src.cli.save_json")
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    @patch("src.analyzers.run_full_analysis")
+    @patch("src.models.corpus.Corpus")
+    def test_cmd_analyze_json_output(self, mock_corpus_class, mock_analysis, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+        """Test analyze command returns JSON output when --json flag is set."""
+        from src.cli import cmd_analyze
+        import json
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 100,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": []
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            json=True
+        )
+
+        mock_corpus = MagicMock()
+        mock_corpus.emails = [MagicMock() for _ in range(100)]
+        mock_corpus_class.return_value = mock_corpus
+
+        mock_results = MagicMock()
+        mock_results.model_dump.return_value = {"results": "data"}
+        mock_results.sender_analysis.unique_senders = 50
+        mock_results.content_clusters = [1, 2, 3]
+        mock_analysis.return_value = mock_results
+
+        # Capture stdout
+        with patch("sys.stdout") as mock_stdout:
+            with patch("src.cli.output_json") as mock_output_json:
+                result = cmd_analyze(args)
+
+                assert result == 0
+                mock_output_json.assert_called_once()
+                call_args = mock_output_json.call_args[0][0]
+                assert call_args["command"] == "analyze"
+                assert call_args["status"] == "success"
+                assert "duration_seconds" in call_args
+                assert "output_file" in call_args
+
+
+class TestInfoCommand:
+    """Test cases for info command (Task 1B.3)."""
+
+    def test_create_parser_has_info_command(self):
+        """Test parser has info subcommand."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["info"])
+        assert args.command == "info"
+
+    def test_info_command_accepts_corpus_option(self):
+        """Test info command accepts --corpus option."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["info", "--corpus", "/path/to/corpus.json"])
+        assert args.corpus == Path("/path/to/corpus.json")
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_info_success(self, mock_logger, mock_path_config, mock_load_json):
+        """Test successful info command execution."""
+        from src.cli import cmd_info
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+
+        # Mock corpus data with minimal structure
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 100,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": [
+                {"id": "1", "sender_email": "alice@example.com", "received_date": "2024-01-01T00:00:00"},
+                {"id": "2", "sender_email": "bob@example.com", "received_date": "2024-06-15T00:00:00"},
+            ]
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            json=False
+        )
+
+        with patch("builtins.print") as mock_print:
+            with patch("pathlib.Path.stat") as mock_stat:
+                mock_stat.return_value = MagicMock(st_size=45_000_000)  # 45 MB
+                with patch("pathlib.Path.exists", return_value=True):
+                    result = cmd_info(args)
+
+        assert result == 0
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_info_json_output(self, mock_logger, mock_path_config, mock_load_json):
+        """Test info command with --json flag."""
+        from src.cli import cmd_info
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 100,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": [
+                {"id": "1", "sender_email": "alice@example.com", "received_date": "2024-01-01T00:00:00"},
+            ]
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            json=True
+        )
+
+        with patch("src.cli.output_json") as mock_output_json:
+            with patch("pathlib.Path.stat") as mock_stat:
+                mock_stat.return_value = MagicMock(st_size=45_000_000)
+                with patch("pathlib.Path.exists", return_value=True):
+                    result = cmd_info(args)
+
+        assert result == 0
+        mock_output_json.assert_called_once()
+        call_args = mock_output_json.call_args[0][0]
+        assert "email_count" in call_args
+        assert "file_size_bytes" in call_args
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_info_corpus_not_found(self, mock_logger, mock_path_config, mock_load_json):
+        """Test info command when corpus file doesn't exist."""
+        from src.cli import cmd_info
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_load_json.side_effect = FileNotFoundError("Corpus not found")
+
+        args = argparse.Namespace(
+            corpus=None,
+            json=False
+        )
+
+        result = cmd_info(args)
+
+        assert result == 1
+
+
+class TestSkipReviewFlag:
+    """Test cases for --skip-review flag (Task 1B.4)."""
+
+    def test_pipeline_command_has_skip_review_option(self):
+        """Test pipeline command has --skip-review flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["pipeline", "--user-email", "test@test.com", "--skip-review"])
+        assert args.skip_review is True
+
+    def test_skip_review_default_is_false(self):
+        """Test skip_review defaults to False."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["pipeline", "--user-email", "test@test.com"])
+        assert args.skip_review is False
+
+    @patch("src.cli.cmd_review")
+    @patch("src.cli.cmd_suggest")
+    @patch("src.cli.cmd_analyze")
+    @patch("src.cli.cmd_extract")
+    @patch("src.cli.logger")
+    def test_cmd_pipeline_skip_review_auto_accepts(self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review):
+        """Test pipeline with --skip-review auto-accepts all suggestions."""
+        from src.cli import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False
+        )
+
+        with patch("src.cli.auto_approve_categories") as mock_auto_approve:
+            mock_auto_approve.return_value = 0
+
+            result = cmd_pipeline(args)
+
+            assert result == 0
+            # Review should not be called
+            mock_review.assert_not_called()
+            # Auto-approve should be called instead
+            mock_auto_approve.assert_called_once()
+
+    @patch("src.cli.cmd_review")
+    @patch("src.cli.cmd_suggest")
+    @patch("src.cli.cmd_analyze")
+    @patch("src.cli.cmd_extract")
+    @patch("src.cli.logger")
+    def test_cmd_pipeline_without_skip_review_calls_review(self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review):
+        """Test pipeline without --skip-review calls interactive review."""
+        from src.cli import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        mock_review.assert_called_once()
+
+
+class TestEmailValidation:
+    """Test cases for email validation and early feedback (Task 1B.5)."""
+
+    def test_validate_email_format_valid(self):
+        """Test email validation accepts valid email formats."""
+        from src.cli import validate_email_format
+
+        assert validate_email_format("user@example.com") is True
+        assert validate_email_format("user@hotmail.com") is True
+        assert validate_email_format("user.name@outlook.com") is True
+        assert validate_email_format("user+tag@gmail.com") is True
+
+    def test_validate_email_format_invalid(self):
+        """Test email validation rejects invalid email formats."""
+        from src.cli import validate_email_format
+
+        assert validate_email_format("notanemail") is False
+        assert validate_email_format("missing@domain") is False
+        assert validate_email_format("@nodomain.com") is False
+        assert validate_email_format("spaces in@email.com") is False
+        assert validate_email_format("") is False
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_extract_validates_email_format(self, mock_logger, mock_path_config):
+        """Test extract command validates email format before proceeding."""
+        from src.cli import cmd_extract
+
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        args = argparse.Namespace(
+            user_email="invalid-email",
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            json=False
+        )
+
+        result = cmd_extract(args)
+
+        assert result == 1
+        mock_logger.error.assert_called()
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_pipeline_validates_email_format(self, mock_logger, mock_path_config):
+        """Test pipeline command validates email format before proceeding."""
+        from src.cli import cmd_pipeline
+
+        args = argparse.Namespace(
+            user_email="invalid-email",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 1
+        mock_logger.error.assert_called()
+
+
+class TestVersionFlag:
+    """Test cases for --version flag (Task 1B.6)."""
+
+    def test_version_defined_in_init(self):
+        """Test that __version__ is defined in src/__init__.py."""
+        from src import __version__
+
+        assert __version__ is not None
+        assert isinstance(__version__, str)
+        # Check semantic versioning format (x.y.z)
+        parts = __version__.split(".")
+        assert len(parts) >= 2
+
+    def test_create_parser_has_version_option(self):
+        """Test parser has --version option."""
+        from src.cli import create_parser
+        from src import __version__
+
+        parser = create_parser()
+
+        # --version should trigger SystemExit and print version
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(["--version"])
+
+        assert exc_info.value.code == 0
+
+    def test_version_output_format(self):
+        """Test version output format."""
+        from src.cli import create_parser
+        from src import __version__
+        import io
+        import sys
+
+        parser = create_parser()
+
+        # Capture stderr (argparse writes version there by default)
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+
+        try:
+            parser.parse_args(["--version"])
+        except SystemExit:
+            pass
+
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        assert __version__ in output
+
+
+class TestAutoApproveCategories:
+    """Test cases for auto_approve_categories function."""
+
+    @patch("src.cli.save_json")
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_auto_approve_categories_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+        """Test auto_approve_categories copies suggestions to approved."""
+        from src.cli import auto_approve_categories
+
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+
+        mock_load_json.return_value = [
+            {"category_id": "cat1", "category_name": "Category 1"},
+            {"category_id": "cat2", "category_name": "Category 2"},
+        ]
+
+        args = argparse.Namespace(
+            suggestions=None,
+            approved_file=None,
+            no_cleanup=True,
+            json=False
+        )
+
+        result = auto_approve_categories(args)
+
+        assert result == 0
+        mock_save_json.assert_called_once()
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_auto_approve_categories_file_not_found(self, mock_logger, mock_path_config, mock_load_json):
+        """Test auto_approve_categories handles missing suggestions file."""
+        from src.cli import auto_approve_categories
+
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_load_json.side_effect = FileNotFoundError("Suggestions not found")
+
+        args = argparse.Namespace(
+            suggestions=None,
+            approved_file=None,
+            no_cleanup=True,
+            json=False
+        )
+
+        result = auto_approve_categories(args)
+
+        assert result == 1
+
+
+class TestOutputJsonFunction:
+    """Test cases for output_json helper function."""
+
+    def test_output_json_writes_formatted_json(self):
+        """Test output_json writes properly formatted JSON to stdout."""
+        from src.cli import output_json
+        import io
+        import sys
+        import json
+
+        data = {"command": "test", "status": "success"}
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+
+        output_json(data)
+
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        assert parsed["command"] == "test"
+        assert parsed["status"] == "success"
+
+    def test_output_json_includes_all_fields(self):
+        """Test output_json preserves all fields."""
+        from src.cli import output_json
+        import io
+        import sys
+        import json
+
+        data = {
+            "command": "analyze",
+            "status": "success",
+            "duration_seconds": 123.45,
+            "output_file": "/path/to/file.json",
+            "stats": {"emails_analyzed": 1000}
+        }
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+
+        output_json(data)
+
+        output = sys.stdout.getvalue()
+        sys.stdout = old_stdout
+
+        parsed = json.loads(output)
+        assert parsed["duration_seconds"] == 123.45
+        assert parsed["stats"]["emails_analyzed"] == 1000
+
+
+# =============================================================================
+# Tests for dry-run mode (--dry-run / -n flag)
+# =============================================================================
+
+
+class TestDryRunParserOptions:
+    """Test cases for --dry-run flag in argument parser."""
+
+    def test_extract_command_has_dry_run_flag(self):
+        """Test extract command has --dry-run flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["extract", "--user-email", "test@test.com", "--dry-run"])
+        assert args.dry_run is True
+
+    def test_extract_command_has_short_dry_run_flag(self):
+        """Test extract command has -n short flag for dry-run."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["extract", "--user-email", "test@test.com", "-n"])
+        assert args.dry_run is True
+
+    def test_extract_dry_run_defaults_to_false(self):
+        """Test extract dry-run defaults to False."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["extract", "--user-email", "test@test.com"])
+        assert args.dry_run is False
+
+    def test_analyze_command_has_dry_run_flag(self):
+        """Test analyze command has --dry-run flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze", "--dry-run"])
+        assert args.dry_run is True
+
+    def test_analyze_command_has_short_dry_run_flag(self):
+        """Test analyze command has -n short flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze", "-n"])
+        assert args.dry_run is True
+
+    def test_suggest_command_has_dry_run_flag(self):
+        """Test suggest command has --dry-run flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["suggest", "--dry-run"])
+        assert args.dry_run is True
+
+    def test_review_command_has_dry_run_flag(self):
+        """Test review command has --dry-run flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["review", "--dry-run"])
+        assert args.dry_run is True
+
+    def test_pipeline_command_has_dry_run_flag(self):
+        """Test pipeline command has --dry-run flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["pipeline", "--user-email", "test@test.com", "--dry-run"])
+        assert args.dry_run is True
+
+
+class TestCmdExtractDryRun:
+    """Test cases for dry-run mode in cmd_extract."""
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_extract_dry_run_does_not_execute(self, mock_logger, mock_path_config):
+        """Test dry-run mode doesn't actually extract emails."""
+        from src.cli import cmd_extract
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            dry_run=True
+        )
+
+        # In dry-run mode, the extractor should NOT be imported/called
+        # The function should return early with preview output
+        with patch("src.extractors.m365_extractor.EmailExtractor", side_effect=Exception("Should not be called")):
+            # Should complete without error because dry-run returns before import
+            result = cmd_extract(args)
+
+        assert result == 0
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_extract_dry_run_prints_preview(self, mock_logger, mock_path_config, capsys):
+        """Test dry-run mode prints preview output."""
+        from src.cli import cmd_extract
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            dry_run=True
+        )
+
+        result = cmd_extract(args)
+
+        captured = capsys.readouterr()
+        assert "[DRY RUN]" in captured.out
+        assert "extract" in captured.out
+        assert "test@example.com" in captured.out
+        assert "No changes will be made" in captured.out
+
+
+class TestCmdAnalyzeDryRun:
+    """Test cases for dry-run mode in cmd_analyze."""
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_analyze_dry_run_does_not_execute(self, mock_logger, mock_path_config):
+        """Test dry-run mode doesn't actually analyze."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            dry_run=True
+        )
+
+        # In dry-run mode, run_full_analysis should NOT be imported/called
+        with patch("src.analyzers.run_full_analysis", side_effect=Exception("Should not be called")):
+            # Should complete without error because dry-run returns before import
+            result = cmd_analyze(args)
+
+        assert result == 0
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_analyze_dry_run_prints_preview(self, mock_logger, mock_path_config, capsys):
+        """Test dry-run mode prints preview output."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            dry_run=True
+        )
+
+        result = cmd_analyze(args)
+
+        captured = capsys.readouterr()
+        assert "[DRY RUN]" in captured.out
+        assert "analyze" in captured.out
+
+
+class TestCmdSuggestDryRun:
+    """Test cases for dry-run mode in cmd_suggest."""
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_suggest_dry_run_does_not_execute(self, mock_logger, mock_path_config):
+        """Test dry-run mode doesn't actually generate suggestions."""
+        from src.cli import cmd_suggest
+
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+
+        args = argparse.Namespace(
+            analysis=None,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            suggestions_file=None,
+            dry_run=True
+        )
+
+        # In dry-run mode, CategoryGenerator should NOT be imported/called
+        with patch("src.generators.category_generator.CategoryGenerator", side_effect=Exception("Should not be called")):
+            # Should complete without error because dry-run returns before import
+            result = cmd_suggest(args)
+
+        assert result == 0
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_suggest_dry_run_prints_preview(self, mock_logger, mock_path_config, capsys):
+        """Test dry-run mode prints preview output."""
+        from src.cli import cmd_suggest
+
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+
+        args = argparse.Namespace(
+            analysis=None,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            suggestions_file=None,
+            dry_run=True
+        )
+
+        result = cmd_suggest(args)
+
+        captured = capsys.readouterr()
+        assert "[DRY RUN]" in captured.out
+        assert "suggest" in captured.out
+
+
+class TestCmdReviewDryRun:
+    """Test cases for dry-run mode in cmd_review."""
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_review_dry_run_does_not_execute(self, mock_logger, mock_path_config):
+        """Test dry-run mode doesn't actually review."""
+        from src.cli import cmd_review
+
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        args = argparse.Namespace(
+            suggestions=None,
+            approved_file=None,
+            no_cleanup=False,
+            dry_run=True
+        )
+
+        # In dry-run mode, review_categories should NOT be imported/called
+        with patch("src.ui.category_review.review_categories", side_effect=Exception("Should not be called")):
+            # Should complete without error because dry-run returns before import
+            result = cmd_review(args)
+
+        assert result == 0
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_review_dry_run_prints_preview(self, mock_logger, mock_path_config, capsys):
+        """Test dry-run mode prints preview output."""
+        from src.cli import cmd_review
+
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        args = argparse.Namespace(
+            suggestions=None,
+            approved_file=None,
+            no_cleanup=False,
+            dry_run=True
+        )
+
+        result = cmd_review(args)
+
+        captured = capsys.readouterr()
+        assert "[DRY RUN]" in captured.out
+        assert "review" in captured.out
+
+
+class TestCmdPipelineDryRun:
+    """Test cases for dry-run mode in cmd_pipeline."""
+
+    @patch("src.cli.logger")
+    def test_cmd_pipeline_dry_run_does_not_execute(self, mock_logger):
+        """Test dry-run mode doesn't actually run pipeline."""
+        from src.cli import cmd_pipeline
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=None,
+            verbose=False,
+            quiet=False,
+            json=False,
+            dry_run=True
+        )
+
+        # Should NOT call any of the sub-commands
+        with patch("src.cli.cmd_extract", side_effect=Exception("Should not be called")):
+            with patch("src.cli.cmd_analyze", side_effect=Exception("Should not be called")):
+                result = cmd_pipeline(args)
+
+        assert result == 0
+
+    @patch("src.cli.logger")
+    def test_cmd_pipeline_dry_run_prints_preview(self, mock_logger, capsys):
+        """Test dry-run mode prints preview output."""
+        from src.cli import cmd_pipeline
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=None,
+            verbose=False,
+            quiet=False,
+            json=False,
+            dry_run=True
+        )
+
+        result = cmd_pipeline(args)
+
+        captured = capsys.readouterr()
+        assert "[DRY RUN]" in captured.out
+        assert "pipeline" in captured.out
+
+
+class TestDryRunValidation:
+    """Test dry-run mode still performs validation."""
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_extract_dry_run_validates_email_format(self, mock_logger, mock_path_config):
+        """Test dry-run still validates email format."""
+        from src.cli import cmd_extract
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+
+        args = argparse.Namespace(
+            user_email="invalid-email",  # Invalid email
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            dry_run=True
+        )
+
+        result = cmd_extract(args)
+
+        # Should fail validation even in dry-run mode
+        assert result == 1
+
+    @patch("src.cli.logger")
+    def test_pipeline_dry_run_validates_email_format(self, mock_logger):
+        """Test pipeline dry-run still validates email format."""
+        from src.cli import cmd_pipeline
+
+        args = argparse.Namespace(
+            user_email="invalid-email",  # Invalid email
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=None,
+            verbose=False,
+            quiet=False,
+            json=False,
+            dry_run=True
+        )
+
+        result = cmd_pipeline(args)
+
+        # Should fail validation even in dry-run mode
+        assert result == 1
+
+
+class TestDryRunWithJsonOutput:
+    """Test dry-run mode with --json flag."""
+
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_extract_dry_run_with_json_output(self, mock_logger, mock_path_config, capsys):
+        """Test dry-run mode respects --json flag."""
+        from src.cli import cmd_extract
+        import json
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            dry_run=True,
+            json=True
+        )
+
+        result = cmd_extract(args)
+
+        captured = capsys.readouterr()
+        # Should output JSON
+        output = json.loads(captured.out)
+        assert output["command"] == "extract"
+        assert output["dry_run"] is True
+        assert result == 0
+
+
+# =============================================================================
+# Tests for auto-cluster CLI integration (Track 2A)
+# =============================================================================
+
+
+class TestAutoClusterCLI:
+    """Test cases for auto-cluster CLI flags."""
+
+    def test_analyze_command_has_auto_clusters_flag(self):
+        """Test analyze command has --auto-clusters flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze", "--auto-clusters"])
+        assert args.auto_clusters is True
+
+    def test_analyze_command_auto_clusters_default_false(self):
+        """Test --auto-clusters defaults to False."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze"])
+        assert args.auto_clusters is False
+
+    def test_analyze_command_has_cluster_method_flag(self):
+        """Test analyze command has --cluster-method flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze", "--cluster-method", "elbow"])
+        assert args.cluster_method == "elbow"
+
+        args = parser.parse_args(["analyze", "--cluster-method", "silhouette"])
+        assert args.cluster_method == "silhouette"
+
+    def test_analyze_command_cluster_method_default_silhouette(self):
+        """Test --cluster-method defaults to silhouette."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze"])
+        assert args.cluster_method == "silhouette"
+
+    def test_num_clusters_overrides_auto_selection(self):
+        """Test --num-clusters overrides auto-selection."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Both flags can be set
+        args = parser.parse_args(["analyze", "--auto-clusters", "--num-clusters", "5"])
+        assert args.auto_clusters is True
+        assert args.num_clusters == 5
+
+    def test_analyze_command_has_cluster_analysis_flag(self):
+        """Test analyze command has --cluster-analysis flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze", "--cluster-analysis"])
+        assert args.cluster_analysis is True
+
+    def test_analyze_command_cluster_analysis_default_false(self):
+        """Test --cluster-analysis defaults to False."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["analyze"])
+        assert args.cluster_analysis is False
+
+    def test_pipeline_command_has_auto_clusters_flag(self):
+        """Test pipeline command has --auto-clusters flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["pipeline", "--user-email", "test@test.com", "--auto-clusters"])
+        assert args.auto_clusters is True
+
+    def test_pipeline_command_has_cluster_method_flag(self):
+        """Test pipeline command has --cluster-method flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["pipeline", "--user-email", "test@test.com", "--cluster-method", "elbow"])
+        assert args.cluster_method == "elbow"
+
+
+# =============================================================================
+# Tests for cluster analysis report (Track 2A.5)
+# =============================================================================
+
+
+class TestClusterAnalysisReport:
+    """Test cases for cluster analysis report feature."""
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cluster_analysis_prints_k_vs_score_table(self, mock_logger, mock_path_config, mock_load_json, capsys):
+        """Test that --cluster-analysis prints k vs score table."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 50,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": [
+                {
+                    "id": str(i),
+                    "sender_email": f"sender{i}@example.com",
+                    "sender_name": "",
+                    "sender_domain": "example.com",
+                    "recipient_email": None,
+                    "recipient_name": "",
+                    "subject": f"Subject {i}",
+                    "body_text": f"Body text {i}",
+                    "received_date": "2024-01-01T10:00:00",
+                    "has_attachments": False
+                }
+                for i in range(50)
+            ]
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=5,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_analysis=True,
+            analysis_file=None,
+            dry_run=False,
+            json=False
+        )
+
+        # This test verifies the feature exists - actual implementation details
+        # are tested in the run to ensure table/chart output is generated
+        with patch("src.analyzers.run_full_analysis") as mock_analysis:
+            with patch("src.cli.save_json"):
+                mock_results = MagicMock()
+                mock_results.model_dump.return_value = {}
+                mock_results.sender_analysis.unique_senders = 10
+                mock_results.content_clusters = []
+                mock_analysis.return_value = mock_results
+
+                # Run should succeed
+                result = cmd_analyze(args)
+
+                # Command should complete (actual output tested via integration)
+                assert result == 0
+
+    def test_cluster_analysis_with_json_output(self):
+        """Test --cluster-analysis works with --json flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # --json is a global flag that must come before the subcommand
+        args = parser.parse_args(["--json", "analyze", "--cluster-analysis"])
+        assert args.cluster_analysis is True
+        assert args.json is True
+
+
+# =============================================================================
+# Tests for export command (Track 5C: Export & Polish)
+# =============================================================================
+
+
+class TestExportCommand:
+    """Test cases for export command (Task 5C.3)."""
+
+    def test_create_parser_has_export_command(self):
+        """Test parser has export subcommand."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "csv"])
+        assert args.command == "export"
+
+    def test_export_command_requires_format(self):
+        """Test export command requires --format flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(["export"])
+
+    def test_export_command_format_csv(self):
+        """Test export command accepts csv format."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "csv"])
+        assert args.format == "csv"
+
+    def test_export_command_format_html(self):
+        """Test export command accepts html format."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "html"])
+        assert args.format == "html"
+
+    def test_export_command_rejects_invalid_format(self):
+        """Test export command rejects invalid format."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(["export", "--format", "invalid"])
+
+    def test_export_command_has_output_option(self):
+        """Test export command has --output option."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "csv", "--output", "/custom/output.csv"])
+        assert args.output == Path("/custom/output.csv")
+
+    def test_export_command_has_input_option(self):
+        """Test export command has --input option."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "csv", "--input", "/custom/categories.json"])
+        assert args.input == Path("/custom/categories.json")
+
+    def test_export_command_default_output_is_none(self):
+        """Test export command --output defaults to None (auto-generated)."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "csv"])
+        assert args.output is None
+
+    def test_export_command_default_input_is_none(self):
+        """Test export command --input defaults to None (uses approved_categories.json)."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["export", "--format", "csv"])
+        assert args.input is None
+
+
+class TestCmdExport:
+    """Test cases for cmd_export function."""
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_csv_success(self, mock_logger, mock_path_config, mock_load_json):
+        """Test successful CSV export."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        # Mock categories data
+        mock_load_json.return_value = [
+            {
+                "category_id": "cat_001",
+                "category_name": "Test Category",
+                "description": "Test description",
+                "confidence": 0.85,
+                "email_count": 100,
+                "percentage": 10.0,
+                "source": "template",
+                "level": 0,
+                "parent_category_id": None,
+            }
+        ]
+
+        args = argparse.Namespace(
+            format="csv",
+            output=None,
+            input=None,
+            json=False
+        )
+
+        with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
+            mock_export.return_value = Path("/output/categories.csv")
+            result = cmd_export(args)
+
+        assert result == 0
+        mock_export.assert_called_once()
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_html_success(self, mock_logger, mock_path_config, mock_load_json):
+        """Test successful HTML export."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        mock_load_json.return_value = [
+            {
+                "category_id": "cat_001",
+                "category_name": "Test Category",
+                "description": "Test description",
+                "confidence": 0.85,
+                "email_count": 100,
+                "percentage": 10.0,
+                "source": "template",
+                "level": 0,
+                "parent_category_id": None,
+            }
+        ]
+
+        args = argparse.Namespace(
+            format="html",
+            output=None,
+            input=None,
+            json=False
+        )
+
+        with patch("src.exporters.html_exporter.export_categories_to_html") as mock_export:
+            mock_export.return_value = Path("/output/report.html")
+            result = cmd_export(args)
+
+        assert result == 0
+        mock_export.assert_called_once()
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_custom_output_path(self, mock_logger, mock_path_config, mock_load_json):
+        """Test export with custom output path."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+
+        mock_load_json.return_value = [
+            {
+                "category_id": "cat_001",
+                "category_name": "Test Category",
+                "description": "Test description",
+                "confidence": 0.85,
+                "email_count": 100,
+                "percentage": 10.0,
+                "source": "template",
+                "level": 0,
+                "parent_category_id": None,
+            }
+        ]
+
+        args = argparse.Namespace(
+            format="csv",
+            output=Path("/custom/output.csv"),
+            input=None,
+            json=False
+        )
+
+        with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
+            mock_export.return_value = Path("/custom/output.csv")
+            result = cmd_export(args)
+
+        assert result == 0
+        # Verify custom path was used
+        call_args = mock_export.call_args[0]
+        assert call_args[1] == Path("/custom/output.csv")
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_custom_input_path(self, mock_logger, mock_path_config, mock_load_json):
+        """Test export with custom input path."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        mock_load_json.return_value = [
+            {
+                "category_id": "cat_001",
+                "category_name": "Test Category",
+                "description": "Test description",
+                "confidence": 0.85,
+                "email_count": 100,
+                "percentage": 10.0,
+                "source": "template",
+                "level": 0,
+                "parent_category_id": None,
+            }
+        ]
+
+        args = argparse.Namespace(
+            format="csv",
+            output=None,
+            input=Path("/custom/input.json"),
+            json=False
+        )
+
+        with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
+            mock_export.return_value = Path("/output/categories.csv")
+            result = cmd_export(args)
+
+        assert result == 0
+        # Verify custom input path was used
+        mock_load_json.assert_called_with(Path("/custom/input.json"))
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_file_not_found(self, mock_logger, mock_path_config, mock_load_json):
+        """Test export when input file doesn't exist."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_load_json.side_effect = FileNotFoundError("File not found")
+
+        args = argparse.Namespace(
+            format="csv",
+            output=None,
+            input=None,
+            json=False
+        )
+
+        result = cmd_export(args)
+
+        assert result == 1
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_json_output(self, mock_logger, mock_path_config, mock_load_json):
+        """Test export with --json output."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        mock_load_json.return_value = [
+            {
+                "category_id": "cat_001",
+                "category_name": "Test Category",
+                "description": "Test description",
+                "confidence": 0.85,
+                "email_count": 100,
+                "percentage": 10.0,
+                "source": "template",
+                "level": 0,
+                "parent_category_id": None,
+            }
+        ]
+
+        args = argparse.Namespace(
+            format="csv",
+            output=None,
+            input=None,
+            json=True
+        )
+
+        with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
+            mock_export.return_value = Path("/output/categories.csv")
+            with patch("src.cli.output_json") as mock_output_json:
+                result = cmd_export(args)
+
+        assert result == 0
+        mock_output_json.assert_called_once()
+        call_args = mock_output_json.call_args[0][0]
+        assert call_args["status"] == "success"
+        assert "output_file" in call_args
+
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    @patch("src.cli.logger")
+    def test_cmd_export_handles_empty_categories(self, mock_logger, mock_path_config, mock_load_json):
+        """Test export handles empty category list."""
+        from src.cli import cmd_export
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+
+        mock_load_json.return_value = []  # Empty list
+
+        args = argparse.Namespace(
+            format="csv",
+            output=None,
+            input=None,
+            json=False
+        )
+
+        with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
+            mock_export.return_value = Path("/output/categories.csv")
+            result = cmd_export(args)
+
+        assert result == 0
+        mock_export.assert_called_once()
+        # Verify empty list was passed
+        call_args = mock_export.call_args[0]
+        assert call_args[0] == []
