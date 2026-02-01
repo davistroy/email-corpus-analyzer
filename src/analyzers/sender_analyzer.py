@@ -11,12 +11,18 @@ from collections.abc import Callable
 from ..models.analysis_results import SenderAnalysis
 from ..models.corpus import Corpus
 from ..models.sender import Sender, SenderType
+from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
-class SenderAnalyzer:
+class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
     """Analyzes sender patterns in email corpus."""
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Sender Analyzer"
 
     def analyze(
         self,

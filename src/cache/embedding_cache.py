@@ -124,9 +124,8 @@ class EmbeddingCache:
             self._hits += 1
             idx = self._id_to_index[email_id]
             return self._embeddings[idx].copy()
-        else:
-            self._misses += 1
-            return None
+        self._misses += 1
+        return None
 
     def get_batch(
         self, email_ids: list[str]

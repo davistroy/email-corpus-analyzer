@@ -9,11 +9,13 @@ Per Phase 2, Track 2A requirements.
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, silhouette_samples
+from sklearn.metrics import silhouette_samples, silhouette_score
+
+from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ class ClusterOptimizationResult:
     per_cluster_scores: dict[int, float] | None = None
 
 
-class ElbowOptimizer:
+class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
     """
     Finds optimal number of clusters using the elbow method.
 
@@ -37,6 +39,11 @@ class ElbowOptimizer:
     for different values of k and identifies the "elbow" point where
     adding more clusters provides diminishing returns.
     """
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Elbow Optimizer"
 
     def __init__(self, max_k: int = 15):
         """
@@ -47,6 +54,24 @@ class ElbowOptimizer:
         """
         self.max_k = max_k
         logger.debug(f"ElbowOptimizer initialized with max_k={max_k}")
+
+    def analyze(self, emails, **kwargs) -> ClusterOptimizationResult:
+        """
+        Analyze embeddings to find optimal cluster count.
+
+        This method wraps find_optimal_k for BaseAnalyzer compatibility.
+        The 'emails' parameter should be embeddings (numpy array) in this case.
+
+        Args:
+            emails: Embeddings array (not email list for this optimizer)
+            **kwargs: Additional arguments including progress_callback
+
+        Returns:
+            ClusterOptimizationResult with optimal k and confidence
+        """
+        embeddings = emails  # For optimizers, we accept embeddings directly
+        progress_callback = kwargs.get('progress_callback')
+        return self.find_optimal_k(embeddings, progress_callback)
 
     def find_optimal_k(
         self,
@@ -238,7 +263,7 @@ class ElbowOptimizer:
         return max(0.0, min(1.0, final_confidence))
 
 
-class SilhouetteOptimizer:
+class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
     """
     Finds optimal number of clusters using silhouette analysis.
 
@@ -246,6 +271,11 @@ class SilhouetteOptimizer:
     compared to other clusters. A higher silhouette score indicates better
     defined clusters.
     """
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Silhouette Optimizer"
 
     def __init__(self, max_k: int = 15):
         """
@@ -256,6 +286,24 @@ class SilhouetteOptimizer:
         """
         self.max_k = max_k
         logger.debug(f"SilhouetteOptimizer initialized with max_k={max_k}")
+
+    def analyze(self, emails, **kwargs) -> ClusterOptimizationResult:
+        """
+        Analyze embeddings to find optimal cluster count.
+
+        This method wraps find_optimal_k for BaseAnalyzer compatibility.
+        The 'emails' parameter should be embeddings (numpy array) in this case.
+
+        Args:
+            emails: Embeddings array (not email list for this optimizer)
+            **kwargs: Additional arguments including progress_callback
+
+        Returns:
+            ClusterOptimizationResult with optimal k and confidence
+        """
+        embeddings = emails  # For optimizers, we accept embeddings directly
+        progress_callback = kwargs.get('progress_callback')
+        return self.find_optimal_k(embeddings, progress_callback)
 
     def find_optimal_k(
         self,

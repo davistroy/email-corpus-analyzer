@@ -1,243 +1,179 @@
-# M365 MCP Server Setup for Personal Accounts (Hotmail/Outlook.com)
+# Email Source Setup Guide
 
-## Issue
+This guide covers authentication setup for extracting emails from Hotmail/Outlook.com and Gmail.
 
-The M365 MCP server currently uses `/users/{email}/messages` endpoint which:
-- ❌ **Does NOT work** with personal accounts (hotmail.com, outlook.com, live.com)
-- ✅ **Only works** with organizational/work accounts with admin consent
+## Hotmail / Outlook.com Setup
 
-For personal Microsoft accounts, you **must** use delegated authentication with `/me/messages` endpoint.
+### How It Works
 
-## Solution: Use Delegated Authentication
+The extractor uses the **Microsoft Graph API** with **MSAL device code flow** — no Azure app registration needed. It authenticates via a well-known public client (Microsoft Graph Explorer) and calls `/me/messages`, which works with personal Hotmail, Outlook.com, and Live.com accounts.
 
-### Key Differences
-
-| Endpoint | Auth Type | Works With | Requires |
-|----------|-----------|------------|----------|
-| `/users/{email}/messages` | Application | Work/School accounts only | Admin consent, client credentials |
-| `/me/messages` | Delegated | Personal + Work accounts | User OAuth login |
-
-### What the M365 MCP Server Needs to Do
-
-The MCP server should:
-
-1. **Use OAuth 2.0 Delegated Flow** (not client credentials)
-2. **Call `/me/messages`** instead of `/users/{email}/messages`
-3. **Store user's access token** from interactive login
-
-## Setup Steps
-
-### 1. Check M365 MCP Server Configuration
-
-The M365 MCP server should be configured for **delegated permissions**:
-
-```json
-{
-  "mcpServers": {
-    "m365-email": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-m365"],
-      "env": {
-        "M365_CLIENT_ID": "your-client-id",
-        "M365_CLIENT_SECRET": "your-client-secret",
-        "M365_TENANT_ID": "common",  // Important: "common" for personal accounts
-        "M365_AUTH_TYPE": "delegated"  // Not "application"
-      }
-    }
-  }
-}
-```
-
-**Critical settings for personal accounts:**
-- `M365_TENANT_ID`: Must be `"common"` or `"consumers"` (not a specific tenant GUID)
-- Authentication must use delegated flow with user login
-
-### 2. Azure App Registration Settings
-
-Your Azure AD app registration needs:
-
-**API Permissions (Delegated):**
-- ✅ `Mail.Read` (delegated)
-- ✅ `Mail.ReadBasic` (delegated)
-- ✅ `User.Read` (delegated)
-
-**NOT** Application permissions - those don't work with personal accounts.
-
-**Supported Account Types:**
-- Must select: "Accounts in any organizational directory and personal Microsoft accounts"
-
-### 3. Authentication Flow
-
-For personal accounts, the MCP server needs to:
-
-1. **Redirect user to Microsoft login** (OAuth 2.0 authorization code flow)
-2. **User logs in** with user@hotmail.com
-3. **User grants consent** to Mail.Read permission
-4. **MCP server receives access token**
-5. **Token is used for API calls** to `/me/messages`
-
-### 4. Testing the Setup
-
-#### Check if MCP server is authenticated:
+### First-Time Authentication
 
 ```bash
-# The M365 MCP server should have prompted for login when it started
-# Check Claude Code MCP server logs for authentication status
+python -m src.cli extract --user-email troy.davis@hotmail.com
 ```
 
-#### Test email fetching:
+On first run, you'll see:
 
-Since the MCP server internally should use `/me/messages`, you shouldn't need to change your code. However, the **MCP server itself** needs to be updated to use the correct endpoint.
-
-## Fixing the M365 MCP Server
-
-The current MCP server implementation has a bug - it's using:
 ```
-/users/{user_email}/messages
-```
-
-It should use:
-```
-/me/messages  (when using delegated auth)
+============================================================
+MICROSOFT AUTHENTICATION REQUIRED
+============================================================
+To sign in, use a web browser to open the page
+https://microsoft.com/devicelogin and enter the code XXXXXXXX
+============================================================
 ```
 
-### Option 1: Use Different MCP Server
+1. Open https://microsoft.com/devicelogin on any device
+2. Enter the code shown
+3. Sign in with your Microsoft account
+4. Grant the `Mail.Read` permission when prompted
+5. Return to the terminal — extraction begins automatically
 
-Check if there's an updated version of the M365 MCP server:
+### Token Caching
+
+After first auth, tokens are cached at `~/.email-analyzer/ms_token_cache.json`. Subsequent runs use the cached token automatically — no re-authentication unless the token expires (typically after 90 days of inactivity).
+
+To force re-authentication:
+```bash
+# Delete the token cache
+rm ~/.email-analyzer/ms_token_cache.json
+
+# Or use the standalone script with --force-auth
+python scripts/fetch_emails_cli.py --force-auth --count 5
+```
+
+### Custom Azure App (Optional)
+
+The default public client ID works for most cases. If you need a custom Azure app:
+
+1. Go to https://portal.azure.com → App registrations → New registration
+2. Name: "Email Corpus Analyzer" (or anything)
+3. Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**
+4. Redirect URI: Select **Mobile and desktop applications** → `https://login.microsoftonline.com/common/oauth2/nativeclient`
+5. API Permissions: Add **Mail.Read** (delegated) and **User.Read** (delegated)
+6. Note the Application (client) ID
+
+Then pass it when extracting:
+```bash
+# The --client-id flag is available on the standalone script
+python scripts/fetch_emails_cli.py --count 500 --output ~/data/outputs/email_corpus.json
+```
+
+---
+
+## Gmail Setup
+
+### Prerequisites
+
+Gmail extraction requires OAuth 2.0 client credentials from Google Cloud Console.
+
+### Step 1: Create Google Cloud Project
+
+1. Go to https://console.cloud.google.com/
+2. Create a new project (or select existing)
+3. Name it something like "Email Corpus Analyzer"
+
+### Step 2: Enable Gmail API
+
+1. Go to **APIs & Services** → **Library**
+2. Search for "Gmail API"
+3. Click **Enable**
+
+### Step 3: Create OAuth Credentials
+
+1. Go to **APIs & Services** → **Credentials**
+2. Click **+ CREATE CREDENTIALS** → **OAuth client ID**
+3. If prompted, configure the consent screen first:
+   - User type: **External**
+   - App name: "Email Corpus Analyzer"
+   - Scopes: Add `gmail.readonly`
+   - Test users: Add your Gmail address
+4. Application type: **Desktop app**
+5. Name: "Email Corpus Analyzer"
+6. Click **Create**
+7. Click **Download JSON** on the confirmation dialog
+
+### Step 4: Save Credentials
+
+Save the downloaded JSON file as:
+```
+~/.email-analyzer/gmail_credentials.json
+```
+
+On Windows:
+```
+C:\Users\YourName\.email-analyzer\gmail_credentials.json
+```
+
+### Step 5: First-Time Authentication
 
 ```bash
-npm info @modelcontextprotocol/server-m365
+python -m src.cli extract --user-email your.email@gmail.com --source gmail
 ```
 
-### Option 2: Modify MCP Server Source
+A browser window opens for Google sign-in:
 
-If you're comfortable with TypeScript, you could:
+1. Sign in with your Google account
+2. Grant "View your email messages and settings" permission
+3. The browser shows "Authentication successful" — return to terminal
+4. Extraction begins
 
-1. Clone the MCP server repo
-2. Update the endpoint from `/users/{email}` to `/me`
-3. Run locally
+### Token Caching
 
-### Option 3: Alternative - Direct Graph API
+Gmail tokens are cached at `~/.email-analyzer/gmail_token.json`. Refresh tokens persist until you revoke access in Google Account settings.
 
-Instead of using the M365 MCP server, you could implement direct Microsoft Graph API calls:
+---
 
-```python
-# See src/extractors/graph_api_client.py example in INTEGRATION.md
-```
+## Multi-Source Extraction
 
-## Quick Test
-
-Try this command to verify MCP authentication status:
+Extract from both Hotmail and Gmail into a single corpus:
 
 ```bash
-# In Claude Code, check MCP server connection status
-# The server should show as "connected" and "authenticated"
+python -m src.cli extract \
+  --user-email troy.davis@hotmail.com \
+  --source both \
+  --gmail-email your.email@gmail.com
 ```
 
-## Expected Behavior
+This runs both extractors sequentially and merges the results into one corpus file. The source is recorded in metadata as "Hotmail/M365+Gmail".
 
-**When working correctly:**
+---
 
-1. First run: Browser opens for Microsoft login
-2. You login with user@hotmail.com
-3. You grant Mail.Read permission
-4. MCP server stores refresh token
-5. Subsequent calls use stored token
-6. Calls to `fetch_emails` work automatically
+## Authentication Files
 
-**Current error (404):**
+| File | Purpose | Created |
+|------|---------|---------|
+| `~/.email-analyzer/ms_token_cache.json` | Microsoft Graph OAuth tokens | First Hotmail extraction |
+| `~/.email-analyzer/gmail_credentials.json` | Google OAuth client secrets | You download from Google Cloud Console |
+| `~/.email-analyzer/gmail_token.json` | Google OAuth access/refresh tokens | First Gmail extraction |
+| `~/.email-analyzer/config.yaml` | App configuration | Manual or `config init` |
 
-The MCP server is trying:
-```
-GET /users/user@hotmail.com/messages
-→ 404 Not Found (personal accounts not accessible via /users endpoint)
-```
+All auth files are in your home directory and never committed to git.
 
-Should be trying:
-```
-GET /me/messages
-→ 200 OK (with user's OAuth token)
-```
+---
 
-## Workaround for Now
+## Troubleshooting
 
-Until the MCP server is fixed, you can:
+### "Authentication failed: Timeout"
+The device code expires after 15 minutes. Run the command again to get a new code.
 
-1. **Use a work/school account** (if you have one)
-2. **Use direct Graph API calls** (bypass MCP)
-3. **Use test data** (for development)
+### "M365MCPClient.fetch_emails() called in stub mode"
+You're running an old code path. The current extractor uses `GraphAPIClient` directly. Make sure you have the latest code.
 
-## Test Data Development Mode
+### "Gmail credentials not found"
+Download OAuth client JSON from Google Cloud Console and save to `~/.email-analyzer/gmail_credentials.json`.
 
-To continue development without M365:
-
+### "Token refresh failed"
+Delete the token cache and re-authenticate:
 ```bash
-cd /home/davistroy/dev/email-processor/initial-learning
-
-# Create test data
-cat > outputs/test_emails.json <<'EOF'
-{
-  "extraction_metadata": {
-    "extraction_date": "2025-10-05T12:00:00Z",
-    "source_email": "test@example.com",
-    "total_emails": 3,
-    "extraction_duration_seconds": 1.0
-  },
-  "emails": [
-    {
-      "id": "msg_001",
-      "sender_email": "deals@store.com",
-      "sender_name": "Store Deals",
-      "sender_domain": "store.com",
-      "recipient_email": "user@hotmail.com",
-      "recipient_name": "Troy Davis",
-      "subject": "50% Off Sale Today Only!",
-      "body_text": "Amazing deals! Click to shop now. Unsubscribe at bottom.",
-      "received_date": "2025-10-01T10:00:00Z",
-      "has_attachments": false
-    },
-    {
-      "id": "msg_002",
-      "sender_email": "noreply@github.com",
-      "sender_name": "GitHub",
-      "sender_domain": "github.com",
-      "recipient_email": "user@hotmail.com",
-      "recipient_name": "Troy Davis",
-      "subject": "Security Alert: New SSH Key Added",
-      "body_text": "A new SSH key was added to your account.",
-      "received_date": "2025-10-02T14:30:00Z",
-      "has_attachments": false
-    },
-    {
-      "id": "msg_003",
-      "sender_email": "friend@gmail.com",
-      "sender_name": "Friend Name",
-      "sender_domain": "gmail.com",
-      "recipient_email": "user@hotmail.com",
-      "recipient_name": "Troy Davis",
-      "subject": "Hey, want to grab coffee?",
-      "body_text": "Let me know when you're free this week!",
-      "received_date": "2025-10-03T09:15:00Z",
-      "has_attachments": false
-    }
-  ]
-}
-EOF
-
-# Test analysis with test data
-./venv/bin/python -m src.main analyze --input outputs/test_emails.json
+rm ~/.email-analyzer/ms_token_cache.json   # For Hotmail
+rm ~/.email-analyzer/gmail_token.json       # For Gmail
 ```
 
-## Next Steps
-
-1. **Check MCP server version**: `npm list @modelcontextprotocol/server-m365`
-2. **Verify authentication**: Look for OAuth login prompt
-3. **Check MCP logs**: See what endpoints are being called
-4. **File bug report**: If MCP server is using wrong endpoint for personal accounts
-5. **Use workaround**: Test data or direct Graph API for now
-
-## Resources
-
-- [Microsoft Graph Personal Accounts](https://learn.microsoft.com/en-us/graph/auth/auth-concepts)
-- [OAuth 2.0 Authorization Code Flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)
-- [Mail API Overview](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview)
+### "Rate limited by Microsoft Graph API"
+The extractor has automatic exponential backoff (up to 8 seconds). For very large mailboxes, use smaller batch sizes:
+```bash
+python -m src.cli extract --user-email you@hotmail.com --batch-size 100
+```

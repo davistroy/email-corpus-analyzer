@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 pip install -e ".[dev]"  # Install with dev dependencies
 
-# Run tests (1144 tests, 84% coverage)
+# Run tests (1403 tests, 83% coverage)
 pytest                                  # All tests with coverage
 pytest tests/unit/                      # Unit tests only
 pytest tests/unit/test_html_parser.py   # Single test file
@@ -24,13 +24,19 @@ ruff check src/ --fix           # Auto-fix issues
 python -m src.cli --help
 python -m src.cli --version
 python -m src.cli pipeline --user-email user@hotmail.com
+python -m src.cli pipeline --user-email user@gmail.com --source gmail
+python -m src.cli pipeline --user-email user@hotmail.com --source both --gmail-email user@gmail.com
 python -m src.cli extract --user-email user@hotmail.com
+python -m src.cli extract --user-email user@gmail.com --source gmail
 python -m src.cli analyze --auto-clusters
 python -m src.cli suggest
 python -m src.cli review
 python -m src.cli info
 python -m src.cli config show
 python -m src.cli export --format html
+python -m src.cli export --format outlook-rules
+python -m src.cli export --format gmail-filters
+python -m src.cli config validate
 ```
 
 ## Architecture
@@ -43,9 +49,17 @@ Extract → Analyze → Suggest → Review → Export
 
 ### Core Pipeline Modules
 
-- **`src/extractors/`** - Email extraction from M365 via MCP server. `m365_extractor.py` handles batched extraction with checkpointing. HTML content parsed via `html_parser.py`. Supports incremental extraction with `--since-last`.
+- **`src/extractors/`** - Email extraction from M365/Hotmail and Gmail:
+  - `graph_api_client.py` - Microsoft Graph API client with MSAL device code auth (works with personal Hotmail/Outlook.com accounts)
+  - `gmail_client.py` - Gmail API client with OAuth 2.0 authentication
+  - `gmail_extractor.py` - Gmail extractor with full/incremental extraction and checkpointing
+  - `m365_extractor.py` - M365/Hotmail extractor with batched extraction and checkpointing
+  - `html_parser.py` - HTML to plain text conversion for email bodies
+  - `checkpoint_manager.py` - Checkpoint/resume for interrupted extractions
+  - Supports `--source hotmail|gmail|both` flag for multi-source extraction
 
-- **`src/analyzers/`** - Six independent analyzers run on the corpus:
+- **`src/analyzers/`** - 5 core + 2 optional analyzers inheriting from `BaseAnalyzer` ABC:
+  - `base.py` - Abstract base class for all analyzers
   - `sender_analyzer.py` - Sender frequency, domain patterns
   - `subject_analyzer.py` - Subject line patterns, prefixes
   - `semantic_analyzer.py` - Content clustering via sentence-transformers
@@ -53,6 +67,7 @@ Extract → Analyze → Suggest → Review → Export
   - `volume_analyzer.py` - Statistical metrics
   - `hierarchical_analyzer.py` - Hierarchical clustering with scipy
   - `cluster_optimizer.py` - Elbow/Silhouette methods for optimal k
+  - `thread_analyzer.py` - Email thread/conversation grouping
 
 - **`src/generators/`** - Category suggestion from analysis results:
   - `template_matcher.py` - Matches 18 predefined templates
@@ -62,7 +77,15 @@ Extract → Analyze → Suggest → Review → Export
 
 - **`src/ui/`** - User interface components:
   - `category_review.py` - CLI review with learning support
-  - `tui/` - Textual-based TUI for interactive review
+  - `tui/` - Textual-based TUI for interactive review with bulk operations and search/filter
+
+- **`src/services/`** - Service layer (CLI-agnostic orchestration):
+  - `extraction_service.py` - M365 email extraction orchestration
+  - `analysis_service.py` - Runs all analyzers with progress callbacks
+  - `suggestion_service.py` - Category generation orchestration
+  - `pipeline_service.py` - Full workflow orchestration
+
+- **`src/exceptions.py`** - Custom exception hierarchy with recovery hints
 
 - **`src/learning/`** - Feedback learning system:
   - `decision_logger.py` - Logs review decisions to JSONL
@@ -71,6 +94,7 @@ Extract → Analyze → Suggest → Review → Export
 - **`src/exporters/`** - Export formats:
   - `csv_exporter.py` - CSV export with Excel compatibility
   - `html_exporter.py` - Standalone HTML reports
+  - `rule_exporter.py` - Outlook and Gmail rule/filter export
 
 - **`src/cache/`** - Performance optimization:
   - `embedding_cache.py` - Caches embeddings for incremental analysis
@@ -100,7 +124,7 @@ All models in `src/models/` use Pydantic v2. Key models:
 
 | Command | Description |
 |---------|-------------|
-| `extract` | Extract emails from M365/Hotmail (supports `--since-last` for incremental) |
+| `extract` | Extract emails from Hotmail/Gmail (supports `--source`, `--since-last`) |
 | `analyze` | Analyze corpus (supports `--auto-clusters`, `--incremental`) |
 | `suggest` | Generate category suggestions |
 | `review` | Interactive review (TUI by default, `--no-tui` for CLI) |
@@ -108,7 +132,8 @@ All models in `src/models/` use Pydantic v2. Key models:
 | `info` | Show corpus statistics |
 | `config init` | Generate config template |
 | `config show` | Display resolved configuration |
-| `export` | Export to CSV or HTML |
+| `config validate` | Validate configuration with checks |
+| `export` | Export to CSV, HTML, Outlook rules, or Gmail filters |
 
 ### Global CLI Flags
 
@@ -174,6 +199,7 @@ This project follows strict principles defined in `.specify/memory/constitution.
 - scipy for hierarchical clustering
 - Textual for TUI interface
 - Local JSON storage (no database)
-- M365 MCP server for email access (requires separate authentication)
+- Microsoft Graph API for Hotmail/Outlook.com (MSAL device code flow, no MCP required)
+- Gmail API for Gmail extraction (OAuth 2.0)
 - YAML configuration with PyYAML
 - Jinja2 for HTML report templating

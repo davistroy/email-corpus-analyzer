@@ -3659,3 +3659,272 @@ class TestCmdExport:
         # Verify empty list was passed
         call_args = mock_export.call_args[0]
         assert call_args[0] == []
+
+
+# =============================================================================
+# Tests for Phase 6 Track 6A: Exception Handling and Recovery Hints
+# =============================================================================
+
+
+class TestExceptionHandlingInCli:
+    """Test cases for proper exception handling with recovery hints."""
+
+    @patch("src.cli.logger")
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    def test_cmd_analyze_corpus_not_found_error(self, mock_path_config, mock_load_json, mock_logger):
+        """Test analyze shows recovery hint when corpus not found."""
+        from src.cli import cmd_analyze
+        from src.exceptions import CorpusNotFoundError
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+
+        # Simulate file not found
+        mock_load_json.side_effect = FileNotFoundError("File not found")
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            verbose=False,
+            json=False,
+            dry_run=False,
+            cluster_analysis=False,
+            incremental=False,
+            auto_clusters=False,
+            cluster_method="silhouette"
+        )
+
+        result = cmd_analyze(args)
+
+        assert result == 1
+        mock_logger.error.assert_called()
+
+    @patch("src.cli.logger")
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    def test_cmd_analyze_corpus_not_found_json_output(self, mock_path_config, mock_load_json, mock_logger):
+        """Test analyze with --json outputs structured error."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_load_json.side_effect = FileNotFoundError("File not found")
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            verbose=False,
+            json=True,
+            dry_run=False,
+            cluster_analysis=False,
+            incremental=False,
+            auto_clusters=False,
+            cluster_method="silhouette"
+        )
+
+        with patch("src.cli.output_json") as mock_output_json:
+            result = cmd_analyze(args)
+
+            assert result == 1
+            mock_output_json.assert_called_once()
+            call_args = mock_output_json.call_args[0][0]
+            assert call_args["status"] == "error"
+            assert "error" in call_args
+
+    @patch("src.cli.logger")
+    @patch("src.cli.load_json")
+    @patch("src.cli.PathConfig")
+    def test_cmd_suggest_analysis_not_found_error(self, mock_path_config, mock_load_json, mock_logger):
+        """Test suggest shows error when analysis not found."""
+        from src.cli import cmd_suggest
+
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_load_json.side_effect = FileNotFoundError("Analysis file not found")
+
+        args = argparse.Namespace(
+            analysis=None,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            suggestions_file=None,
+            verbose=False,
+            json=False,
+            dry_run=False
+        )
+
+        result = cmd_suggest(args)
+
+        assert result == 1
+        mock_logger.error.assert_called()
+
+    @patch("src.cli.logger")
+    def test_cmd_extract_invalid_email_format(self, mock_logger):
+        """Test extract validates email format."""
+        from src.cli import cmd_extract
+
+        args = argparse.Namespace(
+            user_email="not-an-email",
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            verbose=False,
+            json=False,
+            dry_run=False,
+            since_last=False,
+            output_dir=None
+        )
+
+        result = cmd_extract(args)
+
+        assert result == 1
+        mock_logger.error.assert_called()
+
+
+class TestConfigValidateCommand:
+    """Test cases for config validate command (Track 6B)."""
+
+    def test_create_parser_has_config_validate_command(self):
+        """Test parser has config validate subcommand."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        args = parser.parse_args(["config", "validate"])
+        assert args.command == "config"
+        assert args.config_action == "validate"
+
+    @patch("src.cli.logger")
+    def test_cmd_config_validate_success(self, mock_logger):
+        """Test config validate with valid configuration."""
+        from src.cli import cmd_config_validate
+        from src.config.models import AppConfig
+
+        args = argparse.Namespace(
+            config=None,
+            json=False
+        )
+
+        with patch("src.cli.load_config") as mock_load:
+            mock_load.return_value = AppConfig()
+            with patch("src.cli.validate_config") as mock_validate:
+                mock_validate.return_value = []  # No validation errors
+
+                with patch("builtins.print"):
+                    result = cmd_config_validate(args)
+
+                assert result == 0
+
+    @patch("src.cli.logger")
+    def test_cmd_config_validate_with_errors(self, mock_logger):
+        """Test config validate with validation errors."""
+        from src.cli import cmd_config_validate
+        from src.config.models import AppConfig
+
+        args = argparse.Namespace(
+            config=None,
+            json=False
+        )
+
+        with patch("src.cli.load_config") as mock_load:
+            mock_load.return_value = AppConfig(output_dir=Path("/nonexistent/path"))
+            with patch("src.cli.validate_config") as mock_validate:
+                mock_validate.return_value = [
+                    {"field": "output_dir", "status": "error", "message": "Directory does not exist"}
+                ]
+
+                with patch("builtins.print"):
+                    result = cmd_config_validate(args)
+
+                # Returns 0 even with warnings, 1 only for errors
+                assert result in [0, 1]
+
+    @patch("src.cli.logger")
+    def test_cmd_config_validate_json_output(self, mock_logger):
+        """Test config validate with --json flag."""
+        from src.cli import cmd_config_validate
+        from src.config.models import AppConfig
+
+        args = argparse.Namespace(
+            config=None,
+            json=True
+        )
+
+        with patch("src.cli.load_config") as mock_load:
+            mock_load.return_value = AppConfig()
+            with patch("src.cli.validate_config") as mock_validate:
+                mock_validate.return_value = []
+
+                with patch("src.cli.output_json") as mock_output_json:
+                    result = cmd_config_validate(args)
+
+                    mock_output_json.assert_called_once()
+                    call_args = mock_output_json.call_args[0][0]
+                    assert "command" in call_args
+                    assert "validations" in call_args
+
+
+class TestCLIHelpExamples:
+    """Test cases for enhanced CLI help with examples (Track 6B)."""
+
+    def test_analyze_command_has_epilog_with_examples(self):
+        """Test analyze command has epilog with usage examples."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        # Access the subparser for analyze
+        subparsers = parser._subparsers._group_actions[0].choices
+
+        analyze_parser = subparsers["analyze"]
+        assert analyze_parser.epilog is not None
+        assert "example" in analyze_parser.epilog.lower()
+
+    def test_extract_command_has_epilog_with_examples(self):
+        """Test extract command has epilog with usage examples."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        subparsers = parser._subparsers._group_actions[0].choices
+
+        extract_parser = subparsers["extract"]
+        assert extract_parser.epilog is not None
+        assert "example" in extract_parser.epilog.lower()
+
+    def test_suggest_command_has_epilog_with_examples(self):
+        """Test suggest command has epilog with usage examples."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        subparsers = parser._subparsers._group_actions[0].choices
+
+        suggest_parser = subparsers["suggest"]
+        assert suggest_parser.epilog is not None
+
+    def test_review_command_has_epilog_with_examples(self):
+        """Test review command has epilog with usage examples."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        subparsers = parser._subparsers._group_actions[0].choices
+
+        review_parser = subparsers["review"]
+        assert review_parser.epilog is not None
+
+    def test_pipeline_command_has_epilog_with_examples(self):
+        """Test pipeline command has epilog with usage examples."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        subparsers = parser._subparsers._group_actions[0].choices
+
+        pipeline_parser = subparsers["pipeline"]
+        assert pipeline_parser.epilog is not None
+
+    def test_export_command_has_epilog_with_examples(self):
+        """Test export command has epilog with usage examples."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        subparsers = parser._subparsers._group_actions[0].choices
+
+        export_parser = subparsers["export"]
+        assert export_parser.epilog is not None

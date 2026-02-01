@@ -10,12 +10,18 @@ from datetime import datetime
 
 from ..models.analysis_results import TemporalPatterns
 from ..models.corpus import Corpus
+from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
-class TemporalAnalyzer:
+class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
     """Analyzes temporal patterns in email corpus."""
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Temporal Analyzer"
 
     def analyze(
         self,

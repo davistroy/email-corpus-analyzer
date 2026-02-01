@@ -55,3 +55,8 @@ outputs/
 .DS_Store
 Thumbs.db
 desktop.ini
+nul
+NUL
+
+# Mock artifacts
+MagicMock/

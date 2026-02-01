@@ -2,6 +2,7 @@
 Email data model.
 
 Per data-model.md lines 75-91.
+Phase 8 Track 8A.1: Added thread_id, in_reply_to, and references fields for thread analysis.
 """
 from datetime import datetime
 
@@ -21,6 +22,20 @@ class Email(BaseModel):
     body_text: str
     received_date: datetime
     has_attachments: bool
+
+    # Thread analysis fields (Phase 8 Track 8A.1)
+    thread_id: str | None = Field(
+        default=None,
+        description="Unique ID for conversation thread"
+    )
+    in_reply_to: str | None = Field(
+        default=None,
+        description="Message ID this email is replying to (from In-Reply-To header)"
+    )
+    references: list[str] = Field(
+        default_factory=list,
+        description="List of message IDs in the thread (from References header)"
+    )
 
     @property
     def combined_text(self) -> str:
