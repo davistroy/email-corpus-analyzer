@@ -12,7 +12,7 @@ from src.generators.confidence_scorer import calculate_confidence
 from src.generators.name_generator import TfidfNameGenerator, score_name_quality
 from src.generators.template_matcher import match_templates
 from src.learning.decision_logger import DecisionLogger
-from src.learning.pattern_detector import DetectedPattern, PatternDetector, PatternType
+from src.learning.pattern_detector import PatternDetector, PatternType
 from src.models.analysis_results import AnalysisResults
 from src.models.category import Category, CategorySource
 from src.models.category_template import PREDEFINED_TEMPLATES
@@ -281,11 +281,41 @@ class CategoryGenerator:
         logger.debug(f"Merged {len(categories)} → {len(merged)} categories")
         return merged
 
-    def _names_similar(self, name1: str, name2: str) -> bool:
-        """Check if two category names are similar."""
-        # Simplified: check if one contains the other (case-insensitive)
+    def _names_similar(
+        self,
+        name1: str,
+        name2: str,
+        threshold: float = 0.8
+    ) -> bool:
+        """
+        Check if two category names are similar using SequenceMatcher.
+
+        Uses difflib.SequenceMatcher for Levenshtein-like distance calculation.
+        This is more accurate than simple substring matching and handles:
+        - Typos and minor variations
+        - Similar but not identical names
+        - Partial matches with proper scoring
+
+        Args:
+            name1: First category name
+            name2: Second category name
+            threshold: Similarity threshold (0.0-1.0), default 0.8
+
+        Returns:
+            True if names are similar (ratio >= threshold), False otherwise
+        """
+        from difflib import SequenceMatcher
+
         n1, n2 = name1.lower(), name2.lower()
-        return n1 in n2 or n2 in n1 or n1 == n2
+
+        # Exact match is always similar
+        if n1 == n2:
+            return True
+
+        # Use SequenceMatcher for similarity ratio
+        ratio = SequenceMatcher(None, n1, n2).ratio()
+
+        return ratio >= threshold
 
     def _calculate_overlap(self, set1: set, set2: set) -> float:
         """Calculate overlap percentage between two email ID sets."""
@@ -463,14 +493,13 @@ class CategoryGenerator:
                 subject = cluster.representative_samples[0].subject.lower()
                 if 'order' in subject:
                     return f"{domain_name} Orders"
-                elif 'ship' in subject or 'deliver' in subject:
+                if 'ship' in subject or 'deliver' in subject:
                     return f"{domain_name} Shipping"
-                elif 'invoice' in subject or 'payment' in subject:
+                if 'invoice' in subject or 'payment' in subject:
                     return f"{domain_name} Billing"
-                elif 'newsletter' in subject or 'news' in subject:
+                if 'newsletter' in subject or 'news' in subject:
                     return f"{domain_name} Newsletter"
-                else:
-                    return f"{domain_name} Updates"
+                return f"{domain_name} Updates"
 
             return f"{domain_name} Emails"
 
@@ -485,8 +514,8 @@ class CategoryGenerator:
 
     def _extract_common_words(self, texts: list[str]) -> list[str]:
         """Extract common meaningful words from text list."""
-        from collections import Counter
         import re
+        from collections import Counter
 
         # Simple stop words
         stop_words = {

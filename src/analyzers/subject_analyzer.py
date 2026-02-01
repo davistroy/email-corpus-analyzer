@@ -11,12 +11,18 @@ from collections.abc import Callable
 
 from ..models.analysis_results import SubjectPatterns
 from ..models.corpus import Corpus
+from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
-class SubjectAnalyzer:
+class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
     """Analyzer for email subject line patterns."""
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Subject Analyzer"
 
     # Standard English stop words
     STOP_WORDS = {

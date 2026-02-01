@@ -10,12 +10,18 @@ from datetime import datetime
 
 from ..models.analysis_results import VolumeStats
 from ..models.corpus import Corpus
+from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
-class VolumeAnalyzer:
+class VolumeAnalyzer(BaseAnalyzer[VolumeStats]):
     """Analyzes volume statistics in email corpus."""
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Volume Analyzer"
 
     def analyze(
         self,

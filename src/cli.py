@@ -324,13 +324,46 @@ For more information, see: specs/001-use-the-document/quickstart.md
     # ===== EXTRACT COMMAND =====
     extract_parser = subparsers.add_parser(
         "extract",
-        help="Extract emails from M365/Hotmail inbox",
-        description="Extract all emails from M365 account and save to JSON corpus file."
+        help="Extract emails from Hotmail/Gmail inbox",
+        description="Extract emails from M365/Hotmail or Gmail and save to JSON corpus file.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Extract from Hotmail (default)
+  %(prog)s --user-email user@hotmail.com
+
+  # Extract from Gmail
+  %(prog)s --user-email user@gmail.com --source gmail
+
+  # Extract from both accounts
+  %(prog)s --user-email user@hotmail.com --source both --gmail-email user@gmail.com
+
+  # Extract with larger batches
+  %(prog)s --user-email user@hotmail.com --batch-size 1000
+
+  # Incremental extraction (only new emails)
+  %(prog)s --user-email user@hotmail.com --since-last
+
+  # Preview without executing
+  %(prog)s --user-email user@hotmail.com --dry-run
+        """
     )
     extract_parser.add_argument(
         "--user-email",
         required=True,
-        help="M365/Hotmail email address to extract from"
+        help="Primary email address (Hotmail/Outlook or Gmail)"
+    )
+    extract_parser.add_argument(
+        "--source",
+        type=str,
+        choices=["hotmail", "gmail", "both"],
+        default="hotmail",
+        help="Email source: hotmail, gmail, or both (default: hotmail)"
+    )
+    extract_parser.add_argument(
+        "--gmail-email",
+        type=str,
+        help="Gmail address (required when --source both, if different from --user-email)"
     )
     extract_parser.add_argument(
         "--corpus-file",
@@ -365,7 +398,35 @@ For more information, see: specs/001-use-the-document/quickstart.md
     analyze_parser = subparsers.add_parser(
         "analyze",
         help="Analyze email corpus for patterns",
-        description="Run all 5 analyzers on email corpus and generate analysis results."
+        description="Run all 5 analyzers on email corpus and generate analysis results.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Basic analysis with default settings
+  %(prog)s
+
+  # Analyze with custom number of clusters
+  %(prog)s --num-clusters 15
+
+  # Auto-determine optimal clusters using silhouette method
+  %(prog)s --auto-clusters
+
+  # Auto-determine using elbow method
+  %(prog)s --auto-clusters --cluster-method elbow
+
+  # Show cluster analysis report
+  %(prog)s --cluster-analysis
+
+  # Incremental analysis (reuse cached embeddings)
+  %(prog)s --incremental
+
+  # Analyze custom corpus file
+  %(prog)s --corpus /path/to/corpus.json
+
+Note: --auto-clusters and --num-clusters are mutually exclusive.
+      When using --auto-clusters, the --cluster-method flag determines
+      which optimization method is used (default: silhouette).
+        """
     )
     analyze_parser.add_argument(
         "--corpus",
@@ -418,7 +479,25 @@ For more information, see: specs/001-use-the-document/quickstart.md
     suggest_parser = subparsers.add_parser(
         "suggest",
         help="Generate category suggestions",
-        description="Generate category suggestions from analysis results."
+        description="Generate category suggestions from analysis results.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Generate suggestions with default settings
+  %(prog)s
+
+  # Require larger clusters for suggestions
+  %(prog)s --min-cluster-percentage 10.0
+
+  # Require more emails for sender-based categories
+  %(prog)s --min-sender-count 50
+
+  # Use custom analysis file
+  %(prog)s --analysis /path/to/analysis.json
+
+  # Preview without executing
+  %(prog)s --dry-run
+        """
     )
     suggest_parser.add_argument(
         "--analysis",
@@ -452,7 +531,28 @@ For more information, see: specs/001-use-the-document/quickstart.md
     review_parser = subparsers.add_parser(
         "review",
         help="Interactively review category suggestions",
-        description="Interactively review, rename, merge, or delete category suggestions."
+        description="Interactively review, rename, merge, or delete category suggestions.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Interactive TUI review (default)
+  %(prog)s
+
+  # Use legacy CLI interface
+  %(prog)s --no-tui
+
+  # Auto-approve all suggestions (for automation)
+  %(prog)s --headless
+
+  # Skip cleanup of intermediate files
+  %(prog)s --no-cleanup
+
+  # Disable learning from review decisions
+  %(prog)s --no-learning
+
+Note: --headless and --no-tui are mutually exclusive in practice.
+      --headless bypasses all interactive review.
+        """
     )
     review_parser.add_argument(
         "--suggestions",
@@ -494,12 +594,48 @@ For more information, see: specs/001-use-the-document/quickstart.md
     pipeline_parser = subparsers.add_parser(
         "pipeline",
         help="Run complete end-to-end workflow",
-        description="Run extract -> analyze -> suggest -> review -> optional cleanup."
+        description="Run extract -> analyze -> suggest -> review -> optional cleanup.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run complete pipeline with TUI review
+  %(prog)s --user-email user@hotmail.com
+
+  # Run pipeline to custom directory
+  %(prog)s --user-email user@hotmail.com --output-dir ~/my-analysis
+
+  # Skip interactive review (auto-approve all)
+  %(prog)s --user-email user@hotmail.com --skip-review
+
+  # Use auto-clustering
+  %(prog)s --user-email user@hotmail.com --auto-clusters
+
+  # Preview all stages without executing
+  %(prog)s --user-email user@hotmail.com --dry-run
+
+The pipeline runs these stages in order:
+  1. extract  - Fetch emails from M365
+  2. analyze  - Run all analyzers
+  3. suggest  - Generate categories
+  4. review   - Interactive approval
+        """
     )
     pipeline_parser.add_argument(
         "--user-email",
         required=True,
-        help="M365/Hotmail email address to extract from"
+        help="Primary email address (Hotmail/Outlook or Gmail)"
+    )
+    pipeline_parser.add_argument(
+        "--source",
+        type=str,
+        choices=["hotmail", "gmail", "both"],
+        default="hotmail",
+        help="Email source: hotmail, gmail, or both (default: hotmail)"
+    )
+    pipeline_parser.add_argument(
+        "--gmail-email",
+        type=str,
+        help="Gmail address (required when --source both, if different from --user-email)"
     )
     pipeline_parser.add_argument(
         "--num-clusters",
@@ -550,7 +686,19 @@ For more information, see: specs/001-use-the-document/quickstart.md
     info_parser = subparsers.add_parser(
         "info",
         help="Show corpus statistics",
-        description="Display information about the email corpus without loading all data."
+        description="Display information about the email corpus without loading all data.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Show info for default corpus
+  %(prog)s
+
+  # Show info for custom corpus file
+  %(prog)s --corpus /path/to/corpus.json
+
+  # Output as JSON
+  %(prog)s --json
+        """
     )
     info_parser.add_argument(
         "--corpus",
@@ -558,18 +706,43 @@ For more information, see: specs/001-use-the-document/quickstart.md
         help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)"
     )
 
-    # ===== EXPORT COMMAND (Task 5C.3) =====
+    # ===== EXPORT COMMAND (Task 5C.3, Phase 8 Track 8B.3) =====
     export_parser = subparsers.add_parser(
         "export",
-        help="Export categories to CSV or HTML format",
-        description="Export approved categories to CSV or HTML report format."
+        help="Export categories to CSV, HTML, or email rules format",
+        description="Export approved categories to CSV, HTML, Outlook rules, or Gmail filters.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Export to CSV (Excel-compatible)
+  %(prog)s --format csv
+
+  # Export to HTML report
+  %(prog)s --format html
+
+  # Export to Outlook rules XML
+  %(prog)s --format outlook-rules
+
+  # Export to Gmail filters XML
+  %(prog)s --format gmail-filters
+
+  # Export to custom path
+  %(prog)s --format csv --output /path/to/categories.csv
+
+  # Export from custom input file
+  %(prog)s --format html --input /path/to/categories.json
+
+Import Instructions:
+  Outlook: File -> Manage Rules & Alerts -> Options -> Import Rules
+  Gmail: Settings -> See all settings -> Filters -> Import filters
+        """
     )
     export_parser.add_argument(
         "--format",
         type=str,
         required=True,
-        choices=["csv", "html"],
-        help="Export format: csv or html"
+        choices=["csv", "html", "outlook-rules", "gmail-filters"],
+        help="Export format: csv, html, outlook-rules, or gmail-filters"
     )
     export_parser.add_argument(
         "--output",
@@ -618,6 +791,13 @@ For more information, see: specs/001-use-the-document/quickstart.md
         "show",
         help="Display resolved configuration",
         description="Show the current configuration with all sources merged."
+    )
+
+    # config validate
+    config_subparsers.add_parser(
+        "validate",
+        help="Validate configuration settings",
+        description="Check all configuration values and runtime conditions."
     )
 
     return parser
@@ -687,13 +867,12 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
         return 0
 
-    from src.extractors.m365_extractor import EmailExtractor
-    from src.models.corpus import Corpus
-
     start_time = time.time()
+    source = getattr(args, 'source', 'hotmail')
 
     logger.info("=== EMAIL EXTRACTION ===")
     logger.info(f"User email: {args.user_email}")
+    logger.info(f"Source: {source}")
 
     # Determine corpus path
     if args.corpus_file:
@@ -703,14 +882,9 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
     logger.info(f"Corpus output: {corpus_path}")
 
-    # Create extractor with user email
+    # Create the appropriate extractor(s) based on source
     try:
-        # EmailExtractor needs user_email in constructor
-        # Note: checkpoint_dir is being deprecated in favor of PathConfig
-        extractor = EmailExtractor(
-            user_email=args.user_email,
-            checkpoint_dir=str(PathConfig.get_output_dir())
-        )
+        extractors = _create_extractors(args, source)
     except Exception as e:
         logger.error(f"Failed to initialize extractor: {e}", exc_info=True)
         if getattr(args, 'json', False):
@@ -723,17 +897,54 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
     # Handle incremental extraction (Task 4B.2)
     if getattr(args, 'since_last', False):
-        return _cmd_extract_incremental(args, extractor, corpus_path, start_time)
+        # For incremental, use the first extractor's actual extractor object
+        return _cmd_extract_incremental(args, extractors[0]["extractor"], corpus_path, start_time)
 
-    # Run full extraction
+    # Run full extraction from all sources
     try:
-        result = extractor.extract_all(
-            max_batch_size=args.batch_size,
-            checkpoint_interval=args.checkpoint_interval
-        )
+        from src.models.corpus import Corpus, CorpusMetadata
 
-        # Save corpus to file
-        save_json(result.corpus.model_dump(), corpus_path)
+        all_results = []
+        for extractor_info in extractors:
+            extractor = extractor_info["extractor"]
+            source_name = extractor_info["source"]
+            logger.info(f"Extracting from {source_name}...")
+
+            result = extractor.extract_all(
+                max_batch_size=args.batch_size,
+                checkpoint_interval=args.checkpoint_interval
+            )
+            all_results.append((source_name, result))
+
+        # Merge results from multiple sources
+        if len(all_results) == 1:
+            _, result = all_results[0]
+            save_json(result.corpus.model_dump(), corpus_path)
+            total_success = result.success_count
+            total_errors = len(result.failed_emails)
+        else:
+            # Merge corpora from multiple sources
+            all_emails = []
+            total_errors_count = 0
+            source_names = []
+            for source_name, result in all_results:
+                all_emails.extend(result.corpus.emails)
+                total_errors_count += len(result.failed_emails)
+                source_names.append(source_name)
+                logger.info(f"  {source_name}: {result.success_count} emails")
+
+            metadata = CorpusMetadata(
+                extraction_date=datetime.now(),
+                total_emails=len(all_emails),
+                source="+".join(source_names),
+                user_email=args.user_email,
+                last_extraction_date=datetime.now(),
+                extraction_params={"sources": source_names},
+            )
+            merged_corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
+            save_json(merged_corpus.model_dump(), corpus_path)
+            total_success = len(all_emails)
+            total_errors = total_errors_count
 
         duration = time.time() - start_time
 
@@ -744,14 +955,14 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 "duration_seconds": round(duration, 2),
                 "output_file": str(corpus_path),
                 "stats": {
-                    "emails_extracted": result.success_count,
-                    "errors": len(result.failed_emails)
+                    "emails_extracted": total_success,
+                    "errors": total_errors
                 }
             })
         else:
-            logger.info(f"Extraction complete: {result.success_count} emails")
-            if result.failed_emails:
-                logger.warning(f"{len(result.failed_emails)} errors occurred (see error log)")
+            logger.info(f"Extraction complete: {total_success} emails")
+            if total_errors:
+                logger.warning(f"{total_errors} errors occurred (see error log)")
 
         return 0
 
@@ -764,6 +975,42 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 "error": str(e)
             })
         return 1
+
+
+def _create_extractors(args: argparse.Namespace, source: str) -> list[dict]:
+    """
+    Create extractor(s) based on the --source flag.
+
+    Returns:
+        List of dicts with 'extractor' and 'source' keys
+    """
+    from src.extractors.m365_extractor import EmailExtractor
+
+    output_dir = str(PathConfig.get_output_dir())
+    extractors = []
+
+    if source in ("hotmail", "both"):
+        extractors.append({
+            "extractor": EmailExtractor(
+                user_email=args.user_email,
+                checkpoint_dir=output_dir,
+            ),
+            "source": "Hotmail/M365",
+        })
+
+    if source in ("gmail", "both"):
+        from src.extractors.gmail_extractor import GmailExtractor
+
+        gmail_email = getattr(args, 'gmail_email', None) or args.user_email
+        extractors.append({
+            "extractor": GmailExtractor(
+                user_email=gmail_email,
+                checkpoint_dir=output_dir,
+            ),
+            "source": "Gmail",
+        })
+
+    return extractors
 
 
 def _cmd_extract_incremental(
@@ -1222,7 +1469,10 @@ def cmd_review(args: argparse.Namespace) -> int:
         return 0
 
     from src.models.category import Category
-    from src.ui.category_review import cleanup_intermediate_files, review_categories, review_categories_with_ui
+    from src.ui.category_review import (
+        cleanup_intermediate_files,
+        review_categories_with_ui,
+    )
 
     start_time = time.time()
 
@@ -1449,6 +1699,8 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
     logger.info("Step 1/4: Extracting emails...")
     extract_args = argparse.Namespace(
         user_email=args.user_email,
+        source=getattr(args, 'source', 'hotmail'),
+        gmail_email=getattr(args, 'gmail_email', None),
         corpus_file=None,
         batch_size=500,
         checkpoint_interval=100,
@@ -1680,9 +1932,9 @@ def cmd_info(args: argparse.Namespace) -> int:
 
 def cmd_export(args: argparse.Namespace) -> int:
     """
-    Execute export command (Task 5C.3).
+    Execute export command (Task 5C.3, Phase 8 Track 8B.3).
 
-    Exports approved categories to CSV or HTML format.
+    Exports approved categories to CSV, HTML, Outlook rules, or Gmail filters format.
 
     Args:
         args: Parsed command-line arguments
@@ -1694,6 +1946,7 @@ def cmd_export(args: argparse.Namespace) -> int:
 
     from src.exporters.csv_exporter import export_categories_to_csv
     from src.exporters.html_exporter import export_categories_to_html
+    from src.exporters.rule_exporter import GmailFilterExporter, OutlookRuleExporter
     from src.models.category import Category
 
     start_time = time.time()
@@ -1741,8 +1994,12 @@ def cmd_export(args: argparse.Namespace) -> int:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if args.format == "csv":
             output_path = PathConfig.get_output_dir() / f"categories_{timestamp}.csv"
-        else:
+        elif args.format == "html":
             output_path = PathConfig.get_output_dir() / f"category_report_{timestamp}.html"
+        elif args.format == "outlook-rules":
+            output_path = PathConfig.get_output_dir() / f"outlook_rules_{timestamp}.xml"
+        else:  # gmail-filters
+            output_path = PathConfig.get_output_dir() / f"gmail_filters_{timestamp}.xml"
 
     logger.info(f"Output file: {output_path}")
 
@@ -1750,8 +2007,14 @@ def cmd_export(args: argparse.Namespace) -> int:
     try:
         if args.format == "csv":
             result_path = export_categories_to_csv(categories, output_path)
-        else:
+        elif args.format == "html":
             result_path = export_categories_to_html(categories, output_path)
+        elif args.format == "outlook-rules":
+            exporter = OutlookRuleExporter()
+            result_path = exporter.export_to_file(categories, output_path)
+        else:  # gmail-filters
+            exporter = GmailFilterExporter()
+            result_path = exporter.export_to_file(categories, output_path)
 
         duration = time.time() - start_time
 
@@ -1767,6 +2030,12 @@ def cmd_export(args: argparse.Namespace) -> int:
         else:
             logger.info(f"Export complete: {result_path}")
             logger.info(f"Exported {len(categories)} categories to {args.format.upper()}")
+
+            # Show import instructions for rule exports
+            if args.format == "outlook-rules":
+                logger.info("To import: File -> Manage Rules & Alerts -> Options -> Import Rules")
+            elif args.format == "gmail-filters":
+                logger.info("To import: Settings -> See all settings -> Filters -> Import filters")
 
         return 0
 
@@ -1833,6 +2102,236 @@ def cmd_config_show(args: argparse.Namespace) -> int:
         return 1
 
 
+def validate_config(config) -> list[dict]:
+    """
+    Validate configuration settings and check runtime conditions.
+
+    Args:
+        config: AppConfig instance to validate
+
+    Returns:
+        List of validation results, each containing:
+        - field: Name of the config field
+        - status: 'ok', 'warning', or 'error'
+        - message: Description of the validation result
+    """
+    results = []
+
+    # Validate output_dir
+    if config.output_dir:
+        output_path = Path(config.output_dir).expanduser()
+        if output_path.exists():
+            if output_path.is_dir():
+                # Check if writable
+                try:
+                    test_file = output_path / ".write_test"
+                    test_file.touch()
+                    test_file.unlink()
+                    results.append({
+                        "field": "output_dir",
+                        "status": "ok",
+                        "message": f"Directory exists and is writable: {output_path}"
+                    })
+                except (PermissionError, OSError):
+                    results.append({
+                        "field": "output_dir",
+                        "status": "error",
+                        "message": f"Directory is not writable: {output_path}"
+                    })
+            else:
+                results.append({
+                    "field": "output_dir",
+                    "status": "error",
+                    "message": f"Path exists but is not a directory: {output_path}"
+                })
+        else:
+            # Check if parent exists and is writable
+            parent = output_path.parent
+            if parent.exists():
+                results.append({
+                    "field": "output_dir",
+                    "status": "warning",
+                    "message": f"Directory does not exist but parent is accessible: {output_path}"
+                })
+            else:
+                results.append({
+                    "field": "output_dir",
+                    "status": "error",
+                    "message": f"Directory does not exist and cannot be created: {output_path}"
+                })
+    else:
+        results.append({
+            "field": "output_dir",
+            "status": "ok",
+            "message": "Using default output directory"
+        })
+
+    # Validate user_email
+    if config.user_email:
+        if validate_email_format(config.user_email):
+            results.append({
+                "field": "user_email",
+                "status": "ok",
+                "message": f"Valid email format: {config.user_email}"
+            })
+        else:
+            results.append({
+                "field": "user_email",
+                "status": "error",
+                "message": f"Invalid email format: {config.user_email}"
+            })
+    else:
+        results.append({
+            "field": "user_email",
+            "status": "warning",
+            "message": "No user email configured (required for extract command)"
+        })
+
+    # Validate extract settings
+    if config.extract.batch_size <= 0:
+        results.append({
+            "field": "extract.batch_size",
+            "status": "error",
+            "message": "Batch size must be positive"
+        })
+    else:
+        results.append({
+            "field": "extract.batch_size",
+            "status": "ok",
+            "message": f"Batch size: {config.extract.batch_size}"
+        })
+
+    if config.extract.checkpoint_interval <= 0:
+        results.append({
+            "field": "extract.checkpoint_interval",
+            "status": "error",
+            "message": "Checkpoint interval must be positive"
+        })
+    else:
+        results.append({
+            "field": "extract.checkpoint_interval",
+            "status": "ok",
+            "message": f"Checkpoint interval: {config.extract.checkpoint_interval}"
+        })
+
+    # Validate analyze settings
+    if config.analyze.num_clusters < 1:
+        results.append({
+            "field": "analyze.num_clusters",
+            "status": "error",
+            "message": "Number of clusters must be at least 1"
+        })
+    else:
+        results.append({
+            "field": "analyze.num_clusters",
+            "status": "ok",
+            "message": f"Number of clusters: {config.analyze.num_clusters}"
+        })
+
+    # Validate suggest settings
+    if config.suggest.min_cluster_percentage < 0 or config.suggest.min_cluster_percentage > 100:
+        results.append({
+            "field": "suggest.min_cluster_percentage",
+            "status": "error",
+            "message": "Min cluster percentage must be between 0 and 100"
+        })
+    else:
+        results.append({
+            "field": "suggest.min_cluster_percentage",
+            "status": "ok",
+            "message": f"Min cluster percentage: {config.suggest.min_cluster_percentage}%"
+        })
+
+    if config.suggest.min_sender_count < 1:
+        results.append({
+            "field": "suggest.min_sender_count",
+            "status": "error",
+            "message": "Min sender count must be at least 1"
+        })
+    else:
+        results.append({
+            "field": "suggest.min_sender_count",
+            "status": "ok",
+            "message": f"Min sender count: {config.suggest.min_sender_count}"
+        })
+
+    return results
+
+
+def cmd_config_validate(args: argparse.Namespace) -> int:
+    """
+    Execute config validate command - validate all configuration settings.
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        Exit code (0 = success, 1 = has errors)
+    """
+    try:
+        config = load_config(config_path=args.config)
+    except ConfigLoadError as e:
+        logger.error(f"Failed to load configuration: {e}")
+        if getattr(args, 'json', False):
+            output_json({
+                "command": "config validate",
+                "status": "error",
+                "error": str(e)
+            })
+        return 1
+
+    validations = validate_config(config)
+
+    # Count errors
+    errors = [v for v in validations if v["status"] == "error"]
+    warnings = [v for v in validations if v["status"] == "warning"]
+
+    if getattr(args, 'json', False):
+        output_json({
+            "command": "config validate",
+            "status": "error" if errors else "ok",
+            "validations": validations,
+            "summary": {
+                "total": len(validations),
+                "ok": len([v for v in validations if v["status"] == "ok"]),
+                "warnings": len(warnings),
+                "errors": len(errors)
+            }
+        })
+    else:
+        print("\nConfiguration Validation")
+        print("=" * 50)
+        print()
+
+        for validation in validations:
+            status = validation["status"]
+            field = validation["field"]
+            message = validation["message"]
+
+            if status == "ok":
+                symbol = "[OK]"
+            elif status == "warning":
+                symbol = "[WARN]"
+            else:
+                symbol = "[ERROR]"
+
+            print(f"{symbol:8} {field}")
+            print(f"         {message}")
+            print()
+
+        print("=" * 50)
+        print(f"Summary: {len(errors)} errors, {len(warnings)} warnings")
+
+        if errors:
+            print("\nConfiguration has errors that must be fixed.")
+        elif warnings:
+            print("\nConfiguration has warnings but is usable.")
+        else:
+            print("\nConfiguration is valid.")
+
+    return 1 if errors else 0
+
+
 def cmd_config(args: argparse.Namespace) -> int:
     """
     Execute config command dispatcher.
@@ -1845,11 +2344,12 @@ def cmd_config(args: argparse.Namespace) -> int:
     """
     if args.config_action == "init":
         return cmd_config_init(args)
-    elif args.config_action == "show":
+    if args.config_action == "show":
         return cmd_config_show(args)
-    else:
-        logger.error(f"Unknown config action: {args.config_action}")
-        return 1
+    if args.config_action == "validate":
+        return cmd_config_validate(args)
+    logger.error(f"Unknown config action: {args.config_action}")
+    return 1
 
 
 def main() -> int:

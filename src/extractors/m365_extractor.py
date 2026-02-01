@@ -14,7 +14,6 @@ from datetime import datetime
 
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.extractors.html_parser import extract_plain_text
-from src.extractors.m365_mcp_client import M365MCPClient
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 from src.utils.logger import get_logger
@@ -68,7 +67,8 @@ class EmailExtractor:
     def __init__(
         self,
         user_email: str,
-        checkpoint_dir: str = "outputs"
+        checkpoint_dir: str = "outputs",
+        client_id: str | None = None,
     ):
         """
         Initialize email extractor.
@@ -76,15 +76,18 @@ class EmailExtractor:
         Args:
             user_email: User's M365 email address
             checkpoint_dir: Directory for checkpoints (will use extraction_checkpoint.json)
+            client_id: Azure app client ID (uses default public client if None)
         """
         from pathlib import Path
+
+        from src.extractors.graph_api_client import GraphAPIClient
 
         self.user_email = user_email
 
         # Convert directory to checkpoint file path
         checkpoint_path = Path(checkpoint_dir) / "extraction_checkpoint.json"
         self.checkpoint_manager = CheckpointManager(checkpoint_path=checkpoint_path)
-        self.mcp_client = M365MCPClient(user_email)
+        self.mcp_client = GraphAPIClient(user_email, client_id=client_id)
         self.logger = get_logger(__name__)
 
     def extract_all(

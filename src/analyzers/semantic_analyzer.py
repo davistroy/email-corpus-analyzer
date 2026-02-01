@@ -20,6 +20,7 @@ from sklearn.metrics.pairwise import cosine_distances
 
 from ..models.content_cluster import ContentCluster, RepresentativeSample
 from ..models.corpus import Corpus
+from .base import BaseAnalyzer
 from .cluster_optimizer import ElbowOptimizer, SilhouetteOptimizer
 
 if TYPE_CHECKING:
@@ -36,12 +37,21 @@ class IncrementalAnalysisResult:
     stats: dict  # {cached_count, generated_count, hit_rate, etc.}
 
 
-class SemanticAnalyzer:
+class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
     """
     Semantic analyzer using sentence transformers for email clustering.
 
     Per FR-015, FR-016, FR-017 requirements.
     """
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Semantic Analyzer"
+
+    def supports_incremental(self) -> bool:
+        """Return True as semantic analyzer supports incremental analysis."""
+        return True
 
     def __init__(self, model_name: str = "mixedbread-ai/mxbai-embed-large-v1"):
         """

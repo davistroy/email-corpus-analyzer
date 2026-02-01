@@ -5,10 +5,13 @@ Per contracts/analyzer_contract.md lines 324-364, provides run_full_analysis()
 that executes all 5 analyzer modules and combines results.
 
 Task 4B.4: Enhanced with run_full_analysis_incremental for embedding cache support.
+Phase 7: Track 7A - Added BaseAnalyzer abstract base class for all analyzers.
+Phase 8: Track 8A.1 - Added ThreadAnalyzer for email thread/conversation detection.
 """
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from src.analyzers.base import AnalysisError, BaseAnalyzer
 from src.analyzers.cluster_optimizer import (
     ClusterOptimizationResult,
     ElbowOptimizer,
@@ -18,6 +21,7 @@ from src.analyzers.semantic_analyzer import SemanticAnalyzer
 from src.analyzers.sender_analyzer import SenderAnalyzer
 from src.analyzers.subject_analyzer import SubjectAnalyzer
 from src.analyzers.temporal_analyzer import TemporalAnalyzer
+from src.analyzers.thread_analyzer import ThreadAnalyzer
 from src.analyzers.volume_analyzer import VolumeAnalyzer
 from src.models.analysis_results import AnalysisResults
 from src.models.corpus import Corpus
@@ -224,11 +228,14 @@ def run_full_analysis_incremental(
 __all__ = [
     'run_full_analysis',
     'run_full_analysis_incremental',
+    'BaseAnalyzer',
+    'AnalysisError',
     'SenderAnalyzer',
     'SubjectAnalyzer',
     'SemanticAnalyzer',
     'TemporalAnalyzer',
     'VolumeAnalyzer',
+    'ThreadAnalyzer',
     'ElbowOptimizer',
     'SilhouetteOptimizer',
     'ClusterOptimizationResult',

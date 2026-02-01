@@ -156,7 +156,7 @@ class DecisionLogger:
             return []
 
         decisions = []
-        with open(self.decisions_path, "r", encoding="utf-8") as f:
+        with open(self.decisions_path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:

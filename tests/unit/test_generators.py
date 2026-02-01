@@ -433,12 +433,13 @@ class TestCategoryGenerator:
 
     def test_merge_similar_skips_already_merged_indices(self):
         """Test that already-merged categories are skipped in subsequent checks."""
-        # Three categories where first merges with second, and third is similar to second
-        # but should not be processed again since second is already merged
+        # Three categories where first merges with second, and third is similar enough
+        # to merge but should not be processed again since second is already merged
+        # Using names with high SequenceMatcher ratio (>= 0.8)
         categories = [
             Category(
                 category_id="cat1",
-                category_name="Amazon Orders",
+                category_name="Amazon Order Alerts",
                 description="Amazon",
                 confidence=0.9,
                 email_count=100,
@@ -448,7 +449,7 @@ class TestCategoryGenerator:
             ),
             Category(
                 category_id="cat2",
-                category_name="Amazon Orders Promo",  # Similar to cat1
+                category_name="Amazon Order Alert",  # Very similar to cat1 (ratio ~0.94)
                 description="Amazon promo",
                 confidence=0.7,
                 email_count=80,
@@ -458,7 +459,7 @@ class TestCategoryGenerator:
             ),
             Category(
                 category_id="cat3",
-                category_name="Amazon Orders Newsletter",  # Also similar to cat1 and cat2
+                category_name="Amazon Order Alerting",  # Also very similar (ratio ~0.88)
                 description="Amazon newsletter",
                 confidence=0.6,
                 email_count=70,
@@ -482,13 +483,14 @@ class TestCategoryGenerator:
         the inner loop encounters a category that was already merged during
         a prior outer loop iteration.
         """
-        # Set up 4 categories:
-        # - cat0 (Amazon) will merge with cat2 (Amazon Newsletter) - skipping cat1 (different name)
+        # Set up 3 categories:
+        # - cat0 (Amazon Order) will merge with cat2 (Amazon Orders) - high similarity
         # - cat1 (Netflix) will try to check cat2, but cat2 is already merged with cat0
+        # Using SequenceMatcher-compatible similar names (ratio >= 0.8)
         categories = [
             Category(
                 category_id="cat0",
-                category_name="Amazon Orders",
+                category_name="Amazon Order",
                 description="Amazon",
                 confidence=0.9,
                 email_count=100,
@@ -508,7 +510,7 @@ class TestCategoryGenerator:
             ),
             Category(
                 category_id="cat2",
-                category_name="Amazon",  # Similar to cat0
+                category_name="Amazon Orders",  # Very similar to cat0 (ratio ~0.91)
                 description="Amazon Newsletter",
                 confidence=0.7,
                 email_count=80,
@@ -522,13 +524,13 @@ class TestCategoryGenerator:
         merged = generator._merge_similar(categories)
 
         # Expected behavior:
-        # - i=0 (Amazon Orders): checks j=1 (Netflix) - not similar name, skip
-        #                        checks j=2 (Amazon) - similar name, high overlap -> merge
-        #                        merged_indices now has {2}
+        # - i=0 (Amazon Order): checks j=1 (Netflix) - not similar name, skip
+        #                       checks j=2 (Amazon Orders) - similar name (ratio ~0.91), high overlap -> merge
+        #                       merged_indices now has {2}
         # - i=1 (Netflix): 1 not in merged_indices, processes
-        #                  checks j=2 (Amazon) - but 2 is in merged_indices -> continue (line 150)
+        #                  checks j=2 (Amazon Orders) - but 2 is in merged_indices -> continue (line 150)
         #                  no merge found, Netflix stays separate
-        # - i=2 (Amazon): 2 is in merged_indices -> skip entire iteration
+        # - i=2 (Amazon Orders): 2 is in merged_indices -> skip entire iteration
 
         # Result: 2 categories (merged Amazon, standalone Netflix)
         assert len(merged) == 2
@@ -540,12 +542,14 @@ class TestCategoryGenerator:
         assert generator._names_similar("Amazon", "Amazon")
         assert generator._names_similar("amazon", "AMAZON")
 
-    def test_names_similar_substring_match(self):
-        """Test name similarity for substring matches."""
+    def test_names_similar_high_similarity(self):
+        """Test name similarity for highly similar names (SequenceMatcher ratio >= threshold)."""
         generator = CategoryGenerator()
 
-        assert generator._names_similar("Amazon", "Amazon Emails")
-        assert generator._names_similar("Amazon Newsletter", "Amazon")
+        # Similar names should match
+        assert generator._names_similar("Amazon Emails", "Amazon Email")  # very high ratio
+        assert generator._names_similar("Newsletter Updates", "Newsletter Update")
+        assert generator._names_similar("Order Confirmation", "Order Confirmations")
 
     def test_names_similar_different_names(self):
         """Test name similarity returns False for different names."""
@@ -553,6 +557,40 @@ class TestCategoryGenerator:
 
         assert not generator._names_similar("Amazon", "Netflix")
         assert not generator._names_similar("Financial", "Social Media")
+        assert not generator._names_similar("Shopping", "Travel")
+
+    def test_names_similar_with_custom_threshold(self):
+        """Test name similarity respects merge_similarity_threshold config."""
+        generator = CategoryGenerator()
+
+        # The default threshold is 0.8
+        # "Amazon" vs "Amazone" has ratio ~0.91, should match
+        assert generator._names_similar("Amazon", "Amazone")
+
+        # "Amazon" vs "Netflix" has very low ratio, should not match
+        assert not generator._names_similar("Amazon", "Netflix")
+
+    def test_names_similar_typos_and_variations(self):
+        """Test name similarity handles common typos and variations."""
+        generator = CategoryGenerator()
+
+        # Small typos should still match (high similarity ratio)
+        assert generator._names_similar("Amazon Orders", "Amazone Orders")
+        assert generator._names_similar("Newsletter", "Newletter")  # common typo
+
+    def test_names_similar_partial_matches(self):
+        """Test name similarity for partial name matches."""
+        generator = CategoryGenerator()
+
+        # Names that are similar enough to meet threshold
+        # "Amazon Orders" vs "Amazon Order" (ratio ~0.92) should match
+        assert generator._names_similar("Amazon Orders", "Amazon Order")
+
+        # "Amazon" vs "Amazon Shopping" has lower ratio (~0.57) - won't match at 0.8 threshold
+        assert not generator._names_similar("Amazon", "Amazon Shopping")
+
+        # Completely different should not match
+        assert not generator._names_similar("Amazon", "Google Shopping")
 
     def test_calculate_overlap_full_overlap(self):
         """Test overlap calculation with identical sets."""

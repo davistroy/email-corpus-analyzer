@@ -1,6 +1,6 @@
 # Email Corpus Extraction and Analysis System
 
-A Python-based system for extracting emails from Hotmail/Outlook via M365 MCP, analyzing patterns, and generating AI-assisted category suggestions.
+A Python-based system for extracting emails from Hotmail/Outlook.com and Gmail, analyzing patterns, and generating AI-assisted category suggestions with exportable email rules.
 
 ## Quick Start
 
@@ -24,17 +24,22 @@ pip install -r requirements.txt
 **Default output location:** `~/data/outputs` (created automatically with secure permissions)
 
 ```bash
-# Run complete pipeline (extract → analyze → suggest → review)
-python -m src.cli pipeline --user-email your.email@hotmail.com
+# Run complete pipeline from Hotmail (extract → analyze → suggest → review)
+python -m src.cli pipeline --user-email your.email@hotmail.com --auto-clusters
+
+# From Gmail
+python -m src.cli pipeline --user-email your.email@gmail.com --source gmail --auto-clusters
+
+# From both accounts
+python -m src.cli pipeline --user-email your.email@hotmail.com --source both --gmail-email your.email@gmail.com
 
 # Or run individual steps:
 python -m src.cli extract --user-email your.email@hotmail.com  # Extract emails
-python -m src.cli analyze                                       # Analyze patterns
+python -m src.cli analyze --auto-clusters                       # Analyze patterns
 python -m src.cli suggest                                       # Generate categories
-python -m src.cli review                                        # Review interactively
-
-# Use custom output directory
-python -m src.cli --output-dir ~/my-emails pipeline --user-email your.email@hotmail.com
+python -m src.cli review                                        # Review interactively (TUI)
+python -m src.cli export --format outlook-rules                 # Export Outlook rules
+python -m src.cli export --format gmail-filters                 # Export Gmail filters
 
 # Get help
 python -m src.cli --help
@@ -46,7 +51,7 @@ python -m src.cli <command> --help  # For specific command help
 | File | Description |
 |------|-------------|
 | `email_corpus.json` | Extracted email data |
-| `corpus_analysis_results.json` | Analysis results (5 analyzers) |
+| `corpus_analysis_results.json` | Analysis results (5 core analyzers) |
 | `category_suggestions.json` | AI-generated category suggestions |
 | `category_suggestions_report.md` | Human-readable report |
 | `approved_categories.json` | Final approved categories |
@@ -60,7 +65,7 @@ python -m src.cli <command> --help  # For specific command help
 ### Technology Stack
 - **Python**: 3.10+ (type hints, pattern matching)
 - **Text Embeddings**: sentence-transformers >= 2.0.0
-- **Clustering**: scikit-learn == 1.7.1
+- **Clustering**: scikit-learn >= 1.7.1
 - **HTML Parsing**: BeautifulSoup4 >= 4.12.0 + lxml
 - **Data Validation**: Pydantic >= 2.0.0
 - **Progress Tracking**: tqdm >= 4.66.0
@@ -72,20 +77,20 @@ python -m src.cli <command> --help  # For specific command help
 email-corpus-analyzer/
 ├── src/
 │   ├── models/              # 7 Pydantic data models
-│   ├── extractors/          # Email extraction (M365, HTML parsing)
-│   ├── analyzers/           # 7 analysis modules (semantic, hierarchical, etc.)
+│   ├── extractors/          # Email extraction (Hotmail via Graph API, Gmail via Gmail API)
+│   ├── analyzers/           # 5 core + 2 optional analysis modules
 │   ├── generators/          # Category suggestion generation
 │   ├── ui/                  # Interactive review (CLI + TUI)
 │   ├── cache/               # Embedding cache for incremental analysis
 │   ├── config/              # YAML configuration system
-│   ├── exporters/           # CSV and HTML export
+│   ├── exporters/           # CSV, HTML, Outlook rules, Gmail filters export
 │   ├── learning/            # Feedback learning system
 │   ├── preview/             # Dry-run estimators
 │   └── utils/               # Logging, file management, paths
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests (1144 tests, 84% coverage)
+│   └── unit/                # Unit tests (1403 tests, 83% coverage)
 ├── docs/                    # Documentation
 ├── scripts/                 # Standalone scripts
 ├── specs/                   # Design specifications
@@ -122,7 +127,8 @@ This project follows the **Email Corpus Analysis Constitution v1.0.0** (`.specif
 
 ### Prerequisites
 - Python 3.10 or higher
-- M365 MCP server configured and authenticated (for email extraction)
+- For Hotmail: No setup needed (authenticates via device code on first run)
+- For Gmail: OAuth credentials from Google Cloud Console (see [Setup Guide](docs/M365_SETUP.md))
 
 ### Testing & Quality
 
@@ -141,7 +147,7 @@ ruff check src/
 
 - [Usage Guide](docs/USAGE.md)
 - [Quick Reference](docs/QUICK_REFERENCE.md)
-- [M365 Setup](docs/M365_SETUP.md)
+- [Email Source Setup](docs/M365_SETUP.md)
 - [Output Configuration](docs/OUTPUT_CONFIGURATION.md)
 - [Integration Guide](docs/INTEGRATION.md)
 

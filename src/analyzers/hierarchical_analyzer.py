@@ -11,15 +11,20 @@ from __future__ import annotations
 import logging
 from collections import Counter
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 from pydantic import BaseModel, Field
-from scipy.cluster.hierarchy import linkage, fcluster
+from scipy.cluster.hierarchy import fcluster, linkage
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_distances
 
 from ..models.content_cluster import RepresentativeSample
 from ..models.corpus import Corpus
+from .base import BaseAnalyzer
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +67,7 @@ class HierarchicalCluster(BaseModel):
         return len(self.subclusters)
 
 
-class HierarchicalAnalyzer:
+class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
     """
     Hierarchical analyzer using agglomerative clustering for email categorization.
 
@@ -72,6 +77,11 @@ class HierarchicalAnalyzer:
 
     Uses scipy's hierarchical clustering with ward linkage for optimal merging.
     """
+
+    @property
+    def name(self) -> str:
+        """Return human-readable analyzer name."""
+        return "Hierarchical Analyzer"
 
     def __init__(
         self,

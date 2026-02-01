@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.learning.decision_logger import DecisionAction, DecisionLogger
-from src.learning.pattern_detector import DetectedPattern, PatternDetector, PatternType
+from src.learning.pattern_detector import PatternDetector, PatternType
 from src.models.category import Category, CategorySource
 from src.models.email import Email
 from src.utils.file_manager import load_json, save_json
@@ -625,7 +625,6 @@ def is_tui_supported() -> bool:
         True if TUI is supported, False otherwise
     """
     import sys
-    import os
 
     # Check if we're in an interactive terminal
     if not sys.stdin.isatty() or not sys.stdout.isatty():

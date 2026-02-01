@@ -12,11 +12,9 @@ Each estimator follows a consistent pattern:
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from src.utils.file_manager import load_json
 from src.utils.paths import PathConfig
-
 
 # =============================================================================
 # Estimate Data Models
@@ -29,9 +27,9 @@ class ExtractEstimate:
 
     user_email: str
     output_path: Path
-    email_count_estimate: Optional[int] = None
-    output_size_estimate: Optional[int] = None  # bytes
-    duration_estimate: Optional[float] = None  # seconds
+    email_count_estimate: int | None = None
+    output_size_estimate: int | None = None  # bytes
+    duration_estimate: float | None = None  # seconds
 
 
 @dataclass
@@ -41,11 +39,11 @@ class AnalyzeEstimate:
     corpus_path: Path
     corpus_exists: bool
     output_path: Path
-    corpus_size_bytes: Optional[int] = None
-    email_count: Optional[int] = None
-    embedding_time_estimate_seconds: Optional[float] = None
-    clustering_time_estimate_seconds: Optional[float] = None
-    output_size_estimate_bytes: Optional[int] = None
+    corpus_size_bytes: int | None = None
+    email_count: int | None = None
+    embedding_time_estimate_seconds: float | None = None
+    clustering_time_estimate_seconds: float | None = None
+    output_size_estimate_bytes: int | None = None
 
 
 @dataclass
@@ -55,8 +53,8 @@ class SuggestEstimate:
     analysis_path: Path
     analysis_exists: bool
     output_path: Path
-    duration_estimate_seconds: Optional[float] = None
-    output_size_estimate_bytes: Optional[int] = None
+    duration_estimate_seconds: float | None = None
+    output_size_estimate_bytes: int | None = None
 
 
 @dataclass
@@ -66,7 +64,7 @@ class ReviewEstimate:
     suggestions_path: Path
     suggestions_exists: bool
     output_path: Path
-    category_count: Optional[int] = None
+    category_count: int | None = None
 
 
 @dataclass
@@ -367,7 +365,7 @@ class PipelineEstimator:
 # =============================================================================
 
 
-def format_bytes(size_bytes: Optional[int]) -> str:
+def format_bytes(size_bytes: int | None) -> str:
     """
     Format byte size to human-readable string.
 
@@ -382,15 +380,14 @@ def format_bytes(size_bytes: Optional[int]) -> str:
 
     if size_bytes < 1024:
         return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
+    if size_bytes < 1024 * 1024:
         return f"{size_bytes / 1024:.1f} KB"
-    elif size_bytes < 1024 * 1024 * 1024:
+    if size_bytes < 1024 * 1024 * 1024:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
-    else:
-        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+    return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
 
-def format_duration(seconds: Optional[float]) -> str:
+def format_duration(seconds: float | None) -> str:
     """
     Format duration to human-readable string.
 
@@ -405,15 +402,14 @@ def format_duration(seconds: Optional[float]) -> str:
 
     if seconds < 60:
         return f"~{int(seconds)} seconds"
-    elif seconds < 3600:
+    if seconds < 3600:
         minutes = seconds / 60
         return f"~{int(minutes)} minutes"
-    else:
-        hours = seconds / 3600
-        return f"~{hours:.1f} hours"
+    hours = seconds / 3600
+    return f"~{hours:.1f} hours"
 
 
-def format_count(count: Optional[int]) -> str:
+def format_count(count: int | None) -> str:
     """
     Format count to human-readable string.
 

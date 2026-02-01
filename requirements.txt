@@ -1,6 +1,6 @@
 # Core dependencies researched via Context7
 sentence-transformers>=2.0.0  # Text embeddings
-scikit-learn==1.7.1           # Clustering
+scikit-learn>=1.7.1           # Clustering (unpinned for Python 3.14 compat)
 beautifulsoup4>=4.12.0        # HTML parsing
 lxml>=4.9.0                   # Fast HTML parser
 
@@ -17,6 +17,11 @@ pytest>=7.4.0                 # Test framework
 pytest-cov>=4.1.0             # Coverage reporting
 ruff>=0.1.0                   # Linting
 
-# M365 authentication (for scripts/fetch_emails_cli.py)
+# M365 authentication (Microsoft Graph API with device code flow)
 msal>=1.24.0                  # Microsoft Authentication Library
 requests>=2.31.0              # HTTP client
+
+# Gmail authentication (Google Gmail API with OAuth 2.0)
+google-auth>=2.22.0           # Google auth core
+google-auth-oauthlib>=1.0.0   # OAuth 2.0 flow for Google APIs
+google-api-python-client>=2.90.0  # Google API client

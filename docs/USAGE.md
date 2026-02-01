@@ -2,23 +2,32 @@
 
 ## Quick Start
 
+### Prerequisites
+
+- Python 3.10+
+- Dependencies installed: `pip install -r requirements.txt`
+- For Hotmail: No setup needed — authenticates on first run via device code
+- For Gmail: OAuth credentials from Google Cloud Console (see [Setup Guide](M365_SETUP.md))
+
 ### Default Output Directory
-By default, all output files are saved to: **`~/data/outputs`**
+All output files are saved to: **`~/data/outputs`**
 
-This expands to `/home/yourusername/data/outputs` on Linux/Mac or `C:\Users\YourUsername\data\outputs` on Windows.
+This expands to `C:\Users\YourUsername\data\outputs` on Windows or `/home/yourusername/data/outputs` on Linux/Mac.
 
-### Running Commands
+### Running the Pipeline
 
 ```bash
-# Activate virtual environment
-source venv/bin/activate  # or: venv\Scripts\activate on Windows
+# Extract from Hotmail and run full pipeline
+python -m src.cli pipeline --user-email troy.davis@hotmail.com
 
-# Extract emails (saves to ~/data/outputs/)
-python -m src.cli extract --user-email your.email@hotmail.com
+# Extract from Gmail instead
+python -m src.cli pipeline --user-email your.email@gmail.com --source gmail
 
-# View help
-python -m src.cli --help
+# Extract from both accounts
+python -m src.cli pipeline --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
 ```
+
+On first run, you'll be prompted to authenticate in your browser. Tokens are cached for future runs.
 
 ---
 
@@ -36,7 +45,7 @@ python -m src.cli --output-dir ~/my-emails extract --user-email user@hotmail.com
 python -m src.cli --output-dir ~/my-emails analyze
 
 # Run pipeline in custom directory
-python -m src.cli --output-dir /mnt/backup/email-analysis pipeline --user-email user@hotmail.com
+python -m src.cli --output-dir ~/email-analysis pipeline --user-email user@hotmail.com
 ```
 
 ### Method 2: Per-File Custom Paths
@@ -65,51 +74,67 @@ python -m src.cli --output-dir ~/emails \
 
 ### 1. Extract
 
-Extract emails from M365/Hotmail inbox.
+Extract emails from Hotmail/Outlook.com or Gmail inbox.
 
 **Basic Usage:**
 ```bash
-python -m src.cli extract --user-email your.email@hotmail.com
+# From Hotmail (default)
+python -m src.cli extract --user-email troy.davis@hotmail.com
+
+# From Gmail
+python -m src.cli extract --user-email your.email@gmail.com --source gmail
+
+# From both
+python -m src.cli extract --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
+
+# Incremental (only new emails since last extraction)
+python -m src.cli extract --user-email troy.davis@hotmail.com --since-last
 ```
 
 **All Options:**
 ```bash
 python -m src.cli [--output-dir DIR] extract \
   --user-email EMAIL \
+  [--source {hotmail,gmail,both}] \
+  [--gmail-email EMAIL] \
   [--corpus-file PATH] \
   [--batch-size N] \
-  [--checkpoint-interval N]
+  [--checkpoint-interval N] \
+  [--since-last] \
+  [--dry-run]
 ```
 
 **Options:**
-- `--user-email` (required): M365/Hotmail email address
+- `--user-email` (required): Primary email address
+- `--source`: Email source — `hotmail` (default), `gmail`, or `both`
+- `--gmail-email`: Gmail address when using `--source both` (if different from `--user-email`)
 - `--corpus-file`: Custom corpus JSON path (default: `{output-dir}/email_corpus.json`)
 - `--batch-size`: Emails per API batch (default: 500)
 - `--checkpoint-interval`: Save checkpoint every N emails (default: 100)
+- `--since-last`: Only fetch emails received since the last extraction
+- `--dry-run`: Preview what would happen without executing
 
 **Output Files:**
 - `email_corpus.json` - Complete email corpus
-- `extraction_errors.log` - Error log (if any failures)
 - `extraction_checkpoint.json` - Temporary (deleted on success)
 
-**Example:**
-```bash
-# Extract with custom batch size
-python -m src.cli extract --user-email user@hotmail.com --batch-size 1000
-
-# Extract to specific location
-python -m src.cli --output-dir ~/email-backup extract --user-email user@hotmail.com
-```
+**Authentication:**
+- **Hotmail**: Device code flow — prints a URL and code, you authenticate in any browser
+- **Gmail**: Browser-based OAuth — opens browser for Google sign-in
+- Tokens cached at `~/.email-analyzer/` for future runs
 
 ---
 
 ### 2. Analyze
 
-Analyze email corpus for patterns (5 analyzers: sender, subject, semantic, temporal, volume).
+Analyze email corpus for patterns (7 analyzers: sender, subject, semantic, temporal, volume, hierarchical, thread).
 
 **Basic Usage:**
 ```bash
 python -m src.cli analyze
+
+# Auto-detect optimal cluster count
+python -m src.cli analyze --auto-clusters
 ```
 
 **All Options:**
@@ -117,25 +142,23 @@ python -m src.cli analyze
 python -m src.cli [--output-dir DIR] analyze \
   [--corpus PATH] \
   [--num-clusters N] \
+  [--auto-clusters] \
+  [--cluster-method {elbow,silhouette}] \
+  [--incremental] \
   [--analysis-file PATH]
 ```
 
 **Options:**
 - `--corpus`: Path to corpus JSON (default: `{output-dir}/email_corpus.json`)
 - `--num-clusters`: Semantic cluster count (default: 10)
-- `--analysis-file`: Custom analysis results path (default: `{output-dir}/corpus_analysis_results.json`)
+- `--auto-clusters`: Automatically determine optimal cluster count
+- `--cluster-method`: Method for auto-clustering — `silhouette` (default) or `elbow`
+- `--incremental`: Only process new emails using cached embeddings
+- `--analysis-file`: Custom analysis results path
 
 **Output Files:**
-- `corpus_analysis_results.json` - Complete analysis results
-
-**Example:**
-```bash
-# Analyze with 15 semantic clusters
-python -m src.cli analyze --num-clusters 15
-
-# Analyze corpus from custom location
-python -m src.cli analyze --corpus ~/backup/email_corpus.json
-```
+- `corpus_analysis_results.json` - Combined results from all analyzers
+- `embeddings_cache.npz` - Cached embeddings for incremental analysis
 
 ---
 
@@ -154,24 +177,20 @@ python -m src.cli [--output-dir DIR] suggest \
   [--analysis PATH] \
   [--min-cluster-percentage PCT] \
   [--min-sender-count N] \
-  [--suggestions-file PATH]
+  [--suggestions-file PATH] \
+  [--dry-run]
 ```
 
 **Options:**
 - `--analysis`: Path to analysis results (default: `{output-dir}/corpus_analysis_results.json`)
 - `--min-cluster-percentage`: Min cluster size % for category (default: 5.0)
 - `--min-sender-count`: Min emails from sender for category (default: 20)
-- `--suggestions-file`: Custom suggestions path (default: `{output-dir}/category_suggestions.json`)
+- `--suggestions-file`: Custom suggestions path
+- `--dry-run`: Preview suggestions without writing output files
 
 **Output Files:**
 - `category_suggestions.json` - Category suggestions (JSON)
 - `category_suggestions_report.md` - Human-readable report
-
-**Example:**
-```bash
-# More aggressive category generation (smaller threshold)
-python -m src.cli suggest --min-cluster-percentage 3.0 --min-sender-count 10
-```
 
 ---
 
@@ -181,7 +200,11 @@ Interactively review and approve category suggestions.
 
 **Basic Usage:**
 ```bash
+# TUI interface (default)
 python -m src.cli review
+
+# CLI-based review
+python -m src.cli review --no-tui
 ```
 
 **All Options:**
@@ -189,64 +212,102 @@ python -m src.cli review
 python -m src.cli [--output-dir DIR] review \
   [--suggestions PATH] \
   [--approved-file PATH] \
-  [--no-cleanup]
+  [--no-cleanup] \
+  [--no-tui] \
+  [--headless] \
+  [--no-learning]
 ```
 
 **Options:**
-- `--suggestions`: Path to suggestions JSON (default: `{output-dir}/category_suggestions.json`)
-- `--approved-file`: Custom approved categories path (default: `{output-dir}/approved_categories.json`)
+- `--suggestions`: Path to suggestions JSON
+- `--approved-file`: Custom approved categories path
 - `--no-cleanup`: Skip optional cleanup of intermediate files
+- `--no-tui`: Use legacy CLI interface instead of TUI
+- `--headless`: Auto-approve all suggestions without interactive review (for automation)
+- `--no-learning`: Disable feedback learning
+
+**TUI Actions:**
+- Navigate with arrow keys
+- `A` — Accept category
+- `R` — Rename category
+- `M` — Merge with another category
+- `D` — Delete category
+- `S` — Skip (review later)
+- `/` — Search/filter categories
 
 **Output Files:**
 - `approved_categories.json` - Final approved categories
+- `~/.email-analyzer/decisions.jsonl` - Decision history for learning
 
-**Interactive Actions:**
-- `[A]ccept` - Approve category as-is
-- `[R]ename` - Change category name/description
-- `[M]erge` - Combine with another category
-- `[D]elete` - Discard category
-- `[S]kip` - Review later (will re-present at end)
+---
 
-**Example:**
+### 5. Export
+
+Export approved categories to various formats.
+
 ```bash
-# Review without cleanup prompt
-python -m src.cli review --no-cleanup
+# CSV export
+python -m src.cli export --format csv
+
+# HTML report
+python -m src.cli export --format html
+
+# Outlook rules
+python -m src.cli export --format outlook-rules
+
+# Gmail filters (XML)
+python -m src.cli export --format gmail-filters
 ```
 
 ---
 
-### 5. Pipeline
+### 6. Pipeline
 
-Run complete end-to-end workflow: extract → analyze → suggest → review → optional cleanup.
+Run complete end-to-end workflow: extract → analyze → suggest → review.
 
 **Basic Usage:**
 ```bash
-python -m src.cli pipeline --user-email your.email@hotmail.com
+# Hotmail pipeline
+python -m src.cli pipeline --user-email troy.davis@hotmail.com
+
+# Gmail pipeline
+python -m src.cli pipeline --user-email your.email@gmail.com --source gmail
+
+# Both accounts
+python -m src.cli pipeline --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
+
+# Skip interactive review
+python -m src.cli pipeline --user-email troy.davis@hotmail.com --skip-review
 ```
 
 **All Options:**
 ```bash
 python -m src.cli [--output-dir DIR] pipeline \
   --user-email EMAIL \
+  [--source {hotmail,gmail,both}] \
+  [--gmail-email EMAIL] \
   [--num-clusters N] \
-  [--no-cleanup]
+  [--auto-clusters] \
+  [--cluster-method {elbow,silhouette}] \
+  [--skip-review] \
+  [--no-cleanup] \
+  [--no-tui] \
+  [--no-learning] \
+  [--dry-run]
 ```
 
-**Options:**
-- `--user-email` (required): M365/Hotmail email address
-- `--num-clusters`: Semantic cluster count (default: 10)
-- `--no-cleanup`: Skip optional cleanup of intermediate files
+---
 
-**Output Files:**
-- `approved_categories.json` - Final approved categories
-- `extraction_errors.log` - Error log (if any failures)
-- (Intermediate files optionally deleted during cleanup)
+### 7. Other Commands
 
-**Example:**
 ```bash
-# Complete pipeline in custom directory
-python -m src.cli --output-dir ~/my-email-analysis \
-  pipeline --user-email user@hotmail.com --num-clusters 12
+# Show corpus statistics
+python -m src.cli info
+
+# Configuration management
+python -m src.cli config show       # Show resolved configuration
+python -m src.cli config init       # Generate config template
+python -m src.cli config validate   # Validate configuration
 ```
 
 ---
@@ -262,154 +323,152 @@ python -m src.cli --output-dir ~/my-email-analysis \
 | `category_suggestions.json` | Category suggestions | suggest |
 | `category_suggestions_report.md` | Human-readable report | suggest |
 | `approved_categories.json` | Final categories | review |
-| `extraction_errors.log` | Error log | extract |
+| `embeddings_cache.npz` | Cached embeddings | analyze |
 | `extraction_checkpoint.json` | Temp checkpoint | extract (auto-deleted) |
 
-### Custom Directory Example
+### Configuration (~/.email-analyzer/)
 
-```bash
-# Set custom directory
-python -m src.cli --output-dir /mnt/backup/emails pipeline --user-email user@hotmail.com
-
-# All files created in /mnt/backup/emails/
-ls /mnt/backup/emails/
-# email_corpus.json
-# corpus_analysis_results.json
-# category_suggestions.json
-# ...
-```
+| File | Description |
+|------|-------------|
+| `config.yaml` | App configuration |
+| `decisions.jsonl` | Review decision history |
+| `ms_token_cache.json` | Microsoft Graph OAuth tokens |
+| `gmail_credentials.json` | Google OAuth client secrets (you provide) |
+| `gmail_token.json` | Google OAuth tokens |
 
 ---
 
 ## Common Workflows
 
-### Workflow 1: Standard Full Pipeline
+### Workflow 1: First-Time Hotmail Analysis
 
 ```bash
-# One command, default location (~/data/outputs)
-python -m src.cli pipeline --user-email your.email@hotmail.com
+# One command — authenticates, extracts, analyzes, generates categories, reviews
+python -m src.cli pipeline --user-email troy.davis@hotmail.com --auto-clusters
 ```
 
-### Workflow 2: Custom Output Directory
+### Workflow 2: First-Time Gmail Analysis
 
 ```bash
-# Everything in ~/my-emails/
-python -m src.cli --output-dir ~/my-emails \
-  pipeline --user-email your.email@hotmail.com
+# Ensure gmail_credentials.json is in ~/.email-analyzer/ first
+python -m src.cli pipeline --user-email your.email@gmail.com --source gmail --auto-clusters
 ```
 
-### Workflow 3: Step-by-Step with Custom Locations
+### Workflow 3: Combined Hotmail + Gmail
 
 ```bash
-# Step 1: Extract to custom location
-python -m src.cli --output-dir ~/email-project extract --user-email user@hotmail.com
+python -m src.cli pipeline \
+  --user-email troy.davis@hotmail.com \
+  --source both \
+  --gmail-email your.email@gmail.com \
+  --auto-clusters
+```
 
-# Step 2: Analyze (uses ~/email-project/email_corpus.json automatically)
-python -m src.cli --output-dir ~/email-project analyze --num-clusters 15
+### Workflow 4: Step-by-Step
+
+```bash
+# Step 1: Extract
+python -m src.cli extract --user-email troy.davis@hotmail.com
+
+# Step 2: Analyze with auto-clustering
+python -m src.cli analyze --auto-clusters
 
 # Step 3: Generate suggestions
-python -m src.cli --output-dir ~/email-project suggest
+python -m src.cli suggest
 
-# Step 4: Review
-python -m src.cli --output-dir ~/email-project review
+# Step 4: Interactive review
+python -m src.cli review
+
+# Step 5: Export results
+python -m src.cli export --format html
+python -m src.cli export --format outlook-rules
 ```
 
-### Workflow 4: Re-analyze Existing Corpus
+### Workflow 5: Incremental Update
 
 ```bash
-# You already extracted emails, now analyze differently
-python -m src.cli analyze --corpus ~/data/outputs/email_corpus.json --num-clusters 20
+# Fetch only new emails since last extraction
+python -m src.cli extract --user-email troy.davis@hotmail.com --since-last
 
-# Or in different location
-python -m src.cli --output-dir ~/new-analysis \
-  analyze --corpus ~/old-analysis/email_corpus.json --num-clusters 20
+# Re-analyze with new data (uses cached embeddings for old emails)
+python -m src.cli analyze --incremental --auto-clusters
+
+# Re-generate and review
+python -m src.cli suggest
+python -m src.cli review
 ```
 
-### Workflow 5: Resume Interrupted Extraction
+### Workflow 6: Resume Interrupted Extraction
 
 ```bash
-# Extraction was interrupted at email 3,456 / 5,000
-# Just run extract again - it automatically resumes from checkpoint
-python -m src.cli extract --user-email user@hotmail.com
-# Resumes from last checkpoint (e.g., email 3,400)
+# If extraction was interrupted, just run again — it resumes from checkpoint
+python -m src.cli extract --user-email troy.davis@hotmail.com
+```
+
+### Workflow 7: Dry Run (Preview)
+
+```bash
+# See what each command would do without executing
+python -m src.cli extract --user-email troy.davis@hotmail.com --dry-run
+python -m src.cli pipeline --user-email troy.davis@hotmail.com --dry-run
 ```
 
 ---
 
 ## Troubleshooting
 
-### Issue: "ModuleNotFoundError: No module named 'src'"
-
-**Solution:** Run as a module from project root:
+### "ModuleNotFoundError: No module named 'src'"
+Run as a module from project root:
 ```bash
-# Wrong
-cd src && python cli.py --help
-
 # Correct
 python -m src.cli --help
+
+# Wrong
+cd src && python cli.py --help
 ```
 
-### Issue: "Permission denied" when creating output directory
-
-**Solution:** Check directory permissions or use a custom directory:
+### "Permission denied" when creating output directory
+Use a home directory subdirectory:
 ```bash
-# Use home directory subdirectory (always writable)
 python -m src.cli --output-dir ~/my-emails extract --user-email user@hotmail.com
 ```
 
-### Issue: "File not found" when running analyze/suggest/review
+### "File not found" when running analyze/suggest/review
+Ensure the previous step completed and files exist. Use `--output-dir` consistently across commands.
 
-**Solution:** Ensure previous step completed and files exist:
+### "Gmail credentials not found"
+Download OAuth client JSON from Google Cloud Console and save to `~/.email-analyzer/gmail_credentials.json`. See [Setup Guide](M365_SETUP.md#gmail-setup).
+
+### Authentication expired
+Delete the token cache and re-authenticate:
 ```bash
-# Check if corpus exists
-ls ~/data/outputs/email_corpus.json
-
-# If using custom directory, specify it consistently
-python -m src.cli --output-dir ~/my-dir analyze
+rm ~/.email-analyzer/ms_token_cache.json   # For Hotmail
+rm ~/.email-analyzer/gmail_token.json       # For Gmail
 ```
 
-### Issue: Want to see debug logs
-
-**Solution:** Use `--verbose` flag:
+### Want to see debug logs
 ```bash
 python -m src.cli --verbose extract --user-email user@hotmail.com
 ```
 
 ---
 
-## Environment Variables
-
-Currently, the system uses CLI arguments for configuration. Environment variables are not supported, but you can create shell aliases:
-
-```bash
-# In ~/.bashrc or ~/.zshrc
-alias email-processor='python -m src.cli --output-dir ~/my-emails'
-
-# Then use:
-email-processor extract --user-email user@hotmail.com
-email-processor analyze
-```
-
----
-
 ## Security Notes
 
-1. **File Permissions**: All output files are created with mode `0600` (user read/write only)
-2. **Directory Permissions**: Output directories are created with mode `0700` (user read/write/execute only)
-3. **Local Storage Only**: No data is transmitted to external services without explicit consent
-4. **Secure Defaults**: Default directory (`~/data/outputs`) is in your home directory (protected)
+1. **File Permissions**: Output files created with mode `0600` (user read/write only)
+2. **Directory Permissions**: Output directories created with mode `0700` (user only)
+3. **Local Storage Only**: Email data stays on your machine — never transmitted externally
+4. **Token Storage**: Auth tokens cached in `~/.email-analyzer/` (your home directory)
+5. **No Passwords Stored**: Authentication uses OAuth device/browser flows — no passwords saved
 
 ---
 
 ## Next Steps
 
-After approving categories, you can:
-1. Use `approved_categories.json` for Phase 1 (email-by-email categorization - future feature)
-2. Export to your email client (future feature)
-3. Re-run analysis with different parameters
-4. Archive the analysis results for record-keeping
+After approving categories:
+1. Export to Outlook rules: `python -m src.cli export --format outlook-rules`
+2. Export to Gmail filters: `python -m src.cli export --format gmail-filters`
+3. Export HTML report: `python -m src.cli export --format html`
+4. Re-run with different parameters or incremental updates
 
-For more information, see:
-- `specs/001-use-the-document/quickstart.md` - Detailed scenarios
-- `specs/001-use-the-document/spec.md` - Complete feature specification
-- `README.md` - Project overview
+For authentication setup details, see [Setup Guide](M365_SETUP.md).
