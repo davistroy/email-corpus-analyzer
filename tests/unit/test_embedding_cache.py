@@ -66,17 +66,17 @@ class TestEmbeddingCacheInit:
         cache_path = tmp_path / "embeddings_cache.npz"
         meta_path = cache_path.with_suffix(".meta.json")
 
-        # Create a cache file with data
+        # Create a cache file with embeddings only (no pickle-requiring arrays)
         embeddings = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
-        email_ids = np.array(["email_1", "email_2"])
-        np.savez_compressed(cache_path, embeddings=embeddings, email_ids=email_ids)
+        np.savez_compressed(cache_path, embeddings=embeddings)
 
-        # Create matching metadata sidecar
+        # Create matching metadata sidecar (includes email_ids)
         metadata = {
             "model_name": DEFAULT_MODEL_NAME,
             "embedding_dim": DEFAULT_EMBEDDING_DIM,
             "max_text_length": DEFAULT_MAX_TEXT_LENGTH,
             "created_at": "2024-01-15T00:00:00+00:00",
+            "email_ids": ["email_1", "email_2"],
         }
         meta_path.write_text(json.dumps(metadata), encoding="utf-8")
 
@@ -135,10 +135,15 @@ class TestEmbeddingCacheStorage:
         # Verify file exists and contains data
         assert cache.cache_path.exists()
 
-        # Load and verify
-        data = np.load(cache.cache_path, allow_pickle=True)
-        assert len(data["email_ids"]) == 1
+        # Load and verify embeddings from .npz (no pickle needed)
+        data = np.load(cache.cache_path, allow_pickle=False)
         assert data["embeddings"].shape[0] == 1
+
+        # Email IDs are now in the metadata sidecar
+        meta_path = cache.cache_path.with_suffix(".meta.json")
+        assert meta_path.exists()
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert len(metadata["email_ids"]) == 1
 
 
 class TestEmbeddingCacheRetrieval:
@@ -418,7 +423,6 @@ def _write_npz_with_metadata(
     np.savez_compressed(
         cache_path,
         embeddings=embeddings,
-        email_ids=np.array(email_ids, dtype=object),
     )
     meta_path = cache_path.with_suffix(".meta.json")
     metadata = {
@@ -426,6 +430,7 @@ def _write_npz_with_metadata(
         "embedding_dim": embedding_dim,
         "max_text_length": max_text_length,
         "created_at": "2024-01-15T00:00:00+00:00",
+        "email_ids": list(email_ids),
     }
     meta_path.write_text(json.dumps(metadata), encoding="utf-8")
 

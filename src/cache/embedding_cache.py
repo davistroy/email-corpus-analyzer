@@ -302,6 +302,7 @@ class EmbeddingCache:
             "embedding_dim": self._embedding_dim,
             "max_text_length": self._max_text_length,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "email_ids": list(self._email_ids),
         }
 
     def _save_metadata(self) -> None:
@@ -379,14 +380,13 @@ class EmbeddingCache:
         # Ensure parent directory exists
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Save using numpy compressed format
+        # Save embeddings only (no pickle-requiring object arrays)
         np.savez_compressed(
             self.cache_path,
             embeddings=self._embeddings,
-            email_ids=np.array(self._email_ids, dtype=object)
         )
 
-        # Save metadata sidecar
+        # Save metadata sidecar (includes email IDs as JSON-safe list)
         self._save_metadata()
 
         logger.debug(f"Saved {self.size} embeddings to {self.cache_path}")
@@ -432,9 +432,10 @@ class EmbeddingCache:
             return
 
         try:
-            data = np.load(self.cache_path, allow_pickle=True)
+            data = np.load(self.cache_path, allow_pickle=False)
             self._embeddings = data["embeddings"]
-            self._email_ids = list(data["email_ids"])
+            # Email IDs now stored in metadata sidecar (no pickle needed)
+            self._email_ids = list(metadata.get("email_ids", []))
             self._rebuild_index()
 
             logger.info(f"Loaded {self.size} embeddings from cache")

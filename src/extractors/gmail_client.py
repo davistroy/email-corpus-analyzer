@@ -112,9 +112,14 @@ class GmailClient:
         return creds
 
     def _save_token(self, creds) -> None:
-        """Save credentials to token file."""
+        """Save credentials to token file with restrictive permissions."""
+        import os
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.token_path.write_text(creds.to_json())
+        try:
+            os.chmod(self.token_path, 0o600)
+        except OSError:
+            pass  # Windows may not support chmod
 
     def _get_service(self):
         """Get or create Gmail API service."""

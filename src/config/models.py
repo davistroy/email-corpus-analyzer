@@ -263,6 +263,23 @@ class GeneratorThresholds(BaseModel):
         description="Confidence weight for distinctiveness (mean overlap penalty)"
     )
 
+    @model_validator(mode="after")
+    def validate_confidence_weights_sum(self) -> "GeneratorThresholds":
+        """Ensure confidence weights sum to approximately 1.0."""
+        total = (
+            self.confidence_weight_cohesion
+            + self.confidence_weight_volume
+            + self.confidence_weight_source
+            + self.confidence_weight_percentage
+            + self.confidence_weight_name_quality
+            + self.confidence_weight_distinctiveness
+        )
+        if not (0.99 <= total <= 1.01):
+            raise ValueError(
+                f"confidence_weight_* fields must sum to 1.0, got {total:.4f}"
+            )
+        return self
+
 
 class SuggestConfig(BaseModel):
     """Configuration for suggest command."""

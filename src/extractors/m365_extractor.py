@@ -32,7 +32,7 @@ logger = get_logger(__name__)
 
 
 class EmailExtractor(BaseExtractor):
-    """Extract emails from M365 MCP server."""
+    """Extract emails from M365/Hotmail via Microsoft Graph API."""
 
     def __init__(
         self,
@@ -55,7 +55,7 @@ class EmailExtractor(BaseExtractor):
             checkpoint_dir=checkpoint_dir,
             checkpoint_filename="extraction_checkpoint.json",
         )
-        self.mcp_client = GraphAPIClient(user_email, client_id=client_id)
+        self.graph_client = GraphAPIClient(user_email, client_id=client_id)
 
     # ── BaseExtractor abstract method implementations ─────────────────
 
@@ -87,7 +87,7 @@ class EmailExtractor(BaseExtractor):
 
         try:
             # Use MCP client to fetch emails with pagination
-            emails = self.mcp_client.fetch_emails(
+            emails = self.graph_client.fetch_emails(
                 max_results=batch_size,
                 skip=start
             )
@@ -168,7 +168,7 @@ class EmailExtractor(BaseExtractor):
             f"batch_size={batch_size}, filter_after={filter_after}"
         )
 
-        return self.mcp_client.fetch_emails(
+        return self.graph_client.fetch_emails(
             max_results=batch_size,
             skip=start,
             filter_after=filter_after,
@@ -207,7 +207,7 @@ class EmailExtractor(BaseExtractor):
 
         try:
             # Fetch with a very small batch to check if we can get count metadata
-            self.mcp_client.fetch_emails(max_results=1, skip=0)
+            self.graph_client.fetch_emails(max_results=1, skip=0)
 
             # Microsoft Graph doesn't provide total count directly
             # We'll need to estimate by fetching batches until we get fewer than max_results

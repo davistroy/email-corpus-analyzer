@@ -437,7 +437,7 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
             return k, score, labels
 
         completed = 0
-        with ThreadPoolExecutor() as executor:
+        with ThreadPoolExecutor(max_workers=min(4, len(k_values))) as executor:
             futures = {executor.submit(evaluate_k, k): k for k in k_values}
 
             for future in as_completed(futures):

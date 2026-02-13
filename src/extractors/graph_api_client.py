@@ -68,10 +68,15 @@ class GraphAPIClient:
         return cache
 
     def _save_token_cache(self, cache: msal.SerializableTokenCache) -> None:
-        """Persist token cache to disk."""
+        """Persist token cache to disk with restrictive permissions."""
         if cache.has_state_changed:
+            import os
             self.token_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self.token_cache_path.write_text(cache.serialize())
+            try:
+                os.chmod(self.token_cache_path, 0o600)
+            except OSError:
+                pass  # Windows may not support chmod
 
     def _get_app(self) -> msal.PublicClientApplication:
         """Get or create the MSAL application."""

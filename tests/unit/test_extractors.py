@@ -867,7 +867,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_fetch_batch_delegates_to_mcp_client(self, extractor):
         """Test _fetch_batch uses MCP client correctly."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [{"id": "test"}]
 
             result = extractor._fetch_batch(0, 50)
@@ -877,7 +877,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_fetch_batch_connection_error(self, extractor):
         """Test _fetch_batch raises ConnectionError on client failure."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = Exception("Network failure")
 
             with pytest.raises(ConnectionError, match="M365 batch fetch failed"):
@@ -885,7 +885,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_fetch_batch_propagates_connection_error(self, extractor):
         """Test _fetch_batch propagates ConnectionError without wrapping."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = ConnectionError("Original error")
 
             with pytest.raises(ConnectionError, match="Original error"):
@@ -893,7 +893,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_get_total_email_count_propagates_connection_error(self, extractor):
         """Test _get_total_email_count propagates ConnectionError."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = ConnectionError("MCP unreachable")
 
             with pytest.raises(ConnectionError):
@@ -972,7 +972,7 @@ class TestIncrementalExtraction:
         self, extractor, existing_corpus, new_email_data
     ):
         """Test that incremental extraction only fetches emails since last extraction."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = [[new_email_data], []]
 
             result = extractor.extract_incremental(existing_corpus)
@@ -997,7 +997,7 @@ class TestIncrementalExtraction:
             "hasAttachments": False
         }
 
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [duplicate_email]
 
             result = extractor.extract_incremental(existing_corpus)
@@ -1010,7 +1010,7 @@ class TestIncrementalExtraction:
         self, extractor, existing_corpus, new_email_data
     ):
         """Test that metadata is updated after incremental extraction."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = [[new_email_data], []]
 
             old_extraction_date = existing_corpus.extraction_metadata.last_extraction_date
@@ -1024,7 +1024,7 @@ class TestIncrementalExtraction:
         self, extractor, existing_corpus
     ):
         """Test incremental extraction when there are no new emails."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             result = extractor.extract_incremental(existing_corpus)
@@ -1047,7 +1047,7 @@ class TestIncrementalExtraction:
         new_email_2 = new_email_data.copy()
         new_email_2["id"] = "new_002"
 
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = [[new_email_data, new_email_2], []]
 
             result = extractor.extract_incremental(existing_corpus)
@@ -1086,7 +1086,7 @@ class TestIncrementalExtraction:
         """Test that _fetch_incremental_batch passes filter_after to Graph API client."""
         filter_date = datetime(2024, 6, 15, 10, 0, 0)
 
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [{"id": "new_msg"}]
 
             result = extractor._fetch_incremental_batch(
@@ -1102,7 +1102,7 @@ class TestIncrementalExtraction:
 
     def test_fetch_incremental_batch_no_filter_when_not_provided(self, extractor):
         """Test that _fetch_incremental_batch passes None filter when not provided."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             extractor._fetch_incremental_batch(start=0, batch_size=50)
@@ -1117,7 +1117,7 @@ class TestIncrementalExtraction:
         self, extractor, existing_corpus, new_email_data
     ):
         """Test end-to-end: incremental extraction passes date filter to Graph API client."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             # First call returns new email, second call returns empty (stop)
             mock_fetch.side_effect = [[new_email_data], []]
 
@@ -1146,7 +1146,7 @@ class TestIncrementalExtraction:
             "hasAttachments": False,
         }
 
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [duplicate_email]
 
             result = extractor.extract_incremental(existing_corpus)
@@ -1215,7 +1215,7 @@ class TestEmailExtractorEdgeCases:
 
     def test_fetch_batch_returns_fewer_than_requested(self, extractor):
         """Test handling when batch returns fewer emails than requested."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [{"id": "1"}, {"id": "2"}]
 
             result = extractor._fetch_batch(0, 100)
@@ -1225,7 +1225,7 @@ class TestEmailExtractorEdgeCases:
 
     def test_get_total_email_count_returns_sentinel(self, extractor):
         """Test that _get_total_email_count returns large sentinel value."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             count = extractor._get_total_email_count()
@@ -1437,7 +1437,7 @@ class TestIntegrationScenarios:
 
     def test_full_extraction_workflow_empty_inbox(self, extractor):
         """Test complete extraction workflow with empty inbox."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             result = extractor.extract_all()
@@ -1490,7 +1490,7 @@ class TestIntegrationScenarios:
         with open(checkpoint_file, "w") as f:
             json.dump({"test": "data"}, f)
 
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             extractor.extract_all()
