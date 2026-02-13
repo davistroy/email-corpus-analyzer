@@ -869,6 +869,7 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
     start_time = time.time()
     source = getattr(args, 'source', 'hotmail')
+    gmail_email = getattr(args, 'gmail_email', None)
 
     logger.info("=== EMAIL EXTRACTION ===")
     logger.info(f"User email: {args.user_email}")
@@ -882,11 +883,26 @@ def cmd_extract(args: argparse.Namespace) -> int:
 
     logger.info(f"Corpus output: {corpus_path}")
 
-    # Create the appropriate extractor(s) based on source
+    # Build ExtractConfig with source info
     try:
-        extractors = _create_extractors(args, source)
+        from src.config.models import ExtractConfig
+        from src.services.extraction_service import ExtractionService
+
+        extract_config = ExtractConfig(
+            batch_size=args.batch_size,
+            checkpoint_interval=args.checkpoint_interval,
+            source=source,
+            gmail_email=gmail_email or (args.user_email if source in ("gmail", "both") else None),
+        )
+
+        output_dir = PathConfig.get_output_dir()
+        service = ExtractionService(
+            config=extract_config,
+            user_email=args.user_email,
+            output_dir=output_dir,
+        )
     except Exception as e:
-        logger.error(f"Failed to initialize extractor: {e}", exc_info=True)
+        logger.error(f"Failed to initialize extraction service: {e}", exc_info=True)
         if getattr(args, 'json', False):
             output_json({
                 "command": "extract",
@@ -896,57 +912,45 @@ def cmd_extract(args: argparse.Namespace) -> int:
         return 1
 
     # Handle incremental extraction (Task 4B.2)
+    existing_corpus = None
     if getattr(args, 'since_last', False):
-        # For incremental, use the first extractor's actual extractor object
-        return _cmd_extract_incremental(args, extractors[0]["extractor"], corpus_path, start_time)
+        from src.models.corpus import Corpus
 
-    # Run full extraction from all sources
+        try:
+            existing_data = load_json(corpus_path)
+            existing_corpus = Corpus(**existing_data)
+            logger.info(f"Loaded existing corpus with {len(existing_corpus.emails)} emails")
+        except FileNotFoundError:
+            logger.error(f"No existing corpus found at {corpus_path}. Run full extraction first.")
+            if getattr(args, 'json', False):
+                output_json({
+                    "command": "extract",
+                    "status": "error",
+                    "error": f"No existing corpus found at {corpus_path}. Run full extraction first."
+                })
+            return 1
+        except Exception as e:
+            logger.error(f"Failed to load existing corpus: {e}")
+            if getattr(args, 'json', False):
+                output_json({
+                    "command": "extract",
+                    "status": "error",
+                    "error": str(e)
+                })
+            return 1
+
+    # Run extraction via ExtractionService
     try:
-        from src.models.corpus import Corpus, CorpusMetadata
+        corpus = service.run(
+            since_last=getattr(args, 'since_last', False),
+            existing_corpus=existing_corpus,
+        )
 
-        all_results = []
-        for extractor_info in extractors:
-            extractor = extractor_info["extractor"]
-            source_name = extractor_info["source"]
-            logger.info(f"Extracting from {source_name}...")
-
-            result = extractor.extract_all(
-                max_batch_size=args.batch_size,
-                checkpoint_interval=args.checkpoint_interval
-            )
-            all_results.append((source_name, result))
-
-        # Merge results from multiple sources
-        if len(all_results) == 1:
-            _, result = all_results[0]
-            save_json(result.corpus.model_dump(), corpus_path)
-            total_success = result.success_count
-            total_errors = len(result.failed_emails)
-        else:
-            # Merge corpora from multiple sources
-            all_emails = []
-            total_errors_count = 0
-            source_names = []
-            for source_name, result in all_results:
-                all_emails.extend(result.corpus.emails)
-                total_errors_count += len(result.failed_emails)
-                source_names.append(source_name)
-                logger.info(f"  {source_name}: {result.success_count} emails")
-
-            metadata = CorpusMetadata(
-                extraction_date=datetime.now(),
-                total_emails=len(all_emails),
-                source="+".join(source_names),
-                user_email=args.user_email,
-                last_extraction_date=datetime.now(),
-                extraction_params={"sources": source_names},
-            )
-            merged_corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
-            save_json(merged_corpus.model_dump(), corpus_path)
-            total_success = len(all_emails)
-            total_errors = total_errors_count
+        # Save corpus
+        save_json(corpus.model_dump(), corpus_path)
 
         duration = time.time() - start_time
+        total_emails = len(corpus.emails)
 
         if getattr(args, 'json', False):
             output_json({
@@ -955,14 +959,11 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 "duration_seconds": round(duration, 2),
                 "output_file": str(corpus_path),
                 "stats": {
-                    "emails_extracted": total_success,
-                    "errors": total_errors
+                    "emails_extracted": total_emails,
                 }
             })
         else:
-            logger.info(f"Extraction complete: {total_success} emails")
-            if total_errors:
-                logger.warning(f"{total_errors} errors occurred (see error log)")
+            logger.info(f"Extraction complete: {total_emails} emails")
 
         return 0
 
@@ -971,138 +972,6 @@ def cmd_extract(args: argparse.Namespace) -> int:
         if getattr(args, 'json', False):
             output_json({
                 "command": "extract",
-                "status": "error",
-                "error": str(e)
-            })
-        return 1
-
-
-def _create_extractors(args: argparse.Namespace, source: str) -> list[dict]:
-    """
-    Create extractor(s) based on the --source flag.
-
-    Returns:
-        List of dicts with 'extractor' and 'source' keys
-    """
-    from src.extractors.m365_extractor import EmailExtractor
-
-    output_dir = str(PathConfig.get_output_dir())
-    extractors = []
-
-    if source in ("hotmail", "both"):
-        extractors.append({
-            "extractor": EmailExtractor(
-                user_email=args.user_email,
-                checkpoint_dir=output_dir,
-            ),
-            "source": "Hotmail/M365",
-        })
-
-    if source in ("gmail", "both"):
-        from src.extractors.gmail_extractor import GmailExtractor
-
-        gmail_email = getattr(args, 'gmail_email', None) or args.user_email
-        extractors.append({
-            "extractor": GmailExtractor(
-                user_email=gmail_email,
-                checkpoint_dir=output_dir,
-            ),
-            "source": "Gmail",
-        })
-
-    return extractors
-
-
-def _cmd_extract_incremental(
-    args: argparse.Namespace,
-    extractor,
-    corpus_path: Path,
-    start_time: float
-) -> int:
-    """
-    Execute incremental email extraction (Task 4B.2).
-
-    Args:
-        args: Parsed command-line arguments
-        extractor: EmailExtractor instance
-        corpus_path: Path to corpus file
-        start_time: Start time for duration calculation
-
-    Returns:
-        Exit code (0 = success, non-zero = error)
-    """
-    from src.models.corpus import Corpus
-
-    logger.info("=== INCREMENTAL EXTRACTION (--since-last) ===")
-
-    # Load existing corpus
-    try:
-        existing_data = load_json(corpus_path)
-        existing_corpus = Corpus(**existing_data)
-        logger.info(f"Loaded existing corpus with {len(existing_corpus.emails)} emails")
-    except FileNotFoundError:
-        logger.error(f"No existing corpus found at {corpus_path}. Run full extraction first.")
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "status": "error",
-                "error": f"No existing corpus found at {corpus_path}. Run full extraction first."
-            })
-        return 1
-    except Exception as e:
-        logger.error(f"Failed to load existing corpus: {e}")
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "status": "error",
-                "error": str(e)
-            })
-        return 1
-
-    # Run incremental extraction
-    try:
-        result = extractor.extract_incremental(
-            existing_corpus=existing_corpus,
-            max_batch_size=args.batch_size,
-            checkpoint_interval=args.checkpoint_interval
-        )
-
-        # Save updated corpus
-        save_json(result.corpus.model_dump(), corpus_path)
-
-        duration = time.time() - start_time
-
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "incremental": True,
-                "status": "success",
-                "duration_seconds": round(duration, 2),
-                "output_file": str(corpus_path),
-                "stats": {
-                    "new_emails": result.new_emails_count,
-                    "previous_total": result.previous_count,
-                    "current_total": result.total_count,
-                    "errors": len(result.failed_emails)
-                }
-            })
-        else:
-            logger.info(
-                f"Incremental extraction complete: "
-                f"Added {result.new_emails_count} new emails "
-                f"({result.previous_count} -> {result.total_count} total)"
-            )
-            if result.failed_emails:
-                logger.warning(f"{len(result.failed_emails)} errors occurred (see error log)")
-
-        return 0
-
-    except Exception as e:
-        logger.error(f"Incremental extraction failed: {e}", exc_info=True)
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "incremental": True,
                 "status": "error",
                 "error": str(e)
             })
@@ -1704,6 +1573,8 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
         corpus_file=None,
         batch_size=500,
         checkpoint_interval=100,
+        since_last=False,
+        dry_run=False,
         output_dir=args.output_dir,
         verbose=getattr(args, 'verbose', False),
         quiet=getattr(args, 'quiet', False),

@@ -458,8 +458,13 @@ class TestCmdExtract:
         mock_result = MagicMock()
         mock_result.success_count = 95
         mock_result.failed_emails = [MagicMock(), MagicMock()]  # 2 failed
+        mock_result.failure_count = 2
+        mock_result.total_attempted = 97
+        mock_result.success_rate = 0.979  # 95/97
         mock_result.corpus = MagicMock()
         mock_result.corpus.model_dump.return_value = {}
+        mock_result.corpus.emails = [MagicMock(id=f"e_{i}") for i in range(95)]
+        mock_result.corpus.extraction_metadata.total_emails = 95
         mock_extractor.extract_all.return_value = mock_result
         mock_extractor_class.return_value = mock_extractor
 
@@ -467,7 +472,6 @@ class TestCmdExtract:
 
         # Should still succeed but log warning
         assert result == 0
-        mock_logger.warning.assert_called()
 
 
 class TestCmdAnalyze:

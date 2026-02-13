@@ -11,7 +11,7 @@ Per Task 1A.1 specification.
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class ExtractConfig(BaseModel):
@@ -33,6 +33,33 @@ class ExtractConfig(BaseModel):
         default=None,
         description="Custom path for corpus JSON file"
     )
+    source: str = Field(
+        default="hotmail",
+        description="Email source: hotmail, gmail, or both"
+    )
+    gmail_email: str | None = Field(
+        default=None,
+        description="Gmail address (required when source is gmail or both)"
+    )
+
+    @field_validator("source")
+    @classmethod
+    def validate_source(cls, v: str) -> str:
+        """Validate source is one of the allowed values."""
+        allowed = ("hotmail", "gmail", "both")
+        if v not in allowed:
+            raise ValueError(f"source must be one of {allowed}, got '{v}'")
+        return v
+
+    @model_validator(mode="after")
+    def validate_gmail_email_required(self) -> "ExtractConfig":
+        """Ensure gmail_email is provided when source requires it."""
+        if self.source in ("gmail", "both") and not self.gmail_email:
+            raise ValueError(
+                "gmail_email is required when source is "
+                f"'{self.source}'"
+            )
+        return self
 
 
 class AnalyzeConfig(BaseModel):

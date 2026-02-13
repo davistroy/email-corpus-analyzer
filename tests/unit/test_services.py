@@ -377,13 +377,13 @@ class TestExtractionServiceRun:
             failure_count=0,
             total_attempted=len(mock_corpus.emails),
         )
-        service._extractor = MagicMock()
-        service._extractor.extract_all.return_value = mock_result
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = mock_result
 
         result = service.run()
 
         assert isinstance(result, Corpus)
-        service._extractor.extract_all.assert_called_once()
+        service._m365_extractor.extract_all.assert_called_once()
 
     def test_run_calls_progress_callback(self):
         """Test that run calls progress callback."""
@@ -401,8 +401,8 @@ class TestExtractionServiceRun:
             failure_count=0,
             total_attempted=len(mock_corpus.emails),
         )
-        service._extractor = MagicMock()
-        service._extractor.extract_all.return_value = mock_result
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = mock_result
 
         callback_calls = []
 
@@ -429,13 +429,13 @@ class TestExtractionServiceRun:
             previous_count=10,
             total_count=15,
         )
-        service._extractor = MagicMock()
-        service._extractor.extract_incremental.return_value = mock_result
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_incremental.return_value = mock_result
 
         result = service.run(since_last=True, existing_corpus=existing_corpus)
 
         assert isinstance(result, Corpus)
-        service._extractor.extract_incremental.assert_called_once()
+        service._m365_extractor.extract_incremental.assert_called_once()
 
     def test_run_full_extraction_when_since_last_without_corpus(self):
         """Test that run does full extraction when since_last=True but no existing corpus."""
@@ -453,14 +453,331 @@ class TestExtractionServiceRun:
             failure_count=0,
             total_attempted=len(mock_corpus.emails),
         )
-        service._extractor = MagicMock()
-        service._extractor.extract_all.return_value = mock_result
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = mock_result
 
         # since_last=True but no existing_corpus => falls through to full extraction
         result = service.run(since_last=True, existing_corpus=None)
 
         assert isinstance(result, Corpus)
-        service._extractor.extract_all.assert_called_once()
+        service._m365_extractor.extract_all.assert_called_once()
+
+
+# =============================================================================
+# Test ExtractConfig Validation
+# =============================================================================
+
+
+class TestExtractConfigValidation:
+    """Test ExtractConfig source and gmail_email validation."""
+
+    def test_default_source_is_hotmail(self):
+        """Test that default source is hotmail."""
+        config = ExtractConfig()
+        assert config.source == "hotmail"
+        assert config.gmail_email is None
+
+    def test_hotmail_source_no_gmail_email_required(self):
+        """Test that hotmail source does not require gmail_email."""
+        config = ExtractConfig(source="hotmail")
+        assert config.source == "hotmail"
+
+    def test_gmail_source_requires_gmail_email(self):
+        """Test that gmail source requires gmail_email."""
+        with pytest.raises(ValueError, match="gmail_email is required"):
+            ExtractConfig(source="gmail")
+
+    def test_both_source_requires_gmail_email(self):
+        """Test that both source requires gmail_email."""
+        with pytest.raises(ValueError, match="gmail_email is required"):
+            ExtractConfig(source="both")
+
+    def test_gmail_source_with_gmail_email_succeeds(self):
+        """Test that gmail source with gmail_email is valid."""
+        config = ExtractConfig(source="gmail", gmail_email="user@gmail.com")
+        assert config.source == "gmail"
+        assert config.gmail_email == "user@gmail.com"
+
+    def test_both_source_with_gmail_email_succeeds(self):
+        """Test that both source with gmail_email is valid."""
+        config = ExtractConfig(source="both", gmail_email="user@gmail.com")
+        assert config.source == "both"
+        assert config.gmail_email == "user@gmail.com"
+
+    def test_invalid_source_raises_error(self):
+        """Test that invalid source value raises validation error."""
+        with pytest.raises(ValueError, match="source must be one of"):
+            ExtractConfig(source="yahoo")
+
+
+# =============================================================================
+# Test ExtractionService Gmail Mode
+# =============================================================================
+
+
+class TestExtractionServiceGmail:
+    """Test ExtractionService with Gmail source."""
+
+    def test_run_gmail_source(self):
+        """Test that run with source=gmail uses GmailExtractor."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="gmail", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=len(mock_corpus.emails),
+            failure_count=0,
+            total_attempted=len(mock_corpus.emails),
+        )
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_all.return_value = mock_result
+
+        result = service.run()
+
+        assert isinstance(result, Corpus)
+        service._gmail_extractor.extract_all.assert_called_once()
+
+    def test_run_gmail_incremental(self):
+        """Test incremental extraction with Gmail source."""
+        from src.extractors.m365_extractor import IncrementalExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="gmail", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        existing_corpus = create_test_corpus()
+        mock_result = IncrementalExtractionResult(
+            corpus=existing_corpus,
+            failed_emails=[],
+            new_emails_count=3,
+            previous_count=10,
+            total_count=13,
+        )
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_incremental.return_value = mock_result
+
+        result = service.run(since_last=True, existing_corpus=existing_corpus)
+
+        assert isinstance(result, Corpus)
+        service._gmail_extractor.extract_incremental.assert_called_once()
+
+    def test_gmail_extractor_uses_gmail_email(self):
+        """Test that Gmail extractor is created with gmail_email from config."""
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="gmail", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        with patch("src.extractors.gmail_extractor.GmailExtractor") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            service._get_gmail_extractor()
+
+            mock_cls.assert_called_once_with(
+                user_email="user@gmail.com",
+                checkpoint_dir="outputs",
+            )
+
+
+# =============================================================================
+# Test ExtractionService Both Mode
+# =============================================================================
+
+
+class TestExtractionServiceBoth:
+    """Test ExtractionService with both source."""
+
+    def test_run_both_sources(self):
+        """Test that run with source=both uses both extractors and merges."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="both", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        # Create distinct corpora for each source
+        m365_emails = [create_test_email(id=f"m365_{i}") for i in range(5)]
+        gmail_emails = [create_test_email(id=f"gmail_{i}") for i in range(3)]
+
+        m365_corpus = create_test_corpus(emails=m365_emails)
+        gmail_corpus = create_test_corpus(emails=gmail_emails)
+
+        m365_result = ExtractionResult(
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=5,
+            failure_count=0,
+            total_attempted=5,
+        )
+        gmail_result = ExtractionResult(
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=3,
+            failure_count=0,
+            total_attempted=3,
+        )
+
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = m365_result
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_all.return_value = gmail_result
+
+        result = service.run()
+
+        assert isinstance(result, Corpus)
+        assert len(result.emails) == 8  # 5 + 3, no duplicates
+        service._m365_extractor.extract_all.assert_called_once()
+        service._gmail_extractor.extract_all.assert_called_once()
+
+    def test_run_both_deduplicates_by_id(self):
+        """Test that both mode deduplicates emails by ID."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="both", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        # Create overlapping emails (same IDs in both sources)
+        shared_emails = [create_test_email(id=f"shared_{i}") for i in range(2)]
+        m365_only = [create_test_email(id=f"m365_{i}") for i in range(3)]
+        gmail_only = [create_test_email(id=f"gmail_{i}") for i in range(2)]
+
+        m365_corpus = create_test_corpus(emails=m365_only + shared_emails)
+        gmail_corpus = create_test_corpus(emails=gmail_only + shared_emails)
+
+        m365_result = ExtractionResult(
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=5,
+            failure_count=0,
+            total_attempted=5,
+        )
+        gmail_result = ExtractionResult(
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=4,
+            failure_count=0,
+            total_attempted=4,
+        )
+
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = m365_result
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_all.return_value = gmail_result
+
+        result = service.run()
+
+        # Should have 3 m365 + 2 shared + 2 gmail = 7 unique
+        assert len(result.emails) == 7
+        email_ids = {e.id for e in result.emails}
+        assert "shared_0" in email_ids
+        assert "shared_1" in email_ids
+        assert "m365_0" in email_ids
+        assert "gmail_0" in email_ids
+
+    def test_run_both_merged_metadata(self):
+        """Test that merged corpus has correct metadata."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="both", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        m365_corpus = create_test_corpus(emails=[create_test_email(id="m365_1")])
+        gmail_corpus = create_test_corpus(emails=[create_test_email(id="gmail_1")])
+
+        m365_result = ExtractionResult(
+            corpus=m365_corpus, failed_emails=[],
+            success_count=1, failure_count=0, total_attempted=1,
+        )
+        gmail_result = ExtractionResult(
+            corpus=gmail_corpus, failed_emails=[],
+            success_count=1, failure_count=0, total_attempted=1,
+        )
+
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = m365_result
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_all.return_value = gmail_result
+
+        result = service.run()
+
+        assert "M365/Hotmail" in result.extraction_metadata.source
+        assert "Gmail" in result.extraction_metadata.source
+        assert result.extraction_metadata.total_emails == 2
+
+    def test_run_both_calls_progress_callback(self):
+        """Test that both mode calls progress callback multiple times."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="both", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        m365_corpus = create_test_corpus(emails=[create_test_email(id="m365_1")])
+        gmail_corpus = create_test_corpus(emails=[create_test_email(id="gmail_1")])
+
+        m365_result = ExtractionResult(
+            corpus=m365_corpus, failed_emails=[],
+            success_count=1, failure_count=0, total_attempted=1,
+        )
+        gmail_result = ExtractionResult(
+            corpus=gmail_corpus, failed_emails=[],
+            success_count=1, failure_count=0, total_attempted=1,
+        )
+
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = m365_result
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_all.return_value = gmail_result
+
+        callback_calls = []
+        result = service.run(progress_callback=lambda m: callback_calls.append(m))
+
+        # Should have calls for: starting, both-mode, m365, gmail, merged
+        assert len(callback_calls) >= 4
+
+
+# =============================================================================
+# Test ExtractionService._merge_corpora
+# =============================================================================
+
+
+class TestMergeCorpora:
+    """Test the static _merge_corpora method."""
+
+    def test_merge_empty_corpora(self):
+        """Test merging empty corpora."""
+        from src.services.extraction_service import ExtractionService
+
+        c1 = create_test_corpus(emails=[])
+        c2 = create_test_corpus(emails=[])
+
+        merged = ExtractionService._merge_corpora(
+            [c1, c2], user_email="test@example.com",
+            source_labels=["A", "B"],
+        )
+
+        assert len(merged.emails) == 0
+        assert merged.extraction_metadata.source == "A+B"
+
+    def test_merge_single_corpus(self):
+        """Test merging a single corpus returns same emails."""
+        from src.services.extraction_service import ExtractionService
+
+        emails = [create_test_email(id=f"e_{i}") for i in range(3)]
+        c1 = create_test_corpus(emails=emails)
+
+        merged = ExtractionService._merge_corpora(
+            [c1], user_email="test@example.com",
+            source_labels=["Source"],
+        )
+
+        assert len(merged.emails) == 3
 
 
 # =============================================================================
