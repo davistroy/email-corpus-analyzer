@@ -51,7 +51,7 @@ class SuggestionService:
         if progress_callback:
             progress_callback("Generating category suggestions...")
 
-        generator = CategoryGenerator()
+        generator = CategoryGenerator(thresholds=self.config.thresholds)
 
         if progress_callback:
             progress_callback("Processing content clusters...")

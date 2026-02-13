@@ -2,6 +2,7 @@
 Unit tests for cluster optimizer module.
 
 Tests the following cluster optimization components:
+- compute_max_k function - corpus-size-aware max_k calculation
 - ElbowOptimizer class - finds optimal k using inertia curve
 - SilhouetteOptimizer class - finds optimal k using silhouette scores
 """
@@ -13,7 +14,95 @@ from src.analyzers.cluster_optimizer import (
     ElbowOptimizer,
     SilhouetteOptimizer,
     ClusterOptimizationResult,
+    compute_max_k,
 )
+
+
+# ============================================================================
+# Test compute_max_k
+# ============================================================================
+
+
+class TestComputeMaxK:
+    """Test cases for compute_max_k function."""
+
+    def test_50_emails_returns_min(self):
+        """50 emails -> sqrt(50/5) = sqrt(10) ≈ 3 -> clamped to min_k=3."""
+        result = compute_max_k(50)
+        assert result == 3
+
+    def test_100_emails(self):
+        """100 emails -> sqrt(100/5) = sqrt(20) ≈ 4."""
+        result = compute_max_k(100)
+        assert result == 4
+
+    def test_1000_emails(self):
+        """1000 emails -> sqrt(1000/5) = sqrt(200) ≈ 14."""
+        result = compute_max_k(1000)
+        assert result == 14
+
+    def test_10000_emails_returns_cap(self):
+        """10000 emails -> sqrt(10000/5) = sqrt(2000) ≈ 44 -> clamped to cap=25."""
+        result = compute_max_k(10000)
+        assert result == 25
+
+    def test_very_small_corpus(self):
+        """3 emails -> sqrt(3/5) ≈ 0 -> clamped to min_k=3 -> then clamped to n-1=2."""
+        result = compute_max_k(3)
+        assert result == 2  # can't exceed n_emails - 1
+
+    def test_custom_min_k(self):
+        """Custom min_k is respected."""
+        result = compute_max_k(50, min_k=5)
+        assert result == 5
+
+    def test_custom_max_k_cap(self):
+        """Custom max_k_cap is respected."""
+        result = compute_max_k(10000, max_k_cap=15)
+        assert result == 15
+
+    def test_custom_min_and_max(self):
+        """Both custom min and max are respected together."""
+        result = compute_max_k(100, min_k=2, max_k_cap=10)
+        assert result == 4
+
+    def test_n_emails_minus_1_clamp(self):
+        """Result never exceeds n_emails - 1."""
+        # 4 emails: sqrt(4/5)=0.89 -> int=0 -> clamp to min_k=3 -> clamp to n-1=3
+        result = compute_max_k(4)
+        assert result == 3
+
+    def test_invalid_n_emails_raises(self):
+        """n_emails < 2 should raise ValueError."""
+        with pytest.raises(ValueError, match="n_emails must be >= 2"):
+            compute_max_k(1)
+        with pytest.raises(ValueError, match="n_emails must be >= 2"):
+            compute_max_k(0)
+
+    def test_min_k_greater_than_max_k_cap_raises(self):
+        """min_k > max_k_cap should raise ValueError."""
+        with pytest.raises(ValueError, match="min_k.*must be <= max_k_cap"):
+            compute_max_k(100, min_k=30, max_k_cap=10)
+
+    def test_scaling_is_monotonic(self):
+        """Larger corpora should produce >= max_k compared to smaller ones."""
+        sizes = [50, 100, 200, 500, 1000, 5000, 10000]
+        results = [compute_max_k(n) for n in sizes]
+        for i in range(len(results) - 1):
+            assert results[i] <= results[i + 1], (
+                f"compute_max_k({sizes[i]})={results[i]} > "
+                f"compute_max_k({sizes[i+1]})={results[i+1]}"
+            )
+
+    def test_acceptance_50_email_corpus_max_5_clusters(self):
+        """Acceptance criterion: 50-email corpus produces max_k <= 5."""
+        result = compute_max_k(50)
+        assert result <= 5
+
+    def test_acceptance_10k_corpus_can_reach_25(self):
+        """Acceptance criterion: 10K-email corpus can produce up to 25 clusters."""
+        result = compute_max_k(10000)
+        assert result == 25
 
 
 # ============================================================================

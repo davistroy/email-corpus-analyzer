@@ -155,7 +155,7 @@ class EmailProcessorCLI:
             print("5. Calculating volume statistics...")
             print()
 
-            results = run_full_analysis(
+            results, _incremental_stats = run_full_analysis(
                 corpus,
                 num_clusters=num_clusters,
                 progress_callback=progress_callback

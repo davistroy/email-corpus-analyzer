@@ -7,16 +7,32 @@ import logging
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from ..models.analysis_results import TemporalPatterns
 from ..models.corpus import Corpus
 from .base import BaseAnalyzer
+
+if TYPE_CHECKING:
+    from ..config.models import AnalyzerThresholds
 
 logger = logging.getLogger(__name__)
 
 
 class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
     """Analyzes temporal patterns in email corpus."""
+
+    def __init__(self, thresholds: "AnalyzerThresholds | None" = None):
+        """
+        Initialize TemporalAnalyzer.
+
+        Args:
+            thresholds: Optional analyzer thresholds config. Uses defaults if None.
+        """
+        if thresholds is None:
+            from ..config.models import AnalyzerThresholds
+            thresholds = AnalyzerThresholds()
+        self.thresholds = thresholds
 
     @property
     def name(self) -> str:
@@ -121,9 +137,9 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
             logger.debug("Classified as one-time: 1 email")
             return "one-time"
 
-        # Need at least 10 emails for frequency classification
-        if email_count < 10:
-            logger.debug(f"Classified as occasional: {email_count} emails (< 10)")
+        # Need sufficient emails for frequency classification
+        if email_count < self.thresholds.min_emails_for_frequency:
+            logger.debug(f"Classified as occasional: {email_count} emails (< {self.thresholds.min_emails_for_frequency})")
             return "occasional"
 
         # Calculate average interval between emails
@@ -143,10 +159,10 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
         )
 
         # Apply classification thresholds
-        if avg_interval_days < 2:
+        if avg_interval_days < self.thresholds.frequency_daily_threshold_days:
             return "daily"
-        if avg_interval_days < 8:
+        if avg_interval_days < self.thresholds.frequency_weekly_threshold_days:
             return "weekly"
-        if avg_interval_days < 35:
+        if avg_interval_days < self.thresholds.frequency_monthly_threshold_days:
             return "monthly"
         return "occasional"

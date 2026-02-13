@@ -1321,7 +1321,10 @@ class TestRunFullAnalysis:
         ]
         corpus = create_corpus(emails)
 
-        result = run_full_analysis(corpus, num_clusters=2)
+        result, incremental_stats = run_full_analysis(corpus, num_clusters=2)
+
+        # Without embedding_cache, incremental_stats should be None
+        assert incremental_stats is None
 
         # Verify result is AnalysisResults with all components
         assert hasattr(result, 'sender_analysis')
@@ -1358,7 +1361,7 @@ class TestRunFullAnalysis:
         ]
         corpus = create_corpus(emails)
 
-        result = run_full_analysis(corpus, num_clusters=3)
+        result, _stats = run_full_analysis(corpus, num_clusters=3)
 
         # Should have clusters (num depends on KMeans results)
         assert isinstance(result.content_clusters, list)
@@ -1391,6 +1394,46 @@ class TestRunFullAnalysis:
         # Verify callback was called with different analyzer names
         analyzer_names = set(name for name, _, _ in callback_data)
         assert "sender" in analyzer_names or len(callback_data) > 0
+
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_with_embedding_cache_returns_incremental_stats(self, mock_st_class):
+        """Test that providing embedding_cache triggers incremental mode and returns stats."""
+        from src.cache.embedding_cache import EmbeddingCache
+        import tempfile
+        import os
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(5, 1024)
+        mock_st_class.return_value = mock_model
+
+        emails = [
+            create_email(
+                id=str(i),
+                sender_email=f"sender{i}@example.com",
+                sender_domain="example.com",
+                subject=f"Test Subject {i}",
+                body_text=f"Test body content for email {i}",
+                received_date=datetime(2024, 1, 1) + timedelta(days=i)
+            )
+            for i in range(5)
+        ]
+        corpus = create_corpus(emails)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache = EmbeddingCache(cache_path=os.path.join(tmp_dir, "cache.npz"))
+            result, incremental_stats = run_full_analysis(
+                corpus, num_clusters=2, embedding_cache=cache
+            )
+
+            # With embedding_cache, incremental_stats should be a dict
+            assert incremental_stats is not None
+            assert isinstance(incremental_stats, dict)
+            assert "cached_count" in incremental_stats
+            assert "generated_count" in incremental_stats
+
+            # Results should still be valid
+            assert hasattr(result, 'sender_analysis')
+            assert hasattr(result, 'content_clusters')
 
 
 # ============================================================================

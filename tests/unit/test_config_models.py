@@ -93,6 +93,8 @@ class TestAnalyzeConfig:
 
         assert config.num_clusters == 10
         assert config.max_embedding_text_length == 1500
+        assert config.auto_cluster_min == 3
+        assert config.auto_cluster_max == 25
         assert config.corpus_file is None
         assert config.analysis_file is None
 
@@ -171,6 +173,62 @@ class TestAnalyzeConfig:
         with pytest.raises(ValidationError) as exc_info:
             AnalyzeConfig(max_embedding_text_length=5001)
         assert "max_embedding_text_length" in str(exc_info.value)
+
+    def test_analyze_config_auto_cluster_min_default(self):
+        """Test auto_cluster_min defaults to 3."""
+        from src.config.models import AnalyzeConfig
+
+        config = AnalyzeConfig()
+        assert config.auto_cluster_min == 3
+
+    def test_analyze_config_auto_cluster_max_default(self):
+        """Test auto_cluster_max defaults to 25."""
+        from src.config.models import AnalyzeConfig
+
+        config = AnalyzeConfig()
+        assert config.auto_cluster_max == 25
+
+    def test_analyze_config_auto_cluster_bounds_configurable(self):
+        """Test auto_cluster_min and auto_cluster_max accept custom values."""
+        from src.config.models import AnalyzeConfig
+
+        config = AnalyzeConfig(auto_cluster_min=5, auto_cluster_max=50)
+        assert config.auto_cluster_min == 5
+        assert config.auto_cluster_max == 50
+
+    def test_analyze_config_auto_cluster_min_gt_max_raises(self):
+        """Test that auto_cluster_min > auto_cluster_max raises ValidationError."""
+        from src.config.models import AnalyzeConfig
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError) as exc_info:
+            AnalyzeConfig(auto_cluster_min=30, auto_cluster_max=10)
+        assert "auto_cluster_min" in str(exc_info.value)
+
+    def test_analyze_config_auto_cluster_min_boundary(self):
+        """Test auto_cluster_min must be >= 2."""
+        from src.config.models import AnalyzeConfig
+        from pydantic import ValidationError
+
+        config = AnalyzeConfig(auto_cluster_min=2)
+        assert config.auto_cluster_min == 2
+
+        with pytest.raises(ValidationError):
+            AnalyzeConfig(auto_cluster_min=1)
+
+    def test_analyze_config_auto_cluster_max_boundary(self):
+        """Test auto_cluster_max must be >= 3 and <= 100."""
+        from src.config.models import AnalyzeConfig
+        from pydantic import ValidationError
+
+        config = AnalyzeConfig(auto_cluster_max=100)
+        assert config.auto_cluster_max == 100
+
+        with pytest.raises(ValidationError):
+            AnalyzeConfig(auto_cluster_max=101)
+
+        with pytest.raises(ValidationError):
+            AnalyzeConfig(auto_cluster_max=2)
 
 
 class TestSuggestConfig:
@@ -519,3 +577,293 @@ class TestConfigMerging:
         # Global override (not overridden by project)
         assert result.extract.batch_size == 300
         assert result.user_email == "global@example.com"
+
+
+class TestAnalyzerThresholds:
+    """Test cases for AnalyzerThresholds model (Task 2.2)."""
+
+    def test_analyzer_thresholds_default_values_match_original_hardcoded(self):
+        """Test all defaults match the previously-hardcoded values exactly."""
+        from src.config.models import AnalyzerThresholds
+
+        t = AnalyzerThresholds()
+
+        # SenderAnalyzer defaults
+        assert t.top_senders == 50
+        assert t.top_domains == 30
+        assert t.marketing_min_emails == 10
+
+        # SubjectAnalyzer defaults
+        assert t.top_keywords == 50
+
+        # SemanticAnalyzer defaults
+        assert t.max_auto_clusters == 15
+        assert t.representative_samples == 5
+        assert t.random_state == 42
+
+        # TemporalAnalyzer defaults
+        assert t.frequency_daily_threshold_days == 2.0
+        assert t.frequency_weekly_threshold_days == 8.0
+        assert t.frequency_monthly_threshold_days == 35.0
+        assert t.min_emails_for_frequency == 10
+
+    def test_analyzer_thresholds_custom_values(self):
+        """Test AnalyzerThresholds accepts custom values."""
+        from src.config.models import AnalyzerThresholds
+
+        t = AnalyzerThresholds(
+            top_senders=100,
+            top_domains=50,
+            marketing_min_emails=5,
+            top_keywords=75,
+            max_auto_clusters=20,
+            representative_samples=10,
+            random_state=123,
+            frequency_daily_threshold_days=1.5,
+            frequency_weekly_threshold_days=7.0,
+            frequency_monthly_threshold_days=30.0,
+            min_emails_for_frequency=5,
+        )
+
+        assert t.top_senders == 100
+        assert t.top_domains == 50
+        assert t.marketing_min_emails == 5
+        assert t.top_keywords == 75
+        assert t.max_auto_clusters == 20
+        assert t.representative_samples == 10
+        assert t.random_state == 123
+        assert t.frequency_daily_threshold_days == 1.5
+        assert t.frequency_weekly_threshold_days == 7.0
+        assert t.frequency_monthly_threshold_days == 30.0
+        assert t.min_emails_for_frequency == 5
+
+    def test_analyzer_thresholds_validation_top_senders_min(self):
+        """Test top_senders must be >= 1."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(top_senders=0)
+
+    def test_analyzer_thresholds_validation_top_senders_max(self):
+        """Test top_senders must be <= 1000."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(top_senders=1001)
+
+    def test_analyzer_thresholds_validation_top_domains_min(self):
+        """Test top_domains must be >= 1."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(top_domains=0)
+
+    def test_analyzer_thresholds_validation_max_auto_clusters_min(self):
+        """Test max_auto_clusters must be >= 2."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(max_auto_clusters=1)
+
+    def test_analyzer_thresholds_validation_representative_samples_min(self):
+        """Test representative_samples must be >= 1."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(representative_samples=0)
+
+    def test_analyzer_thresholds_validation_random_state_min(self):
+        """Test random_state must be >= 0."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(random_state=-1)
+
+    def test_analyzer_thresholds_validation_daily_threshold_positive(self):
+        """Test frequency_daily_threshold_days must be > 0."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(frequency_daily_threshold_days=0)
+
+    def test_analyzer_thresholds_validation_weekly_threshold_max(self):
+        """Test frequency_weekly_threshold_days must be <= 365."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(frequency_weekly_threshold_days=366)
+
+    def test_analyzer_thresholds_validation_min_emails_for_frequency_min(self):
+        """Test min_emails_for_frequency must be >= 2."""
+        from src.config.models import AnalyzerThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AnalyzerThresholds(min_emails_for_frequency=1)
+
+    def test_analyze_config_has_thresholds_default(self):
+        """Test AnalyzeConfig includes AnalyzerThresholds with defaults."""
+        from src.config.models import AnalyzeConfig, AnalyzerThresholds
+
+        config = AnalyzeConfig()
+        assert isinstance(config.thresholds, AnalyzerThresholds)
+        assert config.thresholds.top_senders == 50
+
+    def test_analyze_config_custom_thresholds(self):
+        """Test AnalyzeConfig accepts custom thresholds."""
+        from src.config.models import AnalyzeConfig, AnalyzerThresholds
+
+        thresholds = AnalyzerThresholds(top_senders=100, random_state=0)
+        config = AnalyzeConfig(thresholds=thresholds)
+
+        assert config.thresholds.top_senders == 100
+        assert config.thresholds.random_state == 0
+        # Other thresholds should still be defaults
+        assert config.thresholds.top_domains == 30
+
+    def test_analyze_config_thresholds_from_dict(self):
+        """Test AnalyzeConfig can load thresholds from nested dict (YAML support)."""
+        from src.config.models import AnalyzeConfig
+
+        data = {
+            "num_clusters": 15,
+            "thresholds": {
+                "top_senders": 75,
+                "frequency_daily_threshold_days": 1.0,
+            }
+        }
+        config = AnalyzeConfig(**data)
+
+        assert config.num_clusters == 15
+        assert config.thresholds.top_senders == 75
+        assert config.thresholds.frequency_daily_threshold_days == 1.0
+        # Non-specified thresholds should be defaults
+        assert config.thresholds.top_domains == 30
+
+
+class TestGeneratorThresholds:
+    """Test cases for GeneratorThresholds model (Task 2.2)."""
+
+    def test_generator_thresholds_default_values_match_original_hardcoded(self):
+        """Test all defaults match the previously-hardcoded values exactly."""
+        from src.config.models import GeneratorThresholds
+
+        t = GeneratorThresholds()
+
+        assert t.max_senders_for_categories == 20
+        assert t.merge_name_similarity == 0.8
+        assert t.merge_email_overlap == 0.7
+
+    def test_generator_thresholds_custom_values(self):
+        """Test GeneratorThresholds accepts custom values."""
+        from src.config.models import GeneratorThresholds
+
+        t = GeneratorThresholds(
+            max_senders_for_categories=50,
+            merge_name_similarity=0.9,
+            merge_email_overlap=0.5,
+        )
+
+        assert t.max_senders_for_categories == 50
+        assert t.merge_name_similarity == 0.9
+        assert t.merge_email_overlap == 0.5
+
+    def test_generator_thresholds_validation_max_senders_min(self):
+        """Test max_senders_for_categories must be >= 1."""
+        from src.config.models import GeneratorThresholds
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            GeneratorThresholds(max_senders_for_categories=0)
+
+    def test_generator_thresholds_validation_merge_name_similarity_range(self):
+        """Test merge_name_similarity must be between 0.0 and 1.0."""
+        from src.config.models import GeneratorThresholds
+        from pydantic import ValidationError
+
+        # Valid boundary values
+        GeneratorThresholds(merge_name_similarity=0.0)
+        GeneratorThresholds(merge_name_similarity=1.0)
+
+        # Invalid
+        with pytest.raises(ValidationError):
+            GeneratorThresholds(merge_name_similarity=-0.1)
+
+        with pytest.raises(ValidationError):
+            GeneratorThresholds(merge_name_similarity=1.1)
+
+    def test_generator_thresholds_validation_merge_email_overlap_range(self):
+        """Test merge_email_overlap must be between 0.0 and 1.0."""
+        from src.config.models import GeneratorThresholds
+        from pydantic import ValidationError
+
+        # Valid boundary values
+        GeneratorThresholds(merge_email_overlap=0.0)
+        GeneratorThresholds(merge_email_overlap=1.0)
+
+        # Invalid
+        with pytest.raises(ValidationError):
+            GeneratorThresholds(merge_email_overlap=-0.1)
+
+        with pytest.raises(ValidationError):
+            GeneratorThresholds(merge_email_overlap=1.1)
+
+    def test_suggest_config_has_thresholds_default(self):
+        """Test SuggestConfig includes GeneratorThresholds with defaults."""
+        from src.config.models import SuggestConfig, GeneratorThresholds
+
+        config = SuggestConfig()
+        assert isinstance(config.thresholds, GeneratorThresholds)
+        assert config.thresholds.max_senders_for_categories == 20
+
+    def test_suggest_config_custom_thresholds(self):
+        """Test SuggestConfig accepts custom thresholds."""
+        from src.config.models import SuggestConfig, GeneratorThresholds
+
+        thresholds = GeneratorThresholds(max_senders_for_categories=30)
+        config = SuggestConfig(thresholds=thresholds)
+
+        assert config.thresholds.max_senders_for_categories == 30
+        # Other thresholds should still be defaults
+        assert config.thresholds.merge_name_similarity == 0.8
+
+    def test_suggest_config_thresholds_from_dict(self):
+        """Test SuggestConfig can load thresholds from nested dict (YAML support)."""
+        from src.config.models import SuggestConfig
+
+        data = {
+            "min_sender_count": 30,
+            "thresholds": {
+                "max_senders_for_categories": 50,
+                "merge_email_overlap": 0.6,
+            }
+        }
+        config = SuggestConfig(**data)
+
+        assert config.min_sender_count == 30
+        assert config.thresholds.max_senders_for_categories == 50
+        assert config.thresholds.merge_email_overlap == 0.6
+        # Non-specified thresholds should be defaults
+        assert config.thresholds.merge_name_similarity == 0.8
+
+    def test_app_config_includes_thresholds(self):
+        """Test AppConfig includes both threshold configs through nesting."""
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+
+        # Analyzer thresholds via analyze config
+        assert config.analyze.thresholds.top_senders == 50
+        assert config.analyze.thresholds.random_state == 42
+
+        # Generator thresholds via suggest config
+        assert config.suggest.thresholds.max_senders_for_categories == 20
+        assert config.suggest.thresholds.merge_name_similarity == 0.8

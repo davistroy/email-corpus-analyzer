@@ -5,6 +5,7 @@ Performs semantic clustering of email corpus using sentence transformers and KMe
 Per analyzer_contract.md lines 153-221 and research.md lines 15-68.
 
 Task 4B.4: Enhanced with incremental analysis support using embedding cache.
+Task 2.2: Externalized magic numbers to AnalyzerThresholds config.
 """
 import logging
 from collections import Counter
@@ -21,10 +22,11 @@ from sklearn.metrics.pairwise import cosine_distances
 from ..models.content_cluster import ContentCluster, RepresentativeSample
 from ..models.corpus import Corpus
 from .base import BaseAnalyzer
-from .cluster_optimizer import ElbowOptimizer, SilhouetteOptimizer
+from .cluster_optimizer import ElbowOptimizer, SilhouetteOptimizer, compute_max_k
 
 if TYPE_CHECKING:
     from src.cache.embedding_cache import EmbeddingCache
+    from src.config.models import AnalyzerThresholds
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         self,
         model_name: str = "mixedbread-ai/mxbai-embed-large-v1",
         max_embedding_text_length: int = 1500,
+        thresholds: "AnalyzerThresholds | None" = None,
     ):
         """
         Initialize with sentence transformer model.
@@ -64,7 +67,12 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         Args:
             model_name: Hugging Face model identifier
             max_embedding_text_length: Max body chars for embedding text (default 1500)
+            thresholds: Optional analyzer thresholds config. Uses defaults if None.
         """
+        if thresholds is None:
+            from ..config.models import AnalyzerThresholds
+            thresholds = AnalyzerThresholds()
+        self.thresholds = thresholds
         self.model_name = model_name
         self.model = None
         self.max_embedding_text_length = max_embedding_text_length
@@ -83,6 +91,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         num_clusters: int = 10,
         auto_clusters: bool = False,
         cluster_method: str = "silhouette",
+        auto_cluster_min: int = 3,
+        auto_cluster_max: int = 25,
         progress_callback: Callable[[int, int], None] | None = None
     ) -> list[ContentCluster]:
         """
@@ -101,6 +111,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             num_clusters: Number of clusters (default 10)
             auto_clusters: If True, automatically determine optimal k
             cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+            auto_cluster_min: Minimum max_k for auto-clustering (default 3)
+            auto_cluster_max: Maximum max_k for auto-clustering (default 25)
             progress_callback: Optional callback(current, total)
 
         Returns:
@@ -150,12 +162,20 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         # Determine effective number of clusters
         if auto_clusters and total_emails >= 3:
             # Auto-determine optimal k using specified method
-            logger.info(f"Auto-determining optimal clusters using {cluster_method} method...")
+            max_k = compute_max_k(
+                total_emails,
+                min_k=auto_cluster_min,
+                max_k_cap=auto_cluster_max
+            )
+            logger.info(
+                f"Auto-determining optimal clusters using {cluster_method} method "
+                f"(max_k={max_k}, corpus_size={total_emails})..."
+            )
 
             if cluster_method == "elbow":
-                optimizer = ElbowOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = ElbowOptimizer(max_k=max_k)
             else:  # silhouette (default)
-                optimizer = SilhouetteOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = SilhouetteOptimizer(max_k=max_k)
 
             optimization_result = optimizer.find_optimal_k(embeddings)
             effective_clusters = optimization_result.optimal_k
@@ -179,7 +199,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         logger.info(f"Performing KMeans clustering with {effective_clusters} clusters")
         kmeans = KMeans(
             n_clusters=effective_clusters,
-            random_state=42,
+            random_state=self.thresholds.random_state,
             n_init=10
         )
         cluster_labels = kmeans.fit_predict(embeddings)
@@ -217,7 +237,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             cluster_emails = [corpus.emails[i] for i in cluster_indices]
             email_ids = [email.id for email in cluster_emails]
 
-            # Find 5 representative samples (closest to centroid) (FR-017)
+            # Find representative samples (closest to centroid) (FR-017)
             cluster_embeddings = embeddings[cluster_mask]
             centroid = cluster_centers[cluster_id]
 
@@ -227,8 +247,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 centroid.reshape(1, -1)
             ).flatten()
 
-            # Get indices of 5 closest samples (or fewer if cluster is small)
-            num_samples = min(5, cluster_size)
+            # Get indices of N closest samples (or fewer if cluster is small)
+            num_samples = min(self.thresholds.representative_samples, cluster_size)
             closest_indices = np.argsort(distances)[:num_samples]
 
             # Map back to original corpus indices
@@ -293,6 +313,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         num_clusters: int = 10,
         auto_clusters: bool = False,
         cluster_method: str = "silhouette",
+        auto_cluster_min: int = 3,
+        auto_cluster_max: int = 25,
         progress_callback: Callable[[int, int], None] | None = None
     ) -> IncrementalAnalysisResult:
         """
@@ -306,6 +328,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             num_clusters: Number of clusters (default 10)
             auto_clusters: If True, automatically determine optimal k
             cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+            auto_cluster_min: Minimum max_k for auto-clustering (default 3)
+            auto_cluster_max: Maximum max_k for auto-clustering (default 25)
             progress_callback: Optional callback(current, total)
 
         Returns:
@@ -395,7 +419,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         # Now perform clustering using the combined embeddings
         # (Reuse clustering logic from analyze method)
         effective_clusters = self._determine_clusters(
-            embeddings, total_emails, num_clusters, auto_clusters, cluster_method
+            embeddings, total_emails, num_clusters, auto_clusters, cluster_method,
+            auto_cluster_min, auto_cluster_max
         )
 
         clusters = self._perform_clustering(
@@ -410,16 +435,26 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         total_emails: int,
         num_clusters: int,
         auto_clusters: bool,
-        cluster_method: str
+        cluster_method: str,
+        auto_cluster_min: int = 3,
+        auto_cluster_max: int = 25,
     ) -> int:
         """Determine effective number of clusters."""
         if auto_clusters and total_emails >= 3:
-            logger.info(f"Auto-determining optimal clusters using {cluster_method} method...")
+            max_k = compute_max_k(
+                total_emails,
+                min_k=auto_cluster_min,
+                max_k_cap=auto_cluster_max
+            )
+            logger.info(
+                f"Auto-determining optimal clusters using {cluster_method} method "
+                f"(max_k={max_k}, corpus_size={total_emails})..."
+            )
 
             if cluster_method == "elbow":
-                optimizer = ElbowOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = ElbowOptimizer(max_k=max_k)
             else:
-                optimizer = SilhouetteOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = SilhouetteOptimizer(max_k=max_k)
 
             optimization_result = optimizer.find_optimal_k(embeddings)
             effective_clusters = optimization_result.optimal_k
@@ -450,7 +485,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         logger.info(f"Performing KMeans clustering with {effective_clusters} clusters")
         kmeans = KMeans(
             n_clusters=effective_clusters,
-            random_state=42,
+            random_state=self.thresholds.random_state,
             n_init=10
         )
         cluster_labels = kmeans.fit_predict(embeddings)
@@ -485,7 +520,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 cluster_embeddings, centroid.reshape(1, -1)
             ).flatten()
 
-            num_samples = min(5, cluster_size)
+            num_samples = min(self.thresholds.representative_samples, cluster_size)
             closest_indices = np.argsort(distances)[:num_samples]
             representative_indices = cluster_indices[closest_indices]
 

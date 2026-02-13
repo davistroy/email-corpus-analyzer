@@ -7,6 +7,7 @@ using elbow method and silhouette analysis.
 Per Phase 2, Track 2A requirements.
 """
 import logging
+import math
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -18,6 +19,43 @@ from sklearn.metrics import silhouette_samples, silhouette_score
 from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
+
+
+def compute_max_k(n_emails: int, min_k: int = 3, max_k_cap: int = 25) -> int:
+    """
+    Compute a corpus-size-aware maximum k for cluster optimization.
+
+    Uses sqrt(n_emails / 5) as the scaling heuristic, clamped to [min_k, max_k_cap].
+    This produces sensible upper bounds across corpus sizes:
+      - 50 emails   -> max_k = 3  (min)
+      - 100 emails  -> max_k = 4
+      - 1,000 emails -> max_k = 14
+      - 10,000 emails -> max_k = 25 (capped)
+
+    The result is also clamped to n_emails - 1 (can't have more clusters than samples).
+
+    Args:
+        n_emails: Total number of emails in the corpus.
+        min_k: Minimum allowed max_k (default 3).
+        max_k_cap: Maximum allowed max_k (default 25).
+
+    Returns:
+        Integer max_k value clamped to [min_k, max_k_cap] and <= n_emails - 1.
+
+    Raises:
+        ValueError: If n_emails < 2 or min_k > max_k_cap.
+    """
+    if n_emails < 2:
+        raise ValueError(f"n_emails must be >= 2, got {n_emails}")
+    if min_k > max_k_cap:
+        raise ValueError(
+            f"min_k ({min_k}) must be <= max_k_cap ({max_k_cap})"
+        )
+
+    raw = int(math.sqrt(n_emails / 5))
+    clamped = max(min_k, min(raw, max_k_cap))
+    # Never exceed n_emails - 1 (KMeans requirement)
+    return min(clamped, n_emails - 1)
 
 
 @dataclass
@@ -398,9 +436,10 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         )
 
 
-# Export classes
+# Export classes and functions
 __all__ = [
     'ClusterOptimizationResult',
     'ElbowOptimizer',
     'SilhouetteOptimizer',
+    'compute_max_k',
 ]

@@ -513,7 +513,7 @@ class TestCmdAnalyze:
         mock_results.model_dump.return_value = {"results": "data"}
         mock_results.sender_analysis.unique_senders = 50
         mock_results.content_clusters = [1, 2, 3]
-        mock_analysis.return_value = mock_results
+        mock_analysis.return_value = (mock_results, None)
 
         result = cmd_analyze(args)
 
@@ -556,7 +556,7 @@ class TestCmdAnalyze:
         mock_results.model_dump.return_value = {}
         mock_results.sender_analysis.unique_senders = 0
         mock_results.content_clusters = []
-        mock_analysis.return_value = mock_results
+        mock_analysis.return_value = (mock_results, None)
 
         result = cmd_analyze(args)
 
@@ -1320,7 +1320,7 @@ class TestEmailProcessorCLIAnalyze:
 
                 mock_results = MagicMock()
                 mock_results.model_dump.return_value = {}
-                mock_analysis.return_value = mock_results
+                mock_analysis.return_value = (mock_results, None)
 
                 result = cli.analyze(num_clusters=10)
 
@@ -2288,7 +2288,7 @@ class TestJsonOutputFlag:
         mock_results.model_dump.return_value = {"results": "data"}
         mock_results.sender_analysis.unique_senders = 50
         mock_results.content_clusters = [1, 2, 3]
-        mock_analysis.return_value = mock_results
+        mock_analysis.return_value = (mock_results, None)
 
         # Capture stdout
         with patch("sys.stdout") as mock_stdout:
@@ -3305,7 +3305,7 @@ class TestClusterAnalysisReport:
                 mock_results.model_dump.return_value = {}
                 mock_results.sender_analysis.unique_senders = 10
                 mock_results.content_clusters = []
-                mock_analysis.return_value = mock_results
+                mock_analysis.return_value = (mock_results, None)
 
                 # Run should succeed
                 result = cmd_analyze(args)

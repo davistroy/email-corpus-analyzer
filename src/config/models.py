@@ -7,6 +7,7 @@ Provides Pydantic models for all CLI configuration options with:
 - Nested configuration structure for each command
 
 Per Task 1A.1 specification.
+Task 2.2: Added AnalyzerThresholds and GeneratorThresholds for externalizing magic numbers.
 """
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,88 @@ class ExtractConfig(BaseModel):
         return self
 
 
+class AnalyzerThresholds(BaseModel):
+    """
+    Configurable thresholds for analyzer modules.
+
+    All defaults match the previously-hardcoded values so behavior
+    is unchanged without explicit configuration.
+    """
+
+    # SenderAnalyzer thresholds
+    top_senders: int = Field(
+        default=50,
+        ge=1,
+        le=1000,
+        description="Number of top senders to extract by frequency"
+    )
+    top_domains: int = Field(
+        default=30,
+        ge=1,
+        le=500,
+        description="Number of top domains to extract by frequency"
+    )
+    marketing_min_emails: int = Field(
+        default=10,
+        ge=1,
+        le=10000,
+        description="Minimum email count to classify sender as marketing"
+    )
+
+    # SubjectAnalyzer thresholds
+    top_keywords: int = Field(
+        default=50,
+        ge=1,
+        le=1000,
+        description="Number of top keywords to extract from subject lines"
+    )
+
+    # SemanticAnalyzer thresholds
+    max_auto_clusters: int = Field(
+        default=15,
+        ge=2,
+        le=100,
+        description="Maximum number of clusters for auto-clustering optimization"
+    )
+    representative_samples: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Number of representative samples per cluster (closest to centroid)"
+    )
+    random_state: int = Field(
+        default=42,
+        ge=0,
+        description="Random state seed for KMeans clustering reproducibility"
+    )
+
+    # TemporalAnalyzer thresholds
+    frequency_daily_threshold_days: float = Field(
+        default=2.0,
+        gt=0,
+        le=365,
+        description="Average interval (days) below which sender is classified as daily"
+    )
+    frequency_weekly_threshold_days: float = Field(
+        default=8.0,
+        gt=0,
+        le=365,
+        description="Average interval (days) below which sender is classified as weekly"
+    )
+    frequency_monthly_threshold_days: float = Field(
+        default=35.0,
+        gt=0,
+        le=365,
+        description="Average interval (days) below which sender is classified as monthly"
+    )
+    min_emails_for_frequency: int = Field(
+        default=10,
+        ge=2,
+        le=10000,
+        description="Minimum email count required for frequency classification beyond one-time"
+    )
+
+
 class AnalyzeConfig(BaseModel):
     """Configuration for analyze command."""
 
@@ -77,6 +160,18 @@ class AnalyzeConfig(BaseModel):
         le=5000,
         description="Maximum body text characters for embedding generation"
     )
+    auto_cluster_min: int = Field(
+        default=3,
+        ge=2,
+        le=50,
+        description="Minimum max_k bound for auto-clustering"
+    )
+    auto_cluster_max: int = Field(
+        default=25,
+        ge=3,
+        le=100,
+        description="Maximum max_k cap for auto-clustering"
+    )
     corpus_file: Path | None = Field(
         default=None,
         description="Path to corpus JSON file"
@@ -84,6 +179,49 @@ class AnalyzeConfig(BaseModel):
     analysis_file: Path | None = Field(
         default=None,
         description="Custom path for analysis results"
+    )
+    thresholds: AnalyzerThresholds = Field(
+        default_factory=AnalyzerThresholds,
+        description="Configurable thresholds for analyzer modules"
+    )
+
+    @model_validator(mode="after")
+    def validate_auto_cluster_bounds(self) -> "AnalyzeConfig":
+        """Ensure auto_cluster_min <= auto_cluster_max."""
+        if self.auto_cluster_min > self.auto_cluster_max:
+            raise ValueError(
+                f"auto_cluster_min ({self.auto_cluster_min}) must be <= "
+                f"auto_cluster_max ({self.auto_cluster_max})"
+            )
+        return self
+
+
+class GeneratorThresholds(BaseModel):
+    """
+    Configurable thresholds for generator modules.
+
+    All defaults match the previously-hardcoded values so behavior
+    is unchanged without explicit configuration.
+    """
+
+    # CategoryGenerator thresholds
+    max_senders_for_categories: int = Field(
+        default=20,
+        ge=1,
+        le=1000,
+        description="Maximum number of top senders to consider for sender-based categories"
+    )
+    merge_name_similarity: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Name similarity threshold for merging categories (SequenceMatcher ratio)"
+    )
+    merge_email_overlap: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Email ID overlap threshold (Jaccard) for merging categories"
     )
 
 
@@ -108,6 +246,10 @@ class SuggestConfig(BaseModel):
     suggestions_file: Path | None = Field(
         default=None,
         description="Custom path for suggestions JSON"
+    )
+    thresholds: GeneratorThresholds = Field(
+        default_factory=GeneratorThresholds,
+        description="Configurable thresholds for generator modules"
     )
 
 

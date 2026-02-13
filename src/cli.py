@@ -1061,7 +1061,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     # Run analysis
     try:
-        results = run_full_analysis(
+        results, _incremental_stats = run_full_analysis(
             corpus=corpus,
             num_clusters=args.num_clusters,
             auto_clusters=getattr(args, 'auto_clusters', False),
@@ -1121,7 +1121,7 @@ def _cmd_analyze_incremental(
     Returns:
         Exit code (0 = success, non-zero = error)
     """
-    from src.analyzers import run_full_analysis_incremental
+    from src.analyzers import run_full_analysis
     from src.cache.embedding_cache import EmbeddingCache
 
     logger.info("=== INCREMENTAL ANALYSIS (--incremental) ===")
@@ -1133,7 +1133,7 @@ def _cmd_analyze_incremental(
     logger.info(f"Embedding cache: {cache_path} ({embedding_cache.size} entries)")
 
     try:
-        results, incremental_stats = run_full_analysis_incremental(
+        results, incremental_stats = run_full_analysis(
             corpus=corpus,
             embedding_cache=embedding_cache,
             num_clusters=args.num_clusters,

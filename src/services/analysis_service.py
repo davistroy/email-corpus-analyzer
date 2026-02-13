@@ -44,10 +44,11 @@ class AnalysisService:
 
     def _build_analyzers(self) -> list[BaseAnalyzer]:
         """Build list of analyzer instances."""
+        thresholds = self.config.thresholds
         return [
-            SenderAnalyzer(),
-            SubjectAnalyzer(),
-            TemporalAnalyzer(),
+            SenderAnalyzer(thresholds=thresholds),
+            SubjectAnalyzer(thresholds=thresholds),
+            TemporalAnalyzer(thresholds=thresholds),
             VolumeAnalyzer(),
             # SemanticAnalyzer is handled separately due to special config
         ]
@@ -75,6 +76,8 @@ class AnalysisService:
         if not corpus.emails:
             raise ValueError("Cannot analyze empty corpus")
 
+        thresholds = self.config.thresholds
+
         if progress_callback:
             progress_callback("Starting analysis...")
 
@@ -82,17 +85,17 @@ class AnalysisService:
         if progress_callback:
             progress_callback(f"Running {self._analyzers[0].name}...")
 
-        sender_analysis = SenderAnalyzer().analyze(corpus)
+        sender_analysis = SenderAnalyzer(thresholds=thresholds).analyze(corpus)
 
         if progress_callback:
             progress_callback("Running Subject Analyzer...")
 
-        subject_patterns = SubjectAnalyzer().analyze(corpus)
+        subject_patterns = SubjectAnalyzer(thresholds=thresholds).analyze(corpus)
 
         if progress_callback:
             progress_callback("Running Temporal Analyzer...")
 
-        temporal_patterns = TemporalAnalyzer().analyze(corpus)
+        temporal_patterns = TemporalAnalyzer(thresholds=thresholds).analyze(corpus)
 
         if progress_callback:
             progress_callback("Running Volume Analyzer...")
@@ -105,6 +108,7 @@ class AnalysisService:
 
         semantic_analyzer = SemanticAnalyzer(
             max_embedding_text_length=self.config.max_embedding_text_length,
+            thresholds=thresholds,
         )
         content_clusters = semantic_analyzer.analyze(
             corpus,

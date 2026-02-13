@@ -6,7 +6,11 @@ analysis results using clusters, senders, and templates.
 
 Task 5B.3: Integrates with feedback learning to apply learned patterns
 to generated categories.
+Task 2.2: Externalized magic numbers to GeneratorThresholds config.
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from src.generators.confidence_scorer import calculate_confidence
 from src.generators.name_generator import TfidfNameGenerator, score_name_quality
@@ -18,6 +22,9 @@ from src.models.category import Category, CategorySource
 from src.models.category_template import PREDEFINED_TEMPLATES
 from src.utils.logger import get_logger
 
+if TYPE_CHECKING:
+    from src.config.models import GeneratorThresholds
+
 logger = get_logger(__name__)
 
 # Threshold below which names are flagged for review
@@ -27,13 +34,22 @@ NAME_QUALITY_THRESHOLD = 0.4
 class CategoryGenerator:
     """Generate category suggestions from analysis results."""
 
-    def __init__(self, decision_logger: DecisionLogger | None = None):
+    def __init__(
+        self,
+        decision_logger: DecisionLogger | None = None,
+        thresholds: GeneratorThresholds | None = None,
+    ):
         """
         Initialize the category generator with TF-IDF name generator.
 
         Args:
             decision_logger: Optional DecisionLogger for feedback learning (Task 5B.3)
+            thresholds: Optional generator thresholds config. Uses defaults if None.
         """
+        if thresholds is None:
+            from src.config.models import GeneratorThresholds
+            thresholds = GeneratorThresholds()
+        self.thresholds = thresholds
         self._name_generator = TfidfNameGenerator()
         self._corpus_texts: list[str] = []
         self._decision_logger = decision_logger
@@ -71,8 +87,9 @@ class CategoryGenerator:
                 logger.debug(f"Created cluster-based category: {category.category_name} ({cluster.percentage:.1f}%)")
 
         # FR-023: Generate from high-volume senders
-        logger.debug("Generating categories from top senders")
-        for sender in analysis_results.sender_analysis.top_senders[:20]:  # Top 20 only
+        max_senders = self.thresholds.max_senders_for_categories
+        logger.debug(f"Generating categories from top {max_senders} senders")
+        for sender in analysis_results.sender_analysis.top_senders[:max_senders]:
             if sender.frequency_count >= min_sender_count:
                 category = self._category_from_sender(sender, total_emails)
                 all_categories.append(category)
@@ -260,14 +277,18 @@ class CategoryGenerator:
                 if j in merged_indices:
                     continue
 
-                # Check name similarity (Levenshtein distance < 3) - simplified to exact match for now
-                if self._names_similar(cat1.category_name, cat2.category_name):
-                    # Check email overlap
+                # Check name similarity using configurable threshold
+                if self._names_similar(
+                    cat1.category_name,
+                    cat2.category_name,
+                    threshold=self.thresholds.merge_name_similarity,
+                ):
+                    # Check email overlap against configurable threshold
                     overlap = self._calculate_overlap(
                         set(cat1.example_email_ids),
                         set(cat2.example_email_ids)
                     )
-                    if overlap > 0.7:  # >70% overlap
+                    if overlap > self.thresholds.merge_email_overlap:
                         similar.append(cat2)
                         merged_indices.add(j)
 
