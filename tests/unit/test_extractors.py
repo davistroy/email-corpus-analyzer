@@ -42,19 +42,14 @@ class TestCheckpointManager:
         assert manager.checkpoint_file == Path(custom_path)
 
     def test_save_checkpoint(self, tmp_path):
-        """Test saving checkpoint data to file."""
+        """Test saving checkpoint data to file (v2 compact format)."""
         checkpoint_file = tmp_path / "checkpoint.json"
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-
-        extracted_emails = [
-            {"id": "email1", "subject": "Test 1"},
-            {"id": "email2", "subject": "Test 2"}
-        ]
 
         manager.save_checkpoint(
             emails_processed=2,
             last_processed_id="email2",
-            extracted_emails=extracted_emails
+            source="hotmail",
         )
 
         # Verify file was created
@@ -64,21 +59,25 @@ class TestCheckpointManager:
         with open(checkpoint_file) as f:
             data = json.load(f)
 
+        assert data["version"] == 2
         assert data["emails_processed"] == 2
         assert data["last_processed_id"] == "email2"
         assert data["checkpoint_interval"] == 100
-        assert len(data["extracted_emails"]) == 2
+        assert data["source"] == "hotmail"
         assert "timestamp" in data
+        # v2 format should NOT contain extracted_emails
+        assert "extracted_emails" not in data
 
     def test_load_checkpoint_existing_file(self, tmp_path):
-        """Test loading existing checkpoint."""
+        """Test loading existing v2 checkpoint."""
         checkpoint_file = tmp_path / "checkpoint.json"
         checkpoint_data = {
+            "version": 2,
             "emails_processed": 50,
             "last_processed_id": "abc123",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [{"id": "abc123"}]
+            "source": "hotmail",
         }
 
         with open(checkpoint_file, "w") as f:
@@ -88,6 +87,7 @@ class TestCheckpointManager:
         loaded = manager.load_checkpoint()
 
         assert loaded is not None
+        assert loaded["version"] == 2
         assert loaded["emails_processed"] == 50
         assert loaded["last_processed_id"] == "abc123"
 
@@ -169,55 +169,182 @@ class TestCheckpointManager:
         assert checkpoint_dir.exists()
 
     def test_get_resume_point_with_checkpoint(self, tmp_path):
-        """Test getting resume point from existing checkpoint."""
+        """Test getting resume point from existing v2 checkpoint."""
         checkpoint_file = tmp_path / "checkpoint.json"
         checkpoint_data = {
+            "version": 2,
             "emails_processed": 75,
             "last_processed_id": "xyz789",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [{"id": "email1"}, {"id": "email2"}]
+            "source": "hotmail",
         }
 
         with open(checkpoint_file, "w") as f:
             json.dump(checkpoint_data, f)
 
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-        count, last_id, emails = manager.get_resume_point()
+        count, last_id = manager.get_resume_point()
 
         assert count == 75
         assert last_id == "xyz789"
-        assert len(emails) == 2
 
     def test_get_resume_point_no_checkpoint(self, tmp_path):
         """Test getting resume point when no checkpoint exists."""
         checkpoint_file = tmp_path / "nonexistent.json"
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-        count, last_id, emails = manager.get_resume_point()
+        count, last_id = manager.get_resume_point()
 
         assert count == 0
         assert last_id == ""
-        assert emails == []
 
-    def test_get_resume_point_missing_extracted_emails(self, tmp_path):
-        """Test resume point when extracted_emails key is missing."""
+    def test_get_resume_point_old_format_returns_empty(self, tmp_path):
+        """Test resume point returns empty for v1 (legacy) checkpoints."""
         checkpoint_file = tmp_path / "checkpoint.json"
         checkpoint_data = {
             "emails_processed": 10,
             "last_processed_id": "abc",
-            "timestamp": "2024-01-01T12:00:00"
-            # No extracted_emails key
+            "timestamp": "2024-01-01T12:00:00",
+            "extracted_emails": [{"id": "email1"}, {"id": "email2"}]
+            # No version field = v1 format
         }
 
         with open(checkpoint_file, "w") as f:
             json.dump(checkpoint_data, f)
 
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-        count, last_id, emails = manager.get_resume_point()
+        count, last_id = manager.get_resume_point()
 
-        assert count == 10
-        assert last_id == "abc"
-        assert emails == []
+        # Old format should be rejected, returning fresh start
+        assert count == 0
+        assert last_id == ""
+
+    def test_checkpoint_file_is_small(self, tmp_path):
+        """Test that v2 checkpoints are < 1KB regardless of emails_processed count."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        # Even for a very large number of processed emails, the file stays tiny
+        manager.save_checkpoint(
+            emails_processed=100000,
+            last_processed_id="a" * 200,  # Long ID
+            source="hotmail",
+        )
+
+        file_size = checkpoint_file.stat().st_size
+        assert file_size < 1024, f"Checkpoint file is {file_size} bytes, expected < 1024"
+
+    def test_checkpoint_version_is_present(self, tmp_path):
+        """Test that saved checkpoints include version field."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        manager.save_checkpoint(
+            emails_processed=5,
+            last_processed_id="test_id",
+            source="gmail",
+        )
+
+        with open(checkpoint_file) as f:
+            data = json.load(f)
+
+        assert "version" in data
+        assert data["version"] == 2
+
+    def test_old_format_checkpoint_rejected_on_load(self, tmp_path):
+        """Test that v1 checkpoints (with extracted_emails) are handled gracefully."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        # Write a v1 checkpoint with full email objects
+        v1_data = {
+            "emails_processed": 50,
+            "last_processed_id": "abc123",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "extracted_emails": [
+                {"id": f"email_{i}", "subject": f"Subject {i}", "body": "x" * 1000}
+                for i in range(50)
+            ]
+        }
+
+        with open(checkpoint_file, "w") as f:
+            json.dump(v1_data, f)
+
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+        loaded = manager.load_checkpoint()
+
+        # v1 format should be rejected
+        assert loaded is None
+
+    def test_checkpoint_integrity_check_negative_count(self, tmp_path):
+        """Test that checkpoints with negative emails_processed are rejected."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        invalid_data = {
+            "version": 2,
+            "emails_processed": -5,
+            "last_processed_id": "abc",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "source": "hotmail",
+        }
+
+        with open(checkpoint_file, "w") as f:
+            json.dump(invalid_data, f)
+
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+        loaded = manager.load_checkpoint()
+        assert loaded is None
+
+    def test_checkpoint_integrity_check_non_integer_count(self, tmp_path):
+        """Test that checkpoints with non-integer emails_processed are rejected."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        invalid_data = {
+            "version": 2,
+            "emails_processed": "not_a_number",
+            "last_processed_id": "abc",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "source": "hotmail",
+        }
+
+        with open(checkpoint_file, "w") as f:
+            json.dump(invalid_data, f)
+
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+        loaded = manager.load_checkpoint()
+        assert loaded is None
+
+    def test_save_checkpoint_gmail_source(self, tmp_path):
+        """Test saving checkpoint with gmail source."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        manager.save_checkpoint(
+            emails_processed=10,
+            last_processed_id="gmail_msg_10",
+            source="gmail",
+        )
+
+        with open(checkpoint_file) as f:
+            data = json.load(f)
+
+        assert data["source"] == "gmail"
+
+    def test_resume_from_v2_checkpoint_with_mock_api(self, tmp_path):
+        """Test that resume from v2 checkpoint works correctly with mocked API."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        # Save a v2 checkpoint
+        manager.save_checkpoint(
+            emails_processed=50,
+            last_processed_id="msg_50",
+            source="hotmail",
+        )
+
+        # Load and verify
+        count, last_id = manager.get_resume_point()
+        assert count == 50
+        assert last_id == "msg_50"
 
 
 class TestCLIExtractSinceLastFlag:
@@ -579,25 +706,15 @@ class TestEmailExtractorResume:
 
     @pytest.fixture
     def extractor_with_checkpoint(self, tmp_path):
-        """Create extractor with pre-existing checkpoint."""
+        """Create extractor with pre-existing v2 checkpoint."""
         checkpoint_file = tmp_path / "extraction_checkpoint.json"
         checkpoint_data = {
+            "version": 2,
             "emails_processed": 50,
             "last_processed_id": "previous_email_id",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [
-                {
-                    "id": "email1",
-                    "sender_email": "sender@example.com",
-                    "sender_name": "Sender",
-                    "sender_domain": "example.com",
-                    "subject": "Test",
-                    "body_text": "Body",
-                    "received_date": "2024-01-01T10:00:00",
-                    "has_attachments": False
-                }
-            ]
+            "source": "hotmail",
         }
 
         with open(checkpoint_file, "w") as f:
@@ -613,14 +730,14 @@ class TestEmailExtractorResume:
     def test_extract_all_resumes_from_checkpoint(
         self, mock_fetch_batch, mock_get_count, extractor_with_checkpoint
     ):
-        """Test that extraction resumes from checkpoint."""
+        """Test that extraction resumes from v2 checkpoint using skip offset."""
         mock_get_count.return_value = 100
-        mock_fetch_batch.return_value = []  # No new emails
+        mock_fetch_batch.return_value = []  # No new emails after skip
 
         result = extractor_with_checkpoint.extract_all()
 
-        # Should have the one email from checkpoint
-        # (reconstruction may fail due to date format, but process runs)
+        # v2 checkpoint: no emails reconstructed from checkpoint,
+        # extractor re-fetches using skip offset
         assert isinstance(result, ExtractionResult)
 
     def test_resume_from_checkpoint_method(self, extractor_with_checkpoint):
@@ -629,6 +746,39 @@ class TestEmailExtractorResume:
             mock_extract.return_value = MagicMock(spec=ExtractionResult)
             result = extractor_with_checkpoint.resume_from_checkpoint("path")
             mock_extract.assert_called_once()
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_old_format_checkpoint_triggers_fresh_extraction(
+        self, mock_fetch_batch, mock_get_count, tmp_path
+    ):
+        """Test that v1 (old format) checkpoint is rejected, causing fresh extraction."""
+        checkpoint_file = tmp_path / "extraction_checkpoint.json"
+        # Write a v1 checkpoint (no version field, has extracted_emails)
+        v1_data = {
+            "emails_processed": 50,
+            "last_processed_id": "old_id",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "extracted_emails": [{"id": "email1"}]
+        }
+        with open(checkpoint_file, "w") as f:
+            json.dump(v1_data, f)
+
+        extractor = EmailExtractor(
+            user_email="test@example.com",
+            checkpoint_dir=str(tmp_path)
+        )
+
+        mock_get_count.return_value = 999999
+        mock_fetch_batch.return_value = []
+
+        result = extractor.extract_all()
+
+        # Should start fresh (0 emails processed from checkpoint)
+        assert isinstance(result, ExtractionResult)
+        # The fetch should start at offset 0 (not 50)
+        mock_fetch_batch.assert_called_once_with(0, 500, "")
 
 
 class TestEmailExtractorRetryLogic:

@@ -114,19 +114,12 @@ class EmailExtractor:
         self.logger.info("Starting email extraction...")
 
         # Check for existing checkpoint
-        emails_processed, last_id, extracted_emails = self.checkpoint_manager.get_resume_point()
+        emails_processed, last_id = self.checkpoint_manager.get_resume_point()
         if emails_processed > 0:
             self.logger.info(f"Resuming from checkpoint: {emails_processed} emails already processed")
 
         failed_emails: list[ExtractionError] = []
         all_emails: list[Email] = []
-
-        # Reconstruct emails from checkpoint
-        for email_dict in extracted_emails:
-            try:
-                all_emails.append(Email(**email_dict))
-            except Exception as e:
-                self.logger.warning(f"Failed to reconstruct email from checkpoint: {e}")
 
         # Fetch message list from M365
         # NOTE: This would use M365 MCP tools - using stub for now
@@ -165,7 +158,7 @@ class EmailExtractor:
                             self.checkpoint_manager.save_checkpoint(
                                 emails_processed,
                                 email.id,
-                                [e.model_dump() for e in all_emails]
+                                source="hotmail",
                             )
 
                         # Update progress
