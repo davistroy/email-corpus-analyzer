@@ -968,29 +968,24 @@ class TestIncrementalExtraction:
             "hasAttachments": False
         }
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_only_fetches_new_emails(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+        self, extractor, existing_corpus, new_email_data
     ):
         """Test that incremental extraction only fetches emails since last extraction."""
-        mock_get_count.return_value = 1
-        mock_fetch_batch.return_value = [new_email_data]
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [[new_email_data], []]
 
-        result = extractor.extract_incremental(existing_corpus)
+            result = extractor.extract_incremental(existing_corpus)
 
-        # Should have 3 emails total (2 existing + 1 new)
-        assert result.corpus.extraction_metadata.total_emails == 3
-        assert len(result.corpus.emails) == 3
-        assert result.new_emails_count == 1
+            # Should have 3 emails total (2 existing + 1 new)
+            assert result.corpus.extraction_metadata.total_emails == 3
+            assert len(result.corpus.emails) == 3
+            assert result.new_emails_count == 1
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_deduplicates_by_message_id(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus
+        self, extractor, existing_corpus
     ):
         """Test that duplicate emails are not added (deduplication by message_id)."""
-        mock_get_count.return_value = 1
         # Return an email with ID that already exists in corpus
         duplicate_email = {
             "id": "existing_001",  # Same ID as existing email
@@ -1001,44 +996,42 @@ class TestIncrementalExtraction:
             "receivedDateTime": "2024-01-15T10:00:00Z",
             "hasAttachments": False
         }
-        mock_fetch_batch.return_value = [duplicate_email]
 
-        result = extractor.extract_incremental(existing_corpus)
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = [duplicate_email]
 
-        # Should still have 2 emails (no duplicates added)
-        assert len(result.corpus.emails) == 2
-        assert result.new_emails_count == 0
+            result = extractor.extract_incremental(existing_corpus)
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
+            # Should still have 2 emails (no duplicates added)
+            assert len(result.corpus.emails) == 2
+            assert result.new_emails_count == 0
+
     def test_extract_incremental_updates_metadata(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+        self, extractor, existing_corpus, new_email_data
     ):
         """Test that metadata is updated after incremental extraction."""
-        mock_get_count.return_value = 1
-        mock_fetch_batch.return_value = [new_email_data]
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [[new_email_data], []]
 
-        old_extraction_date = existing_corpus.extraction_metadata.last_extraction_date
-        result = extractor.extract_incremental(existing_corpus)
+            old_extraction_date = existing_corpus.extraction_metadata.last_extraction_date
+            result = extractor.extract_incremental(existing_corpus)
 
-        # Metadata should be updated
-        assert result.corpus.extraction_metadata.last_extraction_date > old_extraction_date
-        assert result.corpus.extraction_metadata.email_ids_hash != existing_corpus.extraction_metadata.email_ids_hash
+            # Metadata should be updated
+            assert result.corpus.extraction_metadata.last_extraction_date > old_extraction_date
+            assert result.corpus.extraction_metadata.email_ids_hash != existing_corpus.extraction_metadata.email_ids_hash
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_empty_result(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus
+        self, extractor, existing_corpus
     ):
         """Test incremental extraction when there are no new emails."""
-        mock_get_count.return_value = 0
-        mock_fetch_batch.return_value = []
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = []
 
-        result = extractor.extract_incremental(existing_corpus)
+            result = extractor.extract_incremental(existing_corpus)
 
-        # Should still have original 2 emails, no new ones
-        assert len(result.corpus.emails) == 2
-        assert result.new_emails_count == 0
+            # Should still have original 2 emails, no new ones
+            assert len(result.corpus.emails) == 2
+            assert result.new_emails_count == 0
 
     def test_extract_incremental_result_has_new_emails_count(self, extractor):
         """Test that IncrementalExtractionResult has new_emails_count attribute."""
@@ -1047,23 +1040,120 @@ class TestIncrementalExtraction:
         assert hasattr(IncrementalExtractionResult, '__annotations__')
         assert 'new_emails_count' in IncrementalExtractionResult.__annotations__
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_reports_statistics(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+        self, extractor, existing_corpus, new_email_data
     ):
         """Test that incremental extraction provides statistics about added emails."""
-        mock_get_count.return_value = 2
         new_email_2 = new_email_data.copy()
         new_email_2["id"] = "new_002"
-        mock_fetch_batch.return_value = [new_email_data, new_email_2]
 
-        result = extractor.extract_incremental(existing_corpus)
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [[new_email_data, new_email_2], []]
 
-        # Statistics should be correct
-        assert result.previous_count == 2  # Old corpus had 2
-        assert result.new_emails_count == 2  # Added 2 new
-        assert result.total_count == 4  # Total is now 4
+            result = extractor.extract_incremental(existing_corpus)
+
+            # Statistics should be correct
+            assert result.previous_count == 2  # Old corpus had 2
+            assert result.new_emails_count == 2  # Added 2 new
+            assert result.total_count == 4  # Total is now 4
+
+    def test_get_incremental_kwargs_returns_filter_after(
+        self, extractor, existing_corpus
+    ):
+        """Test that _get_incremental_kwargs returns filter_after from corpus metadata."""
+        kwargs = extractor._get_incremental_kwargs(existing_corpus)
+
+        assert "filter_after" in kwargs
+        assert kwargs["filter_after"] == existing_corpus.extraction_metadata.last_extraction_date
+
+    def test_get_incremental_kwargs_empty_when_no_last_date(self, extractor):
+        """Test that _get_incremental_kwargs returns empty dict when no last_extraction_date."""
+        corpus_no_date = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime(2024, 1, 1),
+                total_emails=0,
+                source="Hotmail/M365",
+                user_email="incremental@example.com",
+                last_extraction_date=None,
+            ),
+            emails=[],
+        )
+
+        kwargs = extractor._get_incremental_kwargs(corpus_no_date)
+        assert kwargs == {}
+
+    def test_fetch_incremental_batch_passes_filter_after_to_client(self, extractor):
+        """Test that _fetch_incremental_batch passes filter_after to Graph API client."""
+        filter_date = datetime(2024, 6, 15, 10, 0, 0)
+
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = [{"id": "new_msg"}]
+
+            result = extractor._fetch_incremental_batch(
+                start=0, batch_size=100, filter_after=filter_date
+            )
+
+            mock_fetch.assert_called_once_with(
+                max_results=100,
+                skip=0,
+                filter_after=filter_date,
+            )
+            assert result == [{"id": "new_msg"}]
+
+    def test_fetch_incremental_batch_no_filter_when_not_provided(self, extractor):
+        """Test that _fetch_incremental_batch passes None filter when not provided."""
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = []
+
+            extractor._fetch_incremental_batch(start=0, batch_size=50)
+
+            mock_fetch.assert_called_once_with(
+                max_results=50,
+                skip=0,
+                filter_after=None,
+            )
+
+    def test_incremental_extraction_passes_filter_to_graph_api(
+        self, extractor, existing_corpus, new_email_data
+    ):
+        """Test end-to-end: incremental extraction passes date filter to Graph API client."""
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            # First call returns new email, second call returns empty (stop)
+            mock_fetch.side_effect = [[new_email_data], []]
+
+            result = extractor.extract_incremental(existing_corpus)
+
+            # Verify the first call included filter_after
+            first_call = mock_fetch.call_args_list[0]
+            assert first_call.kwargs.get("filter_after") == existing_corpus.extraction_metadata.last_extraction_date
+
+            # New email should be added
+            assert result.new_emails_count == 1
+            assert result.total_count == 3
+
+    def test_incremental_extraction_dedup_still_works_with_filter(
+        self, extractor, existing_corpus
+    ):
+        """Test that client-side dedup still works as safety net alongside server filter."""
+        # Simulate server returning a duplicate despite the date filter
+        duplicate_email = {
+            "id": "existing_001",  # Same ID as existing email
+            "subject": "Duplicate from server",
+            "from": {"emailAddress": {"address": "dup@example.com", "name": "Dup"}},
+            "toRecipients": [{"emailAddress": {"address": "me@example.com", "name": "Me"}}],
+            "body": {"content": "<p>Dup body</p>"},
+            "receivedDateTime": "2024-01-15T10:00:00Z",
+            "hasAttachments": False,
+        }
+
+        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = [duplicate_email]
+
+            result = extractor.extract_incremental(existing_corpus)
+
+            # Despite server returning an email, dedup catches the duplicate
+            assert result.new_emails_count == 0
+            assert result.total_count == 2  # Still just the 2 original
 
 
 class TestEmailExtractorEdgeCases:

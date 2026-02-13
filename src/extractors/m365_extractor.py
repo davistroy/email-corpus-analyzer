@@ -16,6 +16,7 @@ from src.extractors.base_extractor import (
     IncrementalExtractionResult,
 )
 from src.extractors.html_parser import extract_plain_text
+from src.models.corpus import Corpus
 from src.models.email import Email
 from src.utils.logger import get_logger
 
@@ -143,6 +144,56 @@ class EmailExtractor(BaseExtractor):
         )
 
     # ── M365-specific overrides ───────────────────────────────────────
+
+    def _fetch_incremental_batch(
+        self,
+        start: int,
+        batch_size: int,
+        **kwargs,
+    ) -> list[dict]:
+        """
+        Fetch a batch for incremental extraction with server-side date filter.
+
+        Args:
+            start: Starting offset
+            batch_size: Number of emails to fetch
+            **kwargs: May contain 'filter_after' datetime for OData filtering
+
+        Returns:
+            List of raw email data dicts
+        """
+        filter_after = kwargs.get("filter_after")
+        self.logger.debug(
+            f"Fetching incremental M365 batch: start={start}, "
+            f"batch_size={batch_size}, filter_after={filter_after}"
+        )
+
+        return self.mcp_client.fetch_emails(
+            max_results=batch_size,
+            skip=start,
+            filter_after=filter_after,
+        )
+
+    def _get_incremental_kwargs(self, existing_corpus: Corpus) -> dict:
+        """
+        Build M365-specific keyword arguments for incremental batch fetching.
+
+        Uses the last_extraction_date from the existing corpus to construct
+        an OData date filter via the filter_after parameter.
+
+        Args:
+            existing_corpus: Existing corpus with metadata
+
+        Returns:
+            Dict with 'filter_after' key for Graph API date filtering
+        """
+        since_date = existing_corpus.extraction_metadata.last_extraction_date
+        if since_date:
+            self.logger.info(
+                f"Fetching M365 messages received after: {since_date.isoformat()}"
+            )
+            return {"filter_after": since_date}
+        return {}
 
     def _get_total_email_count(self) -> int:
         """

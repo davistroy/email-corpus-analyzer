@@ -10,6 +10,7 @@ Authentication:
     - Token cache: ~/.email-analyzer/ms_token_cache.json
 """
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -189,6 +190,7 @@ class GraphAPIClient:
         self,
         max_results: int = 500,
         skip: int = 0,
+        filter_after: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """
         Fetch emails from inbox via Microsoft Graph /me/messages.
@@ -198,6 +200,8 @@ class GraphAPIClient:
         Args:
             max_results: Maximum emails to return
             skip: Number of emails to skip (pagination)
+            filter_after: If provided, only fetch emails received after this datetime
+                          (adds OData $filter=receivedDateTime gt ...)
 
         Returns:
             List of message dicts in Microsoft Graph format
@@ -210,7 +214,7 @@ class GraphAPIClient:
         # Graph API caps $top at 999 per request
         page_size = min(max_results, 999)
 
-        params = {
+        params: dict[str, Any] = {
             "$top": page_size,
             "$skip": skip,
             "$select": (
@@ -220,6 +224,12 @@ class GraphAPIClient:
             ),
             "$orderby": "receivedDateTime DESC",
         }
+
+        # Server-side date filter for incremental extraction
+        if filter_after is not None:
+            iso_date = filter_after.strftime("%Y-%m-%dT%H:%M:%SZ")
+            params["$filter"] = f"receivedDateTime gt {iso_date}"
+            logger.debug(f"Applying server-side filter: receivedDateTime gt {iso_date}")
 
         logger.debug(f"Fetching emails: skip={skip}, top={page_size}")
 

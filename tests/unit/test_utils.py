@@ -3,7 +3,7 @@ Unit tests for utility modules.
 
 Tests cover:
 - src/utils/paths.py - PathConfig class
-- src/utils/file_manager.py - save_json, load_json, ensure_output_dir
+- src/utils/file_manager.py - save_json, load_json, ensure_output_dir, atomic_write, atomic_write_text
 - src/utils/progress.py - progress tracking utilities
 - src/utils/logger.py - logging setup and error logging
 """
@@ -17,6 +17,8 @@ import pytest
 
 from src.utils.paths import PathConfig, get_output_dir, set_output_dir, ensure_output_dir
 from src.utils.file_manager import (
+    atomic_write,
+    atomic_write_text,
     save_json,
     load_json,
     ensure_output_dir as fm_ensure_output_dir,
@@ -516,6 +518,210 @@ class TestFileManagerEnsureOutputDir:
         result2 = fm_ensure_output_dir(custom_dir)
 
         assert result1 == result2
+
+
+class TestAtomicWrite:
+    """Test cases for atomic_write function (Work Item 3.4)."""
+
+    def test_atomic_write_creates_file_with_text(self, tmp_path):
+        """Test that atomic_write creates a file with text content."""
+        file_path = tmp_path / "test.txt"
+
+        atomic_write(file_path, "hello world")
+
+        assert file_path.exists()
+        assert file_path.read_text(encoding="utf-8") == "hello world"
+
+    def test_atomic_write_creates_file_with_bytes(self, tmp_path):
+        """Test that atomic_write creates a file with bytes content."""
+        file_path = tmp_path / "test.bin"
+        content = b"\x00\x01\x02\x03"
+
+        atomic_write(file_path, content)
+
+        assert file_path.exists()
+        assert file_path.read_bytes() == content
+
+    def test_atomic_write_no_tmp_file_on_success(self, tmp_path):
+        """Test that .tmp file is cleaned up after successful write."""
+        file_path = tmp_path / "test.json"
+
+        atomic_write(file_path, '{"key": "value"}')
+
+        tmp_file = file_path.with_suffix(".json.tmp")
+        assert not tmp_file.exists()
+        assert file_path.exists()
+
+    def test_atomic_write_preserves_existing_on_failure(self, tmp_path):
+        """Test that existing file is NOT corrupted when write fails.
+
+        This is the core guarantee: if the write process fails (e.g. disk
+        full, serialization error, interrupt), the original file must remain
+        intact.
+        """
+        file_path = tmp_path / "important.json"
+        original_content = '{"original": "data"}'
+        file_path.write_text(original_content, encoding="utf-8")
+
+        # Force a failure during the write by making the tmp directory read-only
+        # Actually, we'll simulate by patching os.replace to fail
+        with patch("src.utils.file_manager.os.replace", side_effect=OSError("Simulated disk error")):
+            with pytest.raises(OSError, match="Simulated disk error"):
+                atomic_write(file_path, '{"corrupted": "data that should not appear"}')
+
+        # Original file must be unchanged
+        assert file_path.read_text(encoding="utf-8") == original_content
+
+    def test_atomic_write_cleans_up_tmp_on_failure(self, tmp_path):
+        """Test that .tmp file is removed when write fails."""
+        file_path = tmp_path / "test.json"
+        tmp_file = file_path.with_suffix(".json.tmp")
+
+        with patch("src.utils.file_manager.os.replace", side_effect=OSError("fail")):
+            with pytest.raises(OSError):
+                atomic_write(file_path, "content")
+
+        assert not tmp_file.exists()
+
+    def test_atomic_write_overwrites_existing_file(self, tmp_path):
+        """Test that atomic_write replaces existing file content."""
+        file_path = tmp_path / "test.json"
+        file_path.write_text("old content", encoding="utf-8")
+
+        atomic_write(file_path, "new content")
+
+        assert file_path.read_text(encoding="utf-8") == "new content"
+
+    def test_atomic_write_with_string_path(self, tmp_path):
+        """Test atomic_write works with string paths."""
+        file_path = str(tmp_path / "string_path.txt")
+
+        atomic_write(file_path, "string path content")
+
+        assert Path(file_path).read_text(encoding="utf-8") == "string path content"
+
+    def test_atomic_write_unicode_content(self, tmp_path):
+        """Test atomic_write handles Unicode correctly."""
+        file_path = tmp_path / "unicode.txt"
+        content = "Hello \u4e16\u754c caf\u00e9 \u2603"
+
+        atomic_write(file_path, content)
+
+        assert file_path.read_text(encoding="utf-8") == content
+
+    def test_atomic_write_large_content(self, tmp_path):
+        """Test atomic_write with large content (simulates real corpus files)."""
+        file_path = tmp_path / "large.json"
+        # Create ~1MB of JSON content
+        data = {"emails": [{"id": f"email_{i}", "body": "x" * 500} for i in range(1000)]}
+        content = json.dumps(data, indent=2)
+
+        atomic_write(file_path, content)
+
+        loaded = json.loads(file_path.read_text(encoding="utf-8"))
+        assert len(loaded["emails"]) == 1000
+
+    def test_atomic_write_empty_content(self, tmp_path):
+        """Test atomic_write with empty string content."""
+        file_path = tmp_path / "empty.txt"
+
+        atomic_write(file_path, "")
+
+        assert file_path.exists()
+        assert file_path.read_text(encoding="utf-8") == ""
+
+
+class TestAtomicWriteText:
+    """Test cases for atomic_write_text function (Work Item 3.4)."""
+
+    def test_atomic_write_text_creates_file(self, tmp_path):
+        """Test that atomic_write_text creates a file."""
+        file_path = tmp_path / "test.json"
+
+        atomic_write_text(file_path, '{"test": true}')
+
+        assert file_path.exists()
+        assert json.loads(file_path.read_text(encoding="utf-8")) == {"test": True}
+
+    def test_atomic_write_text_sets_permissions(self, tmp_path):
+        """Test that atomic_write_text sets 0600 permissions."""
+        file_path = tmp_path / "secure.json"
+
+        atomic_write_text(file_path, "secure data")
+
+        if os.name != "nt":  # Skip on Windows
+            mode = os.stat(file_path).st_mode & 0o777
+            assert mode == 0o600
+
+    def test_atomic_write_text_preserves_existing_on_failure(self, tmp_path):
+        """Test that existing file is preserved when atomic_write_text fails."""
+        file_path = tmp_path / "important.json"
+        original = '{"important": "data"}'
+        file_path.write_text(original, encoding="utf-8")
+
+        with patch("src.utils.file_manager.os.replace", side_effect=OSError("disk full")):
+            with pytest.raises(OSError):
+                atomic_write_text(file_path, '{"bad": "data"}')
+
+        assert file_path.read_text(encoding="utf-8") == original
+
+
+class TestSaveJsonAtomic:
+    """Test that save_json uses atomic writes (Work Item 3.4)."""
+
+    def test_save_json_is_atomic_preserves_on_failure(self, tmp_path):
+        """Test save_json preserves existing file on write failure.
+
+        This verifies the atomic write integration: if save_json fails
+        mid-write, the original file must not be corrupted.
+        """
+        file_path = tmp_path / "data.json"
+        original_data = {"version": 1, "data": "original"}
+        save_json(original_data, file_path)
+
+        # Verify original was written
+        assert load_json(file_path) == original_data
+
+        # Now force a failure during the atomic replace
+        with patch("src.utils.file_manager.os.replace", side_effect=OSError("disk error")):
+            with pytest.raises(OSError):
+                save_json({"version": 2, "data": "should not appear"}, file_path)
+
+        # Original must survive
+        assert load_json(file_path) == original_data
+
+    def test_save_json_no_tmp_file_left(self, tmp_path):
+        """Test that save_json does not leave .tmp files behind."""
+        file_path = tmp_path / "clean.json"
+
+        save_json({"clean": True}, file_path)
+
+        tmp_file = file_path.with_suffix(".json.tmp")
+        assert not tmp_file.exists()
+
+    def test_save_json_no_tmp_file_on_failure(self, tmp_path):
+        """Test that save_json cleans up .tmp file on failure."""
+        file_path = tmp_path / "fail.json"
+        tmp_file = file_path.with_suffix(".json.tmp")
+
+        with patch("src.utils.file_manager.os.replace", side_effect=OSError("fail")):
+            with pytest.raises(OSError):
+                save_json({"data": "test"}, file_path)
+
+        assert not tmp_file.exists()
+
+    def test_save_json_roundtrip_still_works(self, tmp_path):
+        """Test save_json/load_json roundtrip works with atomic writes."""
+        file_path = tmp_path / "roundtrip.json"
+        data = {
+            "categories": [{"id": 1, "name": "Test"}],
+            "metadata": {"version": "2.0"}
+        }
+
+        save_json(data, file_path)
+        loaded = load_json(file_path)
+
+        assert loaded == data
 
 
 class TestProgressTracker:

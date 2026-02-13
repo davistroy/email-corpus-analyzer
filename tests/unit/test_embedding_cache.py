@@ -3,15 +3,24 @@ Unit tests for Embedding Cache module (Task 4B.3).
 
 Tests the embedding cache functionality for storing and retrieving
 email embeddings efficiently using numpy compressed format.
+
+Work Item 3.1: Added tests for cache versioning / metadata sidecar.
 """
+import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
-from src.cache.embedding_cache import EmbeddingCache, CacheStatistics
+from src.cache.embedding_cache import (
+    DEFAULT_EMBEDDING_DIM,
+    DEFAULT_MAX_TEXT_LENGTH,
+    DEFAULT_MODEL_NAME,
+    CacheStatistics,
+    EmbeddingCache,
+)
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 
@@ -53,13 +62,23 @@ class TestEmbeddingCacheInit:
         assert cache.size == 0
 
     def test_init_loads_existing_cache(self, tmp_path):
-        """Test that existing cache file is loaded on init."""
+        """Test that existing cache file with valid metadata is loaded on init."""
         cache_path = tmp_path / "embeddings_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
 
         # Create a cache file with data
         embeddings = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
         email_ids = np.array(["email_1", "email_2"])
         np.savez_compressed(cache_path, embeddings=embeddings, email_ids=email_ids)
+
+        # Create matching metadata sidecar
+        metadata = {
+            "model_name": DEFAULT_MODEL_NAME,
+            "embedding_dim": DEFAULT_EMBEDDING_DIM,
+            "max_text_length": DEFAULT_MAX_TEXT_LENGTH,
+            "created_at": "2024-01-15T00:00:00+00:00",
+        }
+        meta_path.write_text(json.dumps(metadata), encoding="utf-8")
 
         # Load cache
         cache = EmbeddingCache(cache_path=cache_path)
@@ -309,11 +328,21 @@ class TestCacheLoadSave:
     def test_load_handles_corrupted_file(self, tmp_path):
         """Test that loading corrupted file starts with empty cache."""
         cache_path = tmp_path / "corrupted.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
 
-        # Write corrupted data
+        # Write corrupted npz data
         cache_path.write_bytes(b"not valid npz data")
 
-        # Should not raise, just start empty
+        # Write valid metadata so we reach the npz load attempt
+        metadata = {
+            "model_name": DEFAULT_MODEL_NAME,
+            "embedding_dim": DEFAULT_EMBEDDING_DIM,
+            "max_text_length": DEFAULT_MAX_TEXT_LENGTH,
+            "created_at": "2024-01-15T00:00:00+00:00",
+        }
+        meta_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+        # Should not raise, just start empty and clean up corrupt files
         cache = EmbeddingCache(cache_path=cache_path)
         assert cache.size == 0
 
@@ -375,3 +404,301 @@ class TestCacheWithCorpus:
         assert removed_count == 1
         assert cache.size == 3
         assert cache.contains("deleted_email") is False
+
+
+def _write_npz_with_metadata(
+    cache_path: Path,
+    embeddings: np.ndarray,
+    email_ids: list[str],
+    model_name: str = DEFAULT_MODEL_NAME,
+    embedding_dim: int = DEFAULT_EMBEDDING_DIM,
+    max_text_length: int = DEFAULT_MAX_TEXT_LENGTH,
+) -> None:
+    """Helper to write a cache .npz + .meta.json pair on disk."""
+    np.savez_compressed(
+        cache_path,
+        embeddings=embeddings,
+        email_ids=np.array(email_ids, dtype=object),
+    )
+    meta_path = cache_path.with_suffix(".meta.json")
+    metadata = {
+        "model_name": model_name,
+        "embedding_dim": embedding_dim,
+        "max_text_length": max_text_length,
+        "created_at": "2024-01-15T00:00:00+00:00",
+    }
+    meta_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+
+class TestCacheVersioning:
+    """Test cases for cache versioning via metadata sidecar (Work Item 3.1)."""
+
+    # ---- Normal loading with matching metadata ----
+
+    def test_matching_metadata_loads_cache(self, tmp_path):
+        """Cache with matching metadata should load normally."""
+        cache_path = tmp_path / "test_cache.npz"
+        embeddings = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+
+        _write_npz_with_metadata(cache_path, embeddings, ["e1", "e2"])
+
+        cache = EmbeddingCache(cache_path=cache_path)
+        assert cache.size == 2
+        assert np.allclose(cache.get("e1"), [0.1, 0.2, 0.3])
+
+    def test_save_creates_metadata_sidecar(self, tmp_path):
+        """save() should write a .meta.json sidecar alongside .npz."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+
+        cache = EmbeddingCache(cache_path=cache_path, model_name="my-model",
+                               embedding_dim=768, max_text_length=2000)
+        cache.add(["e1"], np.random.rand(1, 768))
+        cache.save()
+
+        assert meta_path.exists()
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert metadata["model_name"] == "my-model"
+        assert metadata["embedding_dim"] == 768
+        assert metadata["max_text_length"] == 2000
+        assert "created_at" in metadata
+
+    def test_metadata_path_property(self, tmp_path):
+        """metadata_path should return .meta.json derived from .npz path."""
+        cache_path = tmp_path / "embeddings_cache.npz"
+        cache = EmbeddingCache(cache_path=cache_path)
+        assert cache.metadata_path == tmp_path / "embeddings_cache.meta.json"
+
+    def test_roundtrip_with_metadata(self, tmp_path):
+        """Full save/load roundtrip should preserve data when metadata matches."""
+        cache_path = tmp_path / "rt_cache.npz"
+        model = "test-model/v1"
+        dim = 256
+
+        cache1 = EmbeddingCache(cache_path=cache_path, model_name=model,
+                                embedding_dim=dim, max_text_length=1000)
+        cache1.add(["a", "b"], np.array([[1.0, 2.0], [3.0, 4.0]]))
+        cache1.save()
+
+        cache2 = EmbeddingCache(cache_path=cache_path, model_name=model,
+                                embedding_dim=dim, max_text_length=1000)
+        assert cache2.size == 2
+        assert np.allclose(cache2.get("a"), [1.0, 2.0])
+        assert np.allclose(cache2.get("b"), [3.0, 4.0])
+
+    # ---- Model name mismatch invalidation ----
+
+    def test_model_name_mismatch_invalidates_cache(self, tmp_path):
+        """Changing model_name should invalidate the cache."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+        embeddings = np.random.rand(3, 384)
+
+        _write_npz_with_metadata(
+            cache_path, embeddings, ["e1", "e2", "e3"],
+            model_name="old-model/v1"
+        )
+
+        # Load with different model name
+        cache = EmbeddingCache(
+            cache_path=cache_path,
+            model_name="new-model/v2"
+        )
+
+        assert cache.size == 0
+        assert not cache_path.exists()
+        assert not meta_path.exists()
+
+    # ---- Embedding dimension mismatch invalidation ----
+
+    def test_embedding_dim_mismatch_invalidates_cache(self, tmp_path):
+        """Changing embedding_dim should invalidate the cache."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+        embeddings = np.random.rand(2, 384)
+
+        _write_npz_with_metadata(
+            cache_path, embeddings, ["e1", "e2"],
+            embedding_dim=384
+        )
+
+        # Load with different dimension
+        cache = EmbeddingCache(
+            cache_path=cache_path,
+            embedding_dim=1024
+        )
+
+        assert cache.size == 0
+        assert not cache_path.exists()
+        assert not meta_path.exists()
+
+    # ---- Max text length mismatch invalidation ----
+
+    def test_max_text_length_mismatch_invalidates_cache(self, tmp_path):
+        """Changing max_text_length should invalidate the cache."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+        embeddings = np.random.rand(2, 384)
+
+        _write_npz_with_metadata(
+            cache_path, embeddings, ["e1", "e2"],
+            max_text_length=1500
+        )
+
+        # Load with different text length
+        cache = EmbeddingCache(
+            cache_path=cache_path,
+            max_text_length=3000
+        )
+
+        assert cache.size == 0
+        assert not cache_path.exists()
+        assert not meta_path.exists()
+
+    # ---- Old cache without metadata sidecar ----
+
+    def test_old_cache_without_metadata_starts_fresh(self, tmp_path):
+        """Old cache .npz without .meta.json should be treated as invalid."""
+        cache_path = tmp_path / "old_cache.npz"
+
+        # Write only the .npz -- no sidecar
+        embeddings = np.array([[0.1, 0.2], [0.3, 0.4]])
+        np.savez_compressed(
+            cache_path,
+            embeddings=embeddings,
+            email_ids=np.array(["e1", "e2"], dtype=object),
+        )
+
+        cache = EmbeddingCache(cache_path=cache_path)
+
+        assert cache.size == 0
+        # The old .npz should be deleted
+        assert not cache_path.exists()
+
+    def test_old_cache_without_metadata_logs_warning(self, tmp_path, caplog):
+        """Old cache without metadata should emit a warning."""
+        cache_path = tmp_path / "old_cache.npz"
+        np.savez_compressed(
+            cache_path,
+            embeddings=np.random.rand(1, 3),
+            email_ids=np.array(["e1"], dtype=object),
+        )
+
+        import logging
+        with caplog.at_level(logging.WARNING):
+            EmbeddingCache(cache_path=cache_path)
+
+        assert any("metadata sidecar" in msg for msg in caplog.messages)
+
+    # ---- Mismatch logs warning ----
+
+    def test_model_mismatch_logs_warning(self, tmp_path, caplog):
+        """Model name mismatch should log a warning about the change."""
+        cache_path = tmp_path / "test_cache.npz"
+        _write_npz_with_metadata(
+            cache_path, np.random.rand(1, 3), ["e1"],
+            model_name="old-model"
+        )
+
+        import logging
+        with caplog.at_level(logging.WARNING):
+            EmbeddingCache(cache_path=cache_path, model_name="new-model")
+
+        assert any("Embedding model changed" in msg for msg in caplog.messages)
+
+    def test_text_length_mismatch_logs_warning(self, tmp_path, caplog):
+        """Max text length mismatch should log a warning."""
+        cache_path = tmp_path / "test_cache.npz"
+        _write_npz_with_metadata(
+            cache_path, np.random.rand(1, 3), ["e1"],
+            max_text_length=1500
+        )
+
+        import logging
+        with caplog.at_level(logging.WARNING):
+            EmbeddingCache(cache_path=cache_path, max_text_length=2000)
+
+        assert any("Max text length changed" in msg for msg in caplog.messages)
+
+    def test_dim_mismatch_logs_warning(self, tmp_path, caplog):
+        """Embedding dimension mismatch should log a warning."""
+        cache_path = tmp_path / "test_cache.npz"
+        _write_npz_with_metadata(
+            cache_path, np.random.rand(1, 3), ["e1"],
+            embedding_dim=384
+        )
+
+        import logging
+        with caplog.at_level(logging.WARNING):
+            EmbeddingCache(cache_path=cache_path, embedding_dim=768)
+
+        assert any("Embedding dimension changed" in msg for msg in caplog.messages)
+
+    # ---- Corrupted metadata sidecar ----
+
+    def test_corrupted_metadata_sidecar_starts_fresh(self, tmp_path):
+        """Corrupted .meta.json should be treated as missing metadata."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+
+        embeddings = np.random.rand(2, 3)
+        np.savez_compressed(
+            cache_path,
+            embeddings=embeddings,
+            email_ids=np.array(["e1", "e2"], dtype=object),
+        )
+        meta_path.write_text("{{not valid json}", encoding="utf-8")
+
+        cache = EmbeddingCache(cache_path=cache_path)
+        assert cache.size == 0
+
+    # ---- Cache files cleaned up after invalidation ----
+
+    def test_invalidation_removes_both_files(self, tmp_path):
+        """After invalidation, both .npz and .meta.json should be deleted."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+
+        _write_npz_with_metadata(
+            cache_path, np.random.rand(2, 3), ["e1", "e2"],
+            model_name="old-model"
+        )
+        assert cache_path.exists()
+        assert meta_path.exists()
+
+        # Trigger invalidation via model mismatch
+        EmbeddingCache(cache_path=cache_path, model_name="new-model")
+
+        assert not cache_path.exists()
+        assert not meta_path.exists()
+
+    # ---- Save after invalidation creates fresh metadata ----
+
+    def test_save_after_invalidation_creates_new_metadata(self, tmp_path):
+        """After cache invalidation, saving creates correct new metadata."""
+        cache_path = tmp_path / "test_cache.npz"
+        meta_path = cache_path.with_suffix(".meta.json")
+
+        _write_npz_with_metadata(
+            cache_path, np.random.rand(2, 3), ["e1", "e2"],
+            model_name="old-model"
+        )
+
+        # Invalidate via model change
+        cache = EmbeddingCache(
+            cache_path=cache_path,
+            model_name="new-model",
+            embedding_dim=512,
+            max_text_length=2000,
+        )
+        assert cache.size == 0
+
+        # Add new data and save
+        cache.add(["x1"], np.random.rand(1, 512))
+        cache.save()
+
+        assert meta_path.exists()
+        metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+        assert metadata["model_name"] == "new-model"
+        assert metadata["embedding_dim"] == 512
+        assert metadata["max_text_length"] == 2000

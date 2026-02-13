@@ -299,47 +299,63 @@ class GmailClient:
         }
 
     def _extract_body(self, payload: dict) -> str:
-        """Extract HTML or plain text body from Gmail message payload."""
-        # Direct body on simple messages
+        """Extract HTML or plain text body from Gmail message payload.
+
+        Delegates to a recursive helper that walks arbitrarily nested
+        MIME structures (multipart/mixed -> multipart/alternative -> text/html, etc.).
+        """
+        html_parts: list[str] = []
+        text_parts: list[str] = []
+        self._extract_body_recursive(payload, html_parts, text_parts, depth=0, max_depth=10)
+
+        # Prefer HTML; fall back to plain text
+        if html_parts:
+            return html_parts[0]
+        if text_parts:
+            return text_parts[0]
+
+        # Last resort: top-level body data regardless of MIME type
         body_data = payload.get("body", {}).get("data")
+        if body_data:
+            return base64.urlsafe_b64decode(body_data).decode("utf-8", errors="replace")
+
+        return ""
+
+    def _extract_body_recursive(
+        self,
+        payload: dict,
+        html_parts: list[str],
+        text_parts: list[str],
+        depth: int = 0,
+        max_depth: int = 10,
+    ) -> None:
+        """Recursively walk a MIME payload tree collecting text bodies.
+
+        Args:
+            payload: A Gmail API payload or part dict.
+            html_parts: Accumulator for decoded text/html bodies.
+            text_parts: Accumulator for decoded text/plain bodies.
+            depth: Current recursion depth.
+            max_depth: Maximum recursion depth to prevent stack overflow
+                       on malformed messages.
+        """
+        if depth > max_depth:
+            return
+
         mime_type = payload.get("mimeType", "")
+        body_data = payload.get("body", {}).get("data")
 
-        if body_data and "html" in mime_type:
-            return base64.urlsafe_b64decode(body_data).decode("utf-8", errors="replace")
+        # Leaf node with data
+        if body_data:
+            decoded = base64.urlsafe_b64decode(body_data).decode("utf-8", errors="replace")
+            if "html" in mime_type:
+                html_parts.append(decoded)
+            elif "plain" in mime_type:
+                text_parts.append(decoded)
 
-        # Multipart messages - look for html first, then plain text
-        parts = payload.get("parts", [])
-        html_body = ""
-        text_body = ""
-
-        for part in parts:
-            part_mime = part.get("mimeType", "")
-            part_data = part.get("body", {}).get("data")
-
-            if part_data:
-                decoded = base64.urlsafe_b64decode(part_data).decode("utf-8", errors="replace")
-                if "html" in part_mime:
-                    html_body = decoded
-                elif "plain" in part_mime:
-                    text_body = decoded
-
-            # Handle nested multipart
-            nested_parts = part.get("parts", [])
-            for nested in nested_parts:
-                nested_mime = nested.get("mimeType", "")
-                nested_data = nested.get("body", {}).get("data")
-                if nested_data:
-                    decoded = base64.urlsafe_b64decode(nested_data).decode("utf-8", errors="replace")
-                    if "html" in nested_mime:
-                        html_body = decoded
-                    elif "plain" in nested_mime:
-                        text_body = decoded
-
-        # If we have plain text at the top level with no parts
-        if body_data and not html_body and not text_body:
-            return base64.urlsafe_b64decode(body_data).decode("utf-8", errors="replace")
-
-        return html_body or text_body
+        # Recurse into child parts
+        for part in payload.get("parts", []):
+            self._extract_body_recursive(part, html_parts, text_parts, depth + 1, max_depth)
 
     @staticmethod
     def _parse_email_header(header: str) -> tuple[str, str]:

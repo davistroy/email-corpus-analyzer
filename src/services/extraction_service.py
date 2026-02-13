@@ -278,15 +278,20 @@ class ExtractionService:
 
     def save_corpus(self, corpus: Corpus, output_path: Path) -> None:
         """
-        Save corpus to file.
+        Save corpus to file atomically.
+
+        Uses atomic_write_text to ensure the file is either fully written or
+        not modified at all. An interrupted write cannot corrupt an existing file.
 
         Args:
             corpus: Corpus to save
             output_path: Path to save corpus JSON
         """
+        from src.utils.file_manager import atomic_write_text
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(corpus.model_dump_json(indent=2))
-        logger.info(f"Saved corpus to {output_path}")
+        atomic_write_text(output_path, corpus.model_dump_json(indent=2))
+        logger.info(f"Saved corpus to {output_path} (atomic)")
 
 
 __all__ = ["ExtractionService"]

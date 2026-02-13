@@ -623,11 +623,12 @@ class TestCmdAnalyze:
 class TestCmdSuggest:
     """Test cases for cmd_suggest() function."""
 
+    @patch("src.cli.atomic_write_text")
     @patch("src.cli.save_json")
     @patch("src.cli.load_json")
     @patch("src.cli.PathConfig")
     @patch("src.cli.logger")
-    def test_cmd_suggest_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_suggest_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json, mock_atomic_write_text):
         """Test successful category suggestion generation."""
         from src.cli import cmd_suggest
 
@@ -712,13 +713,14 @@ class TestCmdSuggest:
 
         assert result == 1
 
+    @patch("src.cli.atomic_write_text")
     @patch("src.cli.save_json")
     @patch("src.cli.load_json")
     @patch("src.cli.PathConfig")
     @patch("src.cli.logger")
     @patch("src.generators.category_generator.CategoryGenerator")
     @patch("src.models.analysis_results.AnalysisResults")
-    def test_cmd_suggest_with_custom_paths(self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json, mock_save):
+    def test_cmd_suggest_with_custom_paths(self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json, mock_save, mock_atomic_write_text):
         """Test suggestion with custom analysis and output paths."""
         from src.cli import cmd_suggest
 
@@ -770,13 +772,12 @@ class TestCmdSuggest:
         mock_gen.generate_report.return_value = ""
         mock_gen_class.return_value = mock_gen
 
-        with patch("builtins.open", mock_open()):
-            result = cmd_suggest(args)
+        result = cmd_suggest(args)
 
-            mock_load_json.assert_called_once_with(Path("/custom/analysis.json"))
-            # Verify custom suggestions path is used
-            call_args = mock_save.call_args
-            assert call_args[0][1] == Path("/custom/suggestions.json")
+        mock_load_json.assert_called_once_with(Path("/custom/analysis.json"))
+        # Verify custom suggestions path is used
+        call_args = mock_save.call_args
+        assert call_args[0][1] == Path("/custom/suggestions.json")
 
     @patch("src.cli.load_json")
     @patch("src.cli.PathConfig")
@@ -1367,11 +1368,12 @@ class TestEmailProcessorCLIAnalyze:
 class TestEmailProcessorCLISuggest:
     """Test cases for EmailProcessorCLI.suggest() method."""
 
+    @patch("src.main.atomic_write_text")
     @patch("src.main.save_json")
     @patch("src.main.load_json")
     @patch("src.main.ensure_output_dir")
     @patch("src.main.logger")
-    def test_suggest_success(self, mock_logger, mock_ensure, mock_load, mock_save):
+    def test_suggest_success(self, mock_logger, mock_ensure, mock_load, mock_save, mock_atomic_write_text):
         """Test successful suggestion generation."""
         from src.main import EmailProcessorCLI
 
@@ -1402,10 +1404,9 @@ class TestEmailProcessorCLISuggest:
                 mock_gen.generate_report.return_value = "# Report"
                 mock_gen_class.return_value = mock_gen
 
-                with patch("builtins.open", mock_open()):
-                    result = cli.suggest()
+                result = cli.suggest()
 
-                    assert result is True
+                assert result is True
 
     @patch("src.main.load_json")
     @patch("src.main.ensure_output_dir")

@@ -328,3 +328,41 @@ class M365AuthError(ExtractionError):
             recovery_hint=hint,
             context=context or {}
         )
+
+
+# =============================================================================
+# Export-related exceptions
+# =============================================================================
+
+
+class ExportError(EmailAnalyzerError):
+    """
+    Raised when export operations fail.
+
+    Occurs when template files are missing, output paths
+    are invalid, or rendering fails.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        recovery_hint: str | None = None,
+        context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize export error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context (e.g., template path, output path)
+        """
+        hint = recovery_hint or (
+            "Check the export configuration and try again. "
+            "Use --verbose for more details."
+        )
+        super().__init__(
+            message=message,
+            recovery_hint=hint,
+            context=context or {}
+        )

@@ -33,7 +33,7 @@ from src.config.loader import (
     load_config,
     show_resolved_config,
 )
-from src.utils.file_manager import load_json, save_json
+from src.utils.file_manager import atomic_write_text, load_json, save_json
 from src.utils.logger import get_logger
 from src.utils.paths import PathConfig
 
@@ -1272,10 +1272,10 @@ def cmd_suggest(args: argparse.Namespace) -> int:
             suggestions_path
         )
 
-        # Generate markdown report
+        # Generate markdown report (atomic write to prevent corruption)
         report_path = PathConfig.get_suggestions_report_path()
         report = generator.generate_report(categories)
-        report_path.write_text(report, encoding='utf-8')
+        atomic_write_text(report_path, report)
 
         duration = time.time() - start_time
 

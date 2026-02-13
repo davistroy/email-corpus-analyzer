@@ -5,15 +5,18 @@ Tests cover:
 - CSV export functionality with configurable delimiters
 - HTML report generation with inline CSS
 - UTF-8 BOM handling for Excel compatibility
+- Template validation and error handling
 
 Uses TDD approach - tests written first before implementation.
 """
 import csv
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from src.exceptions import ExportError
 from src.models.category import Category, CategorySource
 
 
@@ -478,6 +481,67 @@ class TestHtmlExporter:
 
         assert "Caf\u00e9 Notifications" in content
         assert 'charset="utf-8"' in content.lower() or "charset=utf-8" in content.lower()
+
+    def test_export_html_missing_template_raises_export_error(
+        self, sample_categories, temp_output_dir
+    ):
+        """Test that missing template file raises ExportError with clear message."""
+        from src.exporters.html_exporter import (
+            TEMPLATE_DIR,
+            TEMPLATE_NAME,
+            export_categories_to_html,
+        )
+
+        output_path = temp_output_dir / "report.html"
+        expected_path = str(TEMPLATE_DIR / TEMPLATE_NAME)
+
+        with patch(
+            "src.exporters.html_exporter.TEMPLATE_DIR",
+            Path(temp_output_dir / "nonexistent_templates"),
+        ):
+            with pytest.raises(ExportError, match="Template not found at"):
+                export_categories_to_html(sample_categories, output_path)
+
+    def test_export_html_missing_template_error_message_includes_path(
+        self, sample_categories, temp_output_dir
+    ):
+        """Test that ExportError message includes the template path and recovery instructions."""
+        from src.exporters.html_exporter import export_categories_to_html
+
+        output_path = temp_output_dir / "report.html"
+        fake_template_dir = temp_output_dir / "nonexistent_templates"
+
+        with patch(
+            "src.exporters.html_exporter.TEMPLATE_DIR",
+            fake_template_dir,
+        ):
+            with pytest.raises(ExportError) as exc_info:
+                export_categories_to_html(sample_categories, output_path)
+
+            error = exc_info.value
+            assert "Template not found at" in error.message
+            assert "Reinstall package or check installation" in error.message
+            assert error.recovery_hint is not None
+            assert "Reinstall" in error.recovery_hint
+
+    def test_export_html_template_file_missing_but_dir_exists(
+        self, sample_categories, temp_output_dir
+    ):
+        """Test ExportError when template directory exists but template file is missing."""
+        from src.exporters.html_exporter import export_categories_to_html
+
+        # Create an empty template directory (no template file inside)
+        empty_template_dir = temp_output_dir / "empty_templates"
+        empty_template_dir.mkdir()
+
+        output_path = temp_output_dir / "report.html"
+
+        with patch(
+            "src.exporters.html_exporter.TEMPLATE_DIR",
+            empty_template_dir,
+        ):
+            with pytest.raises(ExportError, match="Template not found at"):
+                export_categories_to_html(sample_categories, output_path)
 
 
 # ============================================================================
