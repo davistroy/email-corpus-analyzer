@@ -3,10 +3,11 @@ Unit tests for Track 8A: Thread Analyzer.
 
 Tests the thread detection analyzer that identifies email conversations
 by parsing In-Reply-To and References headers.
+Work Item 3.2: Added subject-based fallback grouping tests.
 
 Uses TDD approach - tests written first before implementation.
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -603,3 +604,423 @@ class TestEmailHeaderFields:
         )
 
         assert email.references == refs
+
+
+# ============================================================================
+# Test _normalize_subject Function
+# ============================================================================
+
+
+class TestNormalizeSubject:
+    """Test the _normalize_subject helper function."""
+
+    def test_strips_re_prefix(self):
+        """Test that RE: prefix is stripped."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Re: Hello World") == "hello world"
+
+    def test_strips_re_prefix_case_insensitive(self):
+        """Test that RE: prefix stripping is case-insensitive."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("RE: Hello World") == "hello world"
+        assert _normalize_subject("re: Hello World") == "hello world"
+        assert _normalize_subject("Re: Hello World") == "hello world"
+
+    def test_strips_fwd_prefix(self):
+        """Test that FWD: prefix is stripped."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Fwd: Hello World") == "hello world"
+        assert _normalize_subject("FWD: Hello World") == "hello world"
+
+    def test_strips_fw_prefix(self):
+        """Test that FW: prefix is stripped."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Fw: Hello World") == "hello world"
+        assert _normalize_subject("FW: Hello World") == "hello world"
+
+    def test_strips_repeated_prefixes(self):
+        """Test that repeated RE:/FWD: prefixes are all stripped."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Re: Re: Re: Hello World") == "hello world"
+        assert _normalize_subject("Re: Fwd: Hello World") == "hello world"
+        assert _normalize_subject("FW: RE: FWD: Hello World") == "hello world"
+
+    def test_normalizes_whitespace(self):
+        """Test that multiple spaces are collapsed to single space."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Hello   World") == "hello world"
+        assert _normalize_subject("  Hello  World  ") == "hello world"
+
+    def test_lowercases_result(self):
+        """Test that the result is lowercased."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Hello WORLD") == "hello world"
+
+    def test_empty_string(self):
+        """Test handling of empty string."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("") == ""
+
+    def test_only_prefix(self):
+        """Test handling of subject that is only a prefix."""
+        from src.analyzers.thread_analyzer import _normalize_subject
+
+        assert _normalize_subject("Re:") == ""
+        assert _normalize_subject("Re: ") == ""
+
+
+# ============================================================================
+# Test Subject-Based Fallback Grouping
+# ============================================================================
+
+
+class TestSubjectBasedFallback:
+    """Test subject-based heuristic grouping for emails without headers."""
+
+    def test_groups_matching_subjects_same_domain_within_window(self):
+        """Emails with matching subjects, same sender domain, within time window are grouped."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Meeting Notes",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Re: Meeting Notes",
+            received_date=base_date + timedelta(days=1),
+        )
+        msg3 = create_test_email(
+            id="msg_003",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="RE: Meeting Notes",
+            received_date=base_date + timedelta(days=2),
+        )
+
+        corpus = create_test_corpus([msg1, msg2, msg3])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # All three should be grouped into one thread via subject heuristic
+        assert result.conversation_count >= 1
+        # Find the thread with 3 emails
+        multi_threads = [t for t in result.threads.values() if t.message_count == 3]
+        assert len(multi_threads) == 1
+        thread = multi_threads[0]
+        assert set(thread.email_ids) == {"msg_001", "msg_002", "msg_003"}
+
+    def test_different_subjects_stay_separate(self):
+        """Emails with different normalized subjects are NOT grouped together."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Meeting Notes",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Lunch Plans",
+            received_date=base_date + timedelta(days=1),
+        )
+
+        corpus = create_test_corpus([msg1, msg2])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # Should remain as 2 separate threads
+        assert len(result.threads) == 2
+
+    def test_same_subject_different_domains_stay_separate(self):
+        """Emails with same subject but different sender domains are NOT grouped."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@company-a.com",
+            sender_domain="company-a.com",
+            subject="Weekly Report",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@company-b.com",
+            sender_domain="company-b.com",
+            subject="Weekly Report",
+            received_date=base_date + timedelta(days=1),
+        )
+
+        corpus = create_test_corpus([msg1, msg2])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # Should remain as 2 separate threads (different domains)
+        assert len(result.threads) == 2
+
+    def test_same_subject_outside_time_window_stay_separate(self):
+        """Emails with matching subjects but outside the time window are NOT grouped."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 1, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Weekly Report",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Re: Weekly Report",
+            received_date=base_date + timedelta(days=10),  # 10 days > 7 day window
+        )
+
+        corpus = create_test_corpus([msg1, msg2])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # Should remain as 2 separate threads (outside 7-day window)
+        assert len(result.threads) == 2
+
+    def test_configurable_time_window(self):
+        """Test that subject_match_window_days parameter controls the time window."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 1, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Project Update",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Re: Project Update",
+            received_date=base_date + timedelta(days=10),
+        )
+
+        # With default 7-day window, these should NOT be grouped
+        analyzer_default = ThreadAnalyzer()
+        result_default = analyzer_default.analyze(create_test_corpus([msg1, msg2]))
+        assert len(result_default.threads) == 2
+
+        # With 14-day window, these SHOULD be grouped
+        analyzer_wide = ThreadAnalyzer(subject_match_window_days=14)
+        result_wide = analyzer_wide.analyze(create_test_corpus([msg1, msg2]))
+        assert result_wide.conversation_count == 1
+
+    def test_configurable_window_zero_disables_heuristic(self):
+        """Test that setting window to 0 effectively disables subject-based grouping."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Meeting Notes",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Re: Meeting Notes",
+            received_date=base_date + timedelta(hours=1),
+        )
+
+        analyzer = ThreadAnalyzer(subject_match_window_days=0)
+        result = analyzer.analyze(create_test_corpus([msg1, msg2]))
+        # With 0-day window, even same-day emails should NOT be grouped by subject
+        assert len(result.threads) == 2
+
+
+# ============================================================================
+# Test Thread Method Tracking
+# ============================================================================
+
+
+class TestThreadMethodTracking:
+    """Test that thread_method field correctly identifies grouping method."""
+
+    def test_header_grouped_threads_have_header_method(self):
+        """Threads grouped by In-Reply-To/References have thread_method='header'."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        msg1 = create_test_email(
+            id="msg_001",
+            subject="Original Message",
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            subject="Re: Original Message",
+            in_reply_to="msg_001",
+        )
+
+        corpus = create_test_corpus([msg1, msg2])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # The multi-email thread should have method "header"
+        conversation_threads = [t for t in result.threads.values() if t.message_count > 1]
+        assert len(conversation_threads) == 1
+        assert conversation_threads[0].thread_method == "header"
+
+    def test_subject_grouped_threads_have_subject_heuristic_method(self):
+        """Threads grouped by subject matching have thread_method='subject_heuristic'."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Budget Discussion",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Re: Budget Discussion",
+            received_date=base_date + timedelta(days=1),
+        )
+
+        corpus = create_test_corpus([msg1, msg2])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # The multi-email thread should have method "subject_heuristic"
+        conversation_threads = [t for t in result.threads.values() if t.message_count > 1]
+        assert len(conversation_threads) == 1
+        assert conversation_threads[0].thread_method == "subject_heuristic"
+
+    def test_single_email_threads_have_header_method(self):
+        """Single-email threads (ungrouped) default to thread_method='header'."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        msg1 = create_test_email(id="msg_001", subject="Standalone Email")
+        corpus = create_test_corpus([msg1])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        thread = list(result.threads.values())[0]
+        assert thread.thread_method == "header"
+
+    def test_mixed_methods_in_single_result(self):
+        """Result can contain threads with different methods."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+
+        # Header-grouped thread
+        msg1 = create_test_email(
+            id="msg_001",
+            subject="Header Thread",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            subject="Re: Header Thread",
+            in_reply_to="msg_001",
+            received_date=base_date + timedelta(hours=1),
+        )
+
+        # Subject-grouped thread (no headers)
+        msg3 = create_test_email(
+            id="msg_003",
+            sender_email="alice@corp.com",
+            sender_domain="corp.com",
+            subject="Subject Thread",
+            received_date=base_date,
+        )
+        msg4 = create_test_email(
+            id="msg_004",
+            sender_email="bob@corp.com",
+            sender_domain="corp.com",
+            subject="Re: Subject Thread",
+            received_date=base_date + timedelta(days=1),
+        )
+
+        corpus = create_test_corpus([msg1, msg2, msg3, msg4])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        methods = {t.thread_method for t in result.threads.values() if t.message_count > 1}
+        assert "header" in methods
+        assert "subject_heuristic" in methods
+
+
+# ============================================================================
+# Test Subject Heuristic Does Not Interfere with Header Grouping
+# ============================================================================
+
+
+class TestSubjectHeuristicNoInterference:
+    """Test that subject heuristic only applies to ungrouped (single) emails."""
+
+    def test_already_header_grouped_not_regrouped_by_subject(self):
+        """Emails already grouped by headers are not re-processed by subject heuristic."""
+        from src.analyzers.thread_analyzer import ThreadAnalyzer
+
+        base_date = datetime(2024, 1, 15, 10, 0)
+        # Two emails connected by In-Reply-To
+        msg1 = create_test_email(
+            id="msg_001",
+            sender_email="alice@example.com",
+            sender_domain="example.com",
+            subject="Project Alpha",
+            received_date=base_date,
+        )
+        msg2 = create_test_email(
+            id="msg_002",
+            sender_email="bob@example.com",
+            sender_domain="example.com",
+            subject="Re: Project Alpha",
+            in_reply_to="msg_001",
+            received_date=base_date + timedelta(hours=2),
+        )
+        # Third email, same subject but no headers, different domain
+        msg3 = create_test_email(
+            id="msg_003",
+            sender_email="charlie@other.com",
+            sender_domain="other.com",
+            subject="Re: Project Alpha",
+            received_date=base_date + timedelta(hours=3),
+        )
+
+        corpus = create_test_corpus([msg1, msg2, msg3])
+        analyzer = ThreadAnalyzer()
+        result = analyzer.analyze(corpus)
+
+        # msg1 and msg2 are header-grouped; msg3 has different domain so stays separate
+        header_thread = [t for t in result.threads.values() if t.message_count == 2]
+        assert len(header_thread) == 1
+        assert set(header_thread[0].email_ids) == {"msg_001", "msg_002"}
+        assert header_thread[0].thread_method == "header"

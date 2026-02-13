@@ -1,5 +1,6 @@
 """Tests for GraphAPIClient - Microsoft Graph API integration."""
 import json
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -268,3 +269,98 @@ class TestGraphAPIClientGetUserEmail:
 
         email = client.get_user_email()
         assert email == "test@hotmail.com"  # Falls back to constructor email
+
+
+class TestGraphAPIClientFilterAfter:
+    """Tests for server-side date filtering via filter_after parameter."""
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_filter_after_adds_odata_filter(self, mock_get, client):
+        """Test that filter_after datetime adds $filter to request params."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"value": []}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        filter_date = datetime(2024, 6, 15, 10, 30, 0)
+        client.fetch_emails(max_results=50, skip=0, filter_after=filter_date)
+
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        assert "$filter" in params
+        assert params["$filter"] == "receivedDateTime gt 2024-06-15T10:30:00Z"
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_no_filter_when_filter_after_is_none(self, mock_get, client):
+        """Test that $filter is NOT included when filter_after is None."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"value": []}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        client.fetch_emails(max_results=50, skip=0, filter_after=None)
+
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        assert "$filter" not in params
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_full_extraction_no_filter_still_works(self, mock_get, client, sample_graph_messages):
+        """Test that full extraction (no filter_after) returns messages normally."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"value": sample_graph_messages}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = client.fetch_emails(max_results=100)
+
+        assert len(result) == 2
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        assert "$filter" not in params
+        assert params["$top"] == 100
+        assert params["$orderby"] == "receivedDateTime DESC"
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_filter_after_with_pagination(self, mock_get, client):
+        """Test that filter_after works alongside pagination params."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"value": []}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        filter_date = datetime(2024, 1, 1, 0, 0, 0)
+        client.fetch_emails(max_results=25, skip=50, filter_after=filter_date)
+
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        assert params["$top"] == 25
+        assert params["$skip"] == 50
+        assert params["$filter"] == "receivedDateTime gt 2024-01-01T00:00:00Z"
+        assert params["$orderby"] == "receivedDateTime DESC"
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_filter_after_iso_format(self, mock_get, client):
+        """Test that the ISO date format in filter is correct for Graph API."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"value": []}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        # Use a date with all components to verify formatting
+        filter_date = datetime(2025, 12, 31, 23, 59, 59)
+        client.fetch_emails(filter_after=filter_date)
+
+        call_kwargs = mock_get.call_args
+        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        assert params["$filter"] == "receivedDateTime gt 2025-12-31T23:59:59Z"

@@ -3,10 +3,15 @@ Embedding Cache module (Task 4B.3).
 
 Provides efficient storage and retrieval of email embeddings using
 numpy compressed format (.npz) for fast incremental analysis.
+
+Work Item 3.1: Added cache versioning with metadata sidecar (.meta.json)
+to detect model/config changes and auto-invalidate stale caches.
 """
+import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -16,6 +21,11 @@ if TYPE_CHECKING:
     from src.models.corpus import Corpus
 
 logger = get_logger(__name__)
+
+# Default values matching SemanticAnalyzer defaults
+DEFAULT_MODEL_NAME = "mixedbread-ai/mxbai-embed-large-v1"
+DEFAULT_EMBEDDING_DIM = 1024
+DEFAULT_MAX_TEXT_LENGTH = 1500
 
 
 @dataclass
@@ -49,18 +59,32 @@ class EmbeddingCache:
     - Cache statistics (hit rate)
     """
 
-    def __init__(self, cache_path: Path | None = None):
+    def __init__(
+        self,
+        cache_path: Path | None = None,
+        model_name: str = DEFAULT_MODEL_NAME,
+        embedding_dim: int = DEFAULT_EMBEDDING_DIM,
+        max_text_length: int = DEFAULT_MAX_TEXT_LENGTH,
+    ):
         """
         Initialize embedding cache.
 
         Args:
             cache_path: Path to cache file. If None, uses default from PathConfig.
+            model_name: Name of the embedding model (used for cache versioning).
+            embedding_dim: Dimensionality of embeddings (used for cache versioning).
+            max_text_length: Max text length used for embedding generation (used for cache versioning).
         """
         if cache_path is None:
             from src.utils.paths import PathConfig
             cache_path = PathConfig.get_output_dir() / "embeddings_cache.npz"
 
         self.cache_path = Path(cache_path)
+
+        # Cache versioning metadata
+        self._model_name = model_name
+        self._embedding_dim = embedding_dim
+        self._max_text_length = max_text_length
 
         # Internal storage
         self._embeddings: np.ndarray | None = None
@@ -71,7 +95,7 @@ class EmbeddingCache:
         self._hits = 0
         self._misses = 0
 
-        # Load existing cache if available
+        # Load existing cache if available (with metadata validation)
         self._load()
 
     @property
@@ -266,8 +290,89 @@ class EmbeddingCache:
 
         return len(ids_to_remove)
 
+    @property
+    def metadata_path(self) -> Path:
+        """Path to the metadata sidecar JSON file."""
+        return self.cache_path.with_suffix(".meta.json")
+
+    def _build_metadata(self) -> dict[str, Any]:
+        """Build metadata dict for the current configuration."""
+        return {
+            "model_name": self._model_name,
+            "embedding_dim": self._embedding_dim,
+            "max_text_length": self._max_text_length,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "email_ids": list(self._email_ids),
+        }
+
+    def _save_metadata(self) -> None:
+        """Write metadata sidecar JSON alongside the .npz file."""
+        self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        metadata = self._build_metadata()
+        self.metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        logger.debug(f"Saved cache metadata to {self.metadata_path}")
+
+    def _load_metadata(self) -> dict[str, Any] | None:
+        """
+        Load metadata sidecar if it exists.
+
+        Returns:
+            Metadata dict, or None if sidecar is missing or unreadable.
+        """
+        if not self.metadata_path.exists():
+            return None
+        try:
+            return json.loads(self.metadata_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read cache metadata: {e}")
+            return None
+
+    def _validate_metadata(self, metadata: dict[str, Any]) -> bool:
+        """
+        Validate stored metadata against current configuration.
+
+        Returns:
+            True if metadata matches current config, False if cache should
+            be invalidated.
+        """
+        stored_model = metadata.get("model_name")
+        stored_dim = metadata.get("embedding_dim")
+        stored_text_len = metadata.get("max_text_length")
+
+        if stored_model != self._model_name:
+            logger.warning(
+                f"Embedding model changed: cached='{stored_model}' "
+                f"current='{self._model_name}'. Invalidating cache."
+            )
+            return False
+
+        if stored_dim != self._embedding_dim:
+            logger.warning(
+                f"Embedding dimension changed: cached={stored_dim} "
+                f"current={self._embedding_dim}. Invalidating cache."
+            )
+            return False
+
+        if stored_text_len != self._max_text_length:
+            logger.warning(
+                f"Max text length changed: cached={stored_text_len} "
+                f"current={self._max_text_length}. Invalidating cache."
+            )
+            return False
+
+        return True
+
+    def _delete_cache_files(self) -> None:
+        """Delete both .npz and .meta.json files from disk."""
+        if self.cache_path.exists():
+            self.cache_path.unlink()
+            logger.debug(f"Deleted cache file: {self.cache_path}")
+        if self.metadata_path.exists():
+            self.metadata_path.unlink()
+            logger.debug(f"Deleted metadata file: {self.metadata_path}")
+
     def save(self) -> None:
-        """Save cache to disk."""
+        """Save cache and metadata sidecar to disk."""
         if self._embeddings is None or len(self._email_ids) == 0:
             logger.debug("Nothing to save - cache is empty")
             return
@@ -275,12 +380,14 @@ class EmbeddingCache:
         # Ensure parent directory exists
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Save using numpy compressed format
+        # Save embeddings only (no pickle-requiring object arrays)
         np.savez_compressed(
             self.cache_path,
             embeddings=self._embeddings,
-            email_ids=np.array(self._email_ids, dtype=object)
         )
+
+        # Save metadata sidecar (includes email IDs as JSON-safe list)
+        self._save_metadata()
 
         logger.debug(f"Saved {self.size} embeddings to {self.cache_path}")
 
@@ -303,15 +410,32 @@ class EmbeddingCache:
         )
 
     def _load(self) -> None:
-        """Load cache from disk if it exists."""
+        """Load cache from disk if it exists, validating metadata first."""
         if not self.cache_path.exists():
             logger.debug(f"No cache file at {self.cache_path}")
             return
 
+        # Check metadata sidecar before loading embeddings
+        metadata = self._load_metadata()
+        if metadata is None:
+            # Old cache without metadata sidecar - treat as invalid
+            logger.warning(
+                "Cache file exists without metadata sidecar. "
+                "Starting fresh (old cache format)."
+            )
+            self._delete_cache_files()
+            return
+
+        if not self._validate_metadata(metadata):
+            # Metadata mismatch - invalidate
+            self._delete_cache_files()
+            return
+
         try:
-            data = np.load(self.cache_path, allow_pickle=True)
+            data = np.load(self.cache_path, allow_pickle=False)
             self._embeddings = data["embeddings"]
-            self._email_ids = list(data["email_ids"])
+            # Email IDs now stored in metadata sidecar (no pickle needed)
+            self._email_ids = list(metadata.get("email_ids", []))
             self._rebuild_index()
 
             logger.info(f"Loaded {self.size} embeddings from cache")
@@ -319,6 +443,7 @@ class EmbeddingCache:
         except Exception as e:
             logger.warning(f"Failed to load cache from {self.cache_path}: {e}")
             # Start fresh
+            self._delete_cache_files()
             self._embeddings = None
             self._email_ids = []
             self._id_to_index = {}

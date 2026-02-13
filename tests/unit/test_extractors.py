@@ -1,8 +1,8 @@
 """
 Unit tests for extractor modules.
 
-Tests CheckpointManager, EmailExtractor, M365MCPClient, and M365MCPExtractor
-with mocked MCP calls and file operations.
+Tests CheckpointManager and EmailExtractor (backed by GraphAPIClient)
+with mocked API calls and file operations.
 """
 import json
 from datetime import datetime
@@ -13,8 +13,6 @@ import pytest
 
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.extractors.m365_extractor import EmailExtractor, ExtractionError, ExtractionResult
-from src.extractors.m365_mcp_client import M365MCPClient
-from src.extractors.m365_mcp_extractor import extract_emails_via_mcp
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 
@@ -44,19 +42,14 @@ class TestCheckpointManager:
         assert manager.checkpoint_file == Path(custom_path)
 
     def test_save_checkpoint(self, tmp_path):
-        """Test saving checkpoint data to file."""
+        """Test saving checkpoint data to file (v2 compact format)."""
         checkpoint_file = tmp_path / "checkpoint.json"
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-
-        extracted_emails = [
-            {"id": "email1", "subject": "Test 1"},
-            {"id": "email2", "subject": "Test 2"}
-        ]
 
         manager.save_checkpoint(
             emails_processed=2,
             last_processed_id="email2",
-            extracted_emails=extracted_emails
+            source="hotmail",
         )
 
         # Verify file was created
@@ -66,21 +59,25 @@ class TestCheckpointManager:
         with open(checkpoint_file) as f:
             data = json.load(f)
 
+        assert data["version"] == 2
         assert data["emails_processed"] == 2
         assert data["last_processed_id"] == "email2"
         assert data["checkpoint_interval"] == 100
-        assert len(data["extracted_emails"]) == 2
+        assert data["source"] == "hotmail"
         assert "timestamp" in data
+        # v2 format should NOT contain extracted_emails
+        assert "extracted_emails" not in data
 
     def test_load_checkpoint_existing_file(self, tmp_path):
-        """Test loading existing checkpoint."""
+        """Test loading existing v2 checkpoint."""
         checkpoint_file = tmp_path / "checkpoint.json"
         checkpoint_data = {
+            "version": 2,
             "emails_processed": 50,
             "last_processed_id": "abc123",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [{"id": "abc123"}]
+            "source": "hotmail",
         }
 
         with open(checkpoint_file, "w") as f:
@@ -90,6 +87,7 @@ class TestCheckpointManager:
         loaded = manager.load_checkpoint()
 
         assert loaded is not None
+        assert loaded["version"] == 2
         assert loaded["emails_processed"] == 50
         assert loaded["last_processed_id"] == "abc123"
 
@@ -171,55 +169,182 @@ class TestCheckpointManager:
         assert checkpoint_dir.exists()
 
     def test_get_resume_point_with_checkpoint(self, tmp_path):
-        """Test getting resume point from existing checkpoint."""
+        """Test getting resume point from existing v2 checkpoint."""
         checkpoint_file = tmp_path / "checkpoint.json"
         checkpoint_data = {
+            "version": 2,
             "emails_processed": 75,
             "last_processed_id": "xyz789",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [{"id": "email1"}, {"id": "email2"}]
+            "source": "hotmail",
         }
 
         with open(checkpoint_file, "w") as f:
             json.dump(checkpoint_data, f)
 
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-        count, last_id, emails = manager.get_resume_point()
+        count, last_id = manager.get_resume_point()
 
         assert count == 75
         assert last_id == "xyz789"
-        assert len(emails) == 2
 
     def test_get_resume_point_no_checkpoint(self, tmp_path):
         """Test getting resume point when no checkpoint exists."""
         checkpoint_file = tmp_path / "nonexistent.json"
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-        count, last_id, emails = manager.get_resume_point()
+        count, last_id = manager.get_resume_point()
 
         assert count == 0
         assert last_id == ""
-        assert emails == []
 
-    def test_get_resume_point_missing_extracted_emails(self, tmp_path):
-        """Test resume point when extracted_emails key is missing."""
+    def test_get_resume_point_old_format_returns_empty(self, tmp_path):
+        """Test resume point returns empty for v1 (legacy) checkpoints."""
         checkpoint_file = tmp_path / "checkpoint.json"
         checkpoint_data = {
             "emails_processed": 10,
             "last_processed_id": "abc",
-            "timestamp": "2024-01-01T12:00:00"
-            # No extracted_emails key
+            "timestamp": "2024-01-01T12:00:00",
+            "extracted_emails": [{"id": "email1"}, {"id": "email2"}]
+            # No version field = v1 format
         }
 
         with open(checkpoint_file, "w") as f:
             json.dump(checkpoint_data, f)
 
         manager = CheckpointManager(checkpoint_path=checkpoint_file)
-        count, last_id, emails = manager.get_resume_point()
+        count, last_id = manager.get_resume_point()
 
-        assert count == 10
-        assert last_id == "abc"
-        assert emails == []
+        # Old format should be rejected, returning fresh start
+        assert count == 0
+        assert last_id == ""
+
+    def test_checkpoint_file_is_small(self, tmp_path):
+        """Test that v2 checkpoints are < 1KB regardless of emails_processed count."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        # Even for a very large number of processed emails, the file stays tiny
+        manager.save_checkpoint(
+            emails_processed=100000,
+            last_processed_id="a" * 200,  # Long ID
+            source="hotmail",
+        )
+
+        file_size = checkpoint_file.stat().st_size
+        assert file_size < 1024, f"Checkpoint file is {file_size} bytes, expected < 1024"
+
+    def test_checkpoint_version_is_present(self, tmp_path):
+        """Test that saved checkpoints include version field."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        manager.save_checkpoint(
+            emails_processed=5,
+            last_processed_id="test_id",
+            source="gmail",
+        )
+
+        with open(checkpoint_file) as f:
+            data = json.load(f)
+
+        assert "version" in data
+        assert data["version"] == 2
+
+    def test_old_format_checkpoint_rejected_on_load(self, tmp_path):
+        """Test that v1 checkpoints (with extracted_emails) are handled gracefully."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        # Write a v1 checkpoint with full email objects
+        v1_data = {
+            "emails_processed": 50,
+            "last_processed_id": "abc123",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "extracted_emails": [
+                {"id": f"email_{i}", "subject": f"Subject {i}", "body": "x" * 1000}
+                for i in range(50)
+            ]
+        }
+
+        with open(checkpoint_file, "w") as f:
+            json.dump(v1_data, f)
+
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+        loaded = manager.load_checkpoint()
+
+        # v1 format should be rejected
+        assert loaded is None
+
+    def test_checkpoint_integrity_check_negative_count(self, tmp_path):
+        """Test that checkpoints with negative emails_processed are rejected."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        invalid_data = {
+            "version": 2,
+            "emails_processed": -5,
+            "last_processed_id": "abc",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "source": "hotmail",
+        }
+
+        with open(checkpoint_file, "w") as f:
+            json.dump(invalid_data, f)
+
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+        loaded = manager.load_checkpoint()
+        assert loaded is None
+
+    def test_checkpoint_integrity_check_non_integer_count(self, tmp_path):
+        """Test that checkpoints with non-integer emails_processed are rejected."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        invalid_data = {
+            "version": 2,
+            "emails_processed": "not_a_number",
+            "last_processed_id": "abc",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "source": "hotmail",
+        }
+
+        with open(checkpoint_file, "w") as f:
+            json.dump(invalid_data, f)
+
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+        loaded = manager.load_checkpoint()
+        assert loaded is None
+
+    def test_save_checkpoint_gmail_source(self, tmp_path):
+        """Test saving checkpoint with gmail source."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        manager.save_checkpoint(
+            emails_processed=10,
+            last_processed_id="gmail_msg_10",
+            source="gmail",
+        )
+
+        with open(checkpoint_file) as f:
+            data = json.load(f)
+
+        assert data["source"] == "gmail"
+
+    def test_resume_from_v2_checkpoint_with_mock_api(self, tmp_path):
+        """Test that resume from v2 checkpoint works correctly with mocked API."""
+        checkpoint_file = tmp_path / "checkpoint.json"
+        manager = CheckpointManager(checkpoint_path=checkpoint_file)
+
+        # Save a v2 checkpoint
+        manager.save_checkpoint(
+            emails_processed=50,
+            last_processed_id="msg_50",
+            source="hotmail",
+        )
+
+        # Load and verify
+        count, last_id = manager.get_resume_point()
+        assert count == 50
+        assert last_id == "msg_50"
 
 
 class TestCLIExtractSinceLastFlag:
@@ -238,35 +363,6 @@ class TestCLIExtractSinceLastFlag:
         # With flag - should be True
         args = parser.parse_args(["extract", "--user-email", "test@test.com", "--since-last"])
         assert args.since_last is True
-
-
-class TestM365MCPClient:
-    """Test cases for M365MCPClient class."""
-
-    def test_init(self):
-        """Test client initialization."""
-        client = M365MCPClient(user_email="user@example.com")
-        assert client.user_email == "user@example.com"
-
-    def test_fetch_emails_stub_returns_empty(self):
-        """Test that stub fetch_emails returns empty list."""
-        client = M365MCPClient(user_email="user@example.com")
-        result = client.fetch_emails(max_results=100, skip=0)
-        assert result == []
-        assert isinstance(result, list)
-
-    def test_fetch_emails_with_pagination_params(self):
-        """Test fetch_emails accepts pagination parameters."""
-        client = M365MCPClient(user_email="user@example.com")
-        result = client.fetch_emails(max_results=500, skip=100)
-        assert result == []
-
-    def test_get_message_body_stub_returns_empty(self):
-        """Test that stub get_message_body returns empty string."""
-        client = M365MCPClient(user_email="user@example.com")
-        result = client.get_message_body(message_id="test_message_id")
-        assert result == ""
-        assert isinstance(result, str)
 
 
 class TestEmailExtractor:
@@ -605,82 +701,20 @@ class TestExtractionError:
             assert error.error_type == error_type
 
 
-class TestM365MCPExtractor:
-    """Test cases for M365MCPExtractor module functions."""
-
-    def test_extract_emails_via_mcp_returns_empty_corpus_in_stub_mode(self):
-        """Test that extract_emails_via_mcp returns empty corpus in stub mode."""
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=100,
-            max_emails=None
-        )
-
-        assert isinstance(corpus, Corpus)
-        assert len(corpus.emails) == 0
-        assert corpus.extraction_metadata.user_email == "test@example.com"
-        assert corpus.extraction_metadata.source == "M365/Hotmail"
-
-    def test_extract_emails_via_mcp_with_max_emails(self):
-        """Test extraction with max_emails limit."""
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=50,
-            max_emails=100
-        )
-
-        assert isinstance(corpus, Corpus)
-        assert len(corpus.emails) == 0  # Stub returns empty
-
-    def test_extract_emails_via_mcp_with_progress_callback(self):
-        """Test extraction with progress callback."""
-        callback_calls = []
-
-        def progress_callback(current, total):
-            callback_calls.append((current, total))
-
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            progress_callback=progress_callback
-        )
-
-        # In stub mode, callback may not be called since no emails are processed
-        assert isinstance(corpus, Corpus)
-
-    def test_extract_emails_via_mcp_metadata_correctness(self):
-        """Test that corpus metadata is populated correctly."""
-        corpus = extract_emails_via_mcp(user_email="user@test.com")
-
-        assert corpus.extraction_metadata.user_email == "user@test.com"
-        assert corpus.extraction_metadata.total_emails == 0
-        assert corpus.extraction_metadata.source == "M365/Hotmail"
-        assert isinstance(corpus.extraction_metadata.extraction_date, datetime)
-
-
 class TestEmailExtractorResume:
     """Test cases for resumption functionality."""
 
     @pytest.fixture
     def extractor_with_checkpoint(self, tmp_path):
-        """Create extractor with pre-existing checkpoint."""
+        """Create extractor with pre-existing v2 checkpoint."""
         checkpoint_file = tmp_path / "extraction_checkpoint.json"
         checkpoint_data = {
+            "version": 2,
             "emails_processed": 50,
             "last_processed_id": "previous_email_id",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [
-                {
-                    "id": "email1",
-                    "sender_email": "sender@example.com",
-                    "sender_name": "Sender",
-                    "sender_domain": "example.com",
-                    "subject": "Test",
-                    "body_text": "Body",
-                    "received_date": "2024-01-01T10:00:00",
-                    "has_attachments": False
-                }
-            ]
+            "source": "hotmail",
         }
 
         with open(checkpoint_file, "w") as f:
@@ -696,14 +730,14 @@ class TestEmailExtractorResume:
     def test_extract_all_resumes_from_checkpoint(
         self, mock_fetch_batch, mock_get_count, extractor_with_checkpoint
     ):
-        """Test that extraction resumes from checkpoint."""
+        """Test that extraction resumes from v2 checkpoint using skip offset."""
         mock_get_count.return_value = 100
-        mock_fetch_batch.return_value = []  # No new emails
+        mock_fetch_batch.return_value = []  # No new emails after skip
 
         result = extractor_with_checkpoint.extract_all()
 
-        # Should have the one email from checkpoint
-        # (reconstruction may fail due to date format, but process runs)
+        # v2 checkpoint: no emails reconstructed from checkpoint,
+        # extractor re-fetches using skip offset
         assert isinstance(result, ExtractionResult)
 
     def test_resume_from_checkpoint_method(self, extractor_with_checkpoint):
@@ -712,6 +746,39 @@ class TestEmailExtractorResume:
             mock_extract.return_value = MagicMock(spec=ExtractionResult)
             result = extractor_with_checkpoint.resume_from_checkpoint("path")
             mock_extract.assert_called_once()
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_old_format_checkpoint_triggers_fresh_extraction(
+        self, mock_fetch_batch, mock_get_count, tmp_path
+    ):
+        """Test that v1 (old format) checkpoint is rejected, causing fresh extraction."""
+        checkpoint_file = tmp_path / "extraction_checkpoint.json"
+        # Write a v1 checkpoint (no version field, has extracted_emails)
+        v1_data = {
+            "emails_processed": 50,
+            "last_processed_id": "old_id",
+            "timestamp": "2024-01-01T12:00:00",
+            "checkpoint_interval": 100,
+            "extracted_emails": [{"id": "email1"}]
+        }
+        with open(checkpoint_file, "w") as f:
+            json.dump(v1_data, f)
+
+        extractor = EmailExtractor(
+            user_email="test@example.com",
+            checkpoint_dir=str(tmp_path)
+        )
+
+        mock_get_count.return_value = 999999
+        mock_fetch_batch.return_value = []
+
+        result = extractor.extract_all()
+
+        # Should start fresh (0 emails processed from checkpoint)
+        assert isinstance(result, ExtractionResult)
+        # The fetch should start at offset 0 (not 50)
+        mock_fetch_batch.assert_called_once_with(0, 500, "")
 
 
 class TestEmailExtractorRetryLogic:
@@ -800,7 +867,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_fetch_batch_delegates_to_mcp_client(self, extractor):
         """Test _fetch_batch uses MCP client correctly."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [{"id": "test"}]
 
             result = extractor._fetch_batch(0, 50)
@@ -810,7 +877,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_fetch_batch_connection_error(self, extractor):
         """Test _fetch_batch raises ConnectionError on client failure."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = Exception("Network failure")
 
             with pytest.raises(ConnectionError, match="M365 batch fetch failed"):
@@ -818,7 +885,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_fetch_batch_propagates_connection_error(self, extractor):
         """Test _fetch_batch propagates ConnectionError without wrapping."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = ConnectionError("Original error")
 
             with pytest.raises(ConnectionError, match="Original error"):
@@ -826,7 +893,7 @@ class TestEmailExtractorRetryLogic:
 
     def test_get_total_email_count_propagates_connection_error(self, extractor):
         """Test _get_total_email_count propagates ConnectionError."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = ConnectionError("MCP unreachable")
 
             with pytest.raises(ConnectionError):
@@ -901,29 +968,24 @@ class TestIncrementalExtraction:
             "hasAttachments": False
         }
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_only_fetches_new_emails(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+        self, extractor, existing_corpus, new_email_data
     ):
         """Test that incremental extraction only fetches emails since last extraction."""
-        mock_get_count.return_value = 1
-        mock_fetch_batch.return_value = [new_email_data]
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [[new_email_data], []]
 
-        result = extractor.extract_incremental(existing_corpus)
+            result = extractor.extract_incremental(existing_corpus)
 
-        # Should have 3 emails total (2 existing + 1 new)
-        assert result.corpus.extraction_metadata.total_emails == 3
-        assert len(result.corpus.emails) == 3
-        assert result.new_emails_count == 1
+            # Should have 3 emails total (2 existing + 1 new)
+            assert result.corpus.extraction_metadata.total_emails == 3
+            assert len(result.corpus.emails) == 3
+            assert result.new_emails_count == 1
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_deduplicates_by_message_id(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus
+        self, extractor, existing_corpus
     ):
         """Test that duplicate emails are not added (deduplication by message_id)."""
-        mock_get_count.return_value = 1
         # Return an email with ID that already exists in corpus
         duplicate_email = {
             "id": "existing_001",  # Same ID as existing email
@@ -934,44 +996,42 @@ class TestIncrementalExtraction:
             "receivedDateTime": "2024-01-15T10:00:00Z",
             "hasAttachments": False
         }
-        mock_fetch_batch.return_value = [duplicate_email]
 
-        result = extractor.extract_incremental(existing_corpus)
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = [duplicate_email]
 
-        # Should still have 2 emails (no duplicates added)
-        assert len(result.corpus.emails) == 2
-        assert result.new_emails_count == 0
+            result = extractor.extract_incremental(existing_corpus)
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
+            # Should still have 2 emails (no duplicates added)
+            assert len(result.corpus.emails) == 2
+            assert result.new_emails_count == 0
+
     def test_extract_incremental_updates_metadata(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+        self, extractor, existing_corpus, new_email_data
     ):
         """Test that metadata is updated after incremental extraction."""
-        mock_get_count.return_value = 1
-        mock_fetch_batch.return_value = [new_email_data]
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [[new_email_data], []]
 
-        old_extraction_date = existing_corpus.extraction_metadata.last_extraction_date
-        result = extractor.extract_incremental(existing_corpus)
+            old_extraction_date = existing_corpus.extraction_metadata.last_extraction_date
+            result = extractor.extract_incremental(existing_corpus)
 
-        # Metadata should be updated
-        assert result.corpus.extraction_metadata.last_extraction_date > old_extraction_date
-        assert result.corpus.extraction_metadata.email_ids_hash != existing_corpus.extraction_metadata.email_ids_hash
+            # Metadata should be updated
+            assert result.corpus.extraction_metadata.last_extraction_date > old_extraction_date
+            assert result.corpus.extraction_metadata.email_ids_hash != existing_corpus.extraction_metadata.email_ids_hash
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_empty_result(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus
+        self, extractor, existing_corpus
     ):
         """Test incremental extraction when there are no new emails."""
-        mock_get_count.return_value = 0
-        mock_fetch_batch.return_value = []
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = []
 
-        result = extractor.extract_incremental(existing_corpus)
+            result = extractor.extract_incremental(existing_corpus)
 
-        # Should still have original 2 emails, no new ones
-        assert len(result.corpus.emails) == 2
-        assert result.new_emails_count == 0
+            # Should still have original 2 emails, no new ones
+            assert len(result.corpus.emails) == 2
+            assert result.new_emails_count == 0
 
     def test_extract_incremental_result_has_new_emails_count(self, extractor):
         """Test that IncrementalExtractionResult has new_emails_count attribute."""
@@ -980,23 +1040,120 @@ class TestIncrementalExtraction:
         assert hasattr(IncrementalExtractionResult, '__annotations__')
         assert 'new_emails_count' in IncrementalExtractionResult.__annotations__
 
-    @patch.object(EmailExtractor, "_get_total_email_count")
-    @patch.object(EmailExtractor, "_fetch_batch")
     def test_extract_incremental_reports_statistics(
-        self, mock_fetch_batch, mock_get_count, extractor, existing_corpus, new_email_data
+        self, extractor, existing_corpus, new_email_data
     ):
         """Test that incremental extraction provides statistics about added emails."""
-        mock_get_count.return_value = 2
         new_email_2 = new_email_data.copy()
         new_email_2["id"] = "new_002"
-        mock_fetch_batch.return_value = [new_email_data, new_email_2]
 
-        result = extractor.extract_incremental(existing_corpus)
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [[new_email_data, new_email_2], []]
 
-        # Statistics should be correct
-        assert result.previous_count == 2  # Old corpus had 2
-        assert result.new_emails_count == 2  # Added 2 new
-        assert result.total_count == 4  # Total is now 4
+            result = extractor.extract_incremental(existing_corpus)
+
+            # Statistics should be correct
+            assert result.previous_count == 2  # Old corpus had 2
+            assert result.new_emails_count == 2  # Added 2 new
+            assert result.total_count == 4  # Total is now 4
+
+    def test_get_incremental_kwargs_returns_filter_after(
+        self, extractor, existing_corpus
+    ):
+        """Test that _get_incremental_kwargs returns filter_after from corpus metadata."""
+        kwargs = extractor._get_incremental_kwargs(existing_corpus)
+
+        assert "filter_after" in kwargs
+        assert kwargs["filter_after"] == existing_corpus.extraction_metadata.last_extraction_date
+
+    def test_get_incremental_kwargs_empty_when_no_last_date(self, extractor):
+        """Test that _get_incremental_kwargs returns empty dict when no last_extraction_date."""
+        corpus_no_date = Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime(2024, 1, 1),
+                total_emails=0,
+                source="Hotmail/M365",
+                user_email="incremental@example.com",
+                last_extraction_date=None,
+            ),
+            emails=[],
+        )
+
+        kwargs = extractor._get_incremental_kwargs(corpus_no_date)
+        assert kwargs == {}
+
+    def test_fetch_incremental_batch_passes_filter_after_to_client(self, extractor):
+        """Test that _fetch_incremental_batch passes filter_after to Graph API client."""
+        filter_date = datetime(2024, 6, 15, 10, 0, 0)
+
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = [{"id": "new_msg"}]
+
+            result = extractor._fetch_incremental_batch(
+                start=0, batch_size=100, filter_after=filter_date
+            )
+
+            mock_fetch.assert_called_once_with(
+                max_results=100,
+                skip=0,
+                filter_after=filter_date,
+            )
+            assert result == [{"id": "new_msg"}]
+
+    def test_fetch_incremental_batch_no_filter_when_not_provided(self, extractor):
+        """Test that _fetch_incremental_batch passes None filter when not provided."""
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = []
+
+            extractor._fetch_incremental_batch(start=0, batch_size=50)
+
+            mock_fetch.assert_called_once_with(
+                max_results=50,
+                skip=0,
+                filter_after=None,
+            )
+
+    def test_incremental_extraction_passes_filter_to_graph_api(
+        self, extractor, existing_corpus, new_email_data
+    ):
+        """Test end-to-end: incremental extraction passes date filter to Graph API client."""
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            # First call returns new email, second call returns empty (stop)
+            mock_fetch.side_effect = [[new_email_data], []]
+
+            result = extractor.extract_incremental(existing_corpus)
+
+            # Verify the first call included filter_after
+            first_call = mock_fetch.call_args_list[0]
+            assert first_call.kwargs.get("filter_after") == existing_corpus.extraction_metadata.last_extraction_date
+
+            # New email should be added
+            assert result.new_emails_count == 1
+            assert result.total_count == 3
+
+    def test_incremental_extraction_dedup_still_works_with_filter(
+        self, extractor, existing_corpus
+    ):
+        """Test that client-side dedup still works as safety net alongside server filter."""
+        # Simulate server returning a duplicate despite the date filter
+        duplicate_email = {
+            "id": "existing_001",  # Same ID as existing email
+            "subject": "Duplicate from server",
+            "from": {"emailAddress": {"address": "dup@example.com", "name": "Dup"}},
+            "toRecipients": [{"emailAddress": {"address": "me@example.com", "name": "Me"}}],
+            "body": {"content": "<p>Dup body</p>"},
+            "receivedDateTime": "2024-01-15T10:00:00Z",
+            "hasAttachments": False,
+        }
+
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.return_value = [duplicate_email]
+
+            result = extractor.extract_incremental(existing_corpus)
+
+            # Despite server returning an email, dedup catches the duplicate
+            assert result.new_emails_count == 0
+            assert result.total_count == 2  # Still just the 2 original
 
 
 class TestEmailExtractorEdgeCases:
@@ -1058,7 +1215,7 @@ class TestEmailExtractorEdgeCases:
 
     def test_fetch_batch_returns_fewer_than_requested(self, extractor):
         """Test handling when batch returns fewer emails than requested."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = [{"id": "1"}, {"id": "2"}]
 
             result = extractor._fetch_batch(0, 100)
@@ -1068,103 +1225,13 @@ class TestEmailExtractorEdgeCases:
 
     def test_get_total_email_count_returns_sentinel(self, extractor):
         """Test that _get_total_email_count returns large sentinel value."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             count = extractor._get_total_email_count()
 
             # Returns 999999 sentinel since M365 doesn't provide count
             assert count == 999999
-
-
-class TestM365MCPExtractorWithMockedBatches:
-    """Test M365MCPExtractor with mocked batch data to achieve higher coverage."""
-
-    @pytest.fixture
-    def mock_batch_messages(self):
-        """Create mock batch of M365 message data."""
-        return [
-            {
-                "id": "msg_001",
-                "subject": "Test Email 1",
-                "from": {
-                    "emailAddress": {
-                        "address": "sender1@example.com",
-                        "name": "Sender One"
-                    }
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": "recipient@example.com",
-                            "name": "Recipient"
-                        }
-                    }
-                ],
-                "body": {
-                    "contentType": "html",
-                    "content": "<p>Email body 1</p>"
-                },
-                "receivedDateTime": "2024-01-15T10:30:00Z",
-                "hasAttachments": False
-            },
-            {
-                "id": "msg_002",
-                "subject": "Test Email 2",
-                "from": {
-                    "emailAddress": {
-                        "address": "sender2@company.com",
-                        "name": "Sender Two"
-                    }
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": "recipient@example.com",
-                            "name": "Recipient"
-                        }
-                    }
-                ],
-                "body": {
-                    "contentType": "html",
-                    "content": "<p>Email body 2</p>"
-                },
-                "receivedDateTime": "2024-01-16T14:00:00Z",
-                "hasAttachments": True
-            }
-        ]
-
-    def test_extract_with_mocked_mcp_response(self, mock_batch_messages):
-        """Test extraction when MCP returns actual data."""
-        # We can't easily mock the MCP response in extract_emails_via_mcp
-        # because the batch_messages variable is set to [] in the stub code.
-        # This test documents the expected behavior.
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=10
-        )
-        # In stub mode, corpus is empty
-        assert len(corpus.emails) == 0
-
-    def test_extract_handles_malformed_message(self):
-        """Test that extraction handles malformed messages gracefully."""
-        # The actual processing happens in the while loop which never executes
-        # in stub mode, but this documents expected behavior
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=5,
-            max_emails=10
-        )
-        assert isinstance(corpus, Corpus)
-
-    def test_extract_respects_max_emails_parameter(self):
-        """Test that max_emails parameter is respected."""
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            max_emails=50
-        )
-        # Even if there were more emails, max_emails would limit
-        assert len(corpus.emails) <= 50
 
 
 class TestCorpusMetadataEnhancements:
@@ -1370,7 +1437,7 @@ class TestIntegrationScenarios:
 
     def test_full_extraction_workflow_empty_inbox(self, extractor):
         """Test complete extraction workflow with empty inbox."""
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             result = extractor.extract_all()
@@ -1423,7 +1490,7 @@ class TestIntegrationScenarios:
         with open(checkpoint_file, "w") as f:
             json.dump({"test": "data"}, f)
 
-        with patch.object(extractor.mcp_client, "fetch_emails") as mock_fetch:
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
 
             extractor.extract_all()

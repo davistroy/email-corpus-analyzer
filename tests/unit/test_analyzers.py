@@ -1242,6 +1242,45 @@ class TestSemanticAnalyzer:
             analyzer._ensure_model_loaded()
             mock_st.assert_not_called()
 
+    def test_init_default_max_embedding_text_length(self, analyzer):
+        """Test default max_embedding_text_length is 1500."""
+        assert analyzer.max_embedding_text_length == 1500
+
+    def test_init_custom_max_embedding_text_length(self):
+        """Test custom max_embedding_text_length initialization."""
+        custom_analyzer = SemanticAnalyzer(max_embedding_text_length=3000)
+        assert custom_analyzer.max_embedding_text_length == 3000
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_analyze_uses_configurable_text_length(self, mock_st_class, mock_ensure_model):
+        """Test that analyze uses max_embedding_text_length for text preparation."""
+        custom_analyzer = SemanticAnalyzer(max_embedding_text_length=300)
+
+        long_body = "z" * 1000
+        emails = [
+            create_email(
+                id="1",
+                sender_email="sender@example.com",
+                sender_domain="example.com",
+                subject="Subj",
+                body_text=long_body,
+            )
+        ]
+        corpus = create_corpus(emails)
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(1, 384)
+        custom_analyzer.model = mock_model
+
+        custom_analyzer.analyze(corpus, num_clusters=1)
+
+        # Check that model.encode was called with text truncated at 300 chars
+        call_args = mock_model.encode.call_args
+        texts = call_args[0][0]
+        expected_text = f"Subj {long_body[:300]}"
+        assert texts[0] == expected_text
+
 
 # ============================================================================
 # Test run_full_analysis
@@ -1282,7 +1321,10 @@ class TestRunFullAnalysis:
         ]
         corpus = create_corpus(emails)
 
-        result = run_full_analysis(corpus, num_clusters=2)
+        result, incremental_stats = run_full_analysis(corpus, num_clusters=2)
+
+        # Without embedding_cache, incremental_stats should be None
+        assert incremental_stats is None
 
         # Verify result is AnalysisResults with all components
         assert hasattr(result, 'sender_analysis')
@@ -1319,7 +1361,7 @@ class TestRunFullAnalysis:
         ]
         corpus = create_corpus(emails)
 
-        result = run_full_analysis(corpus, num_clusters=3)
+        result, _stats = run_full_analysis(corpus, num_clusters=3)
 
         # Should have clusters (num depends on KMeans results)
         assert isinstance(result.content_clusters, list)
@@ -1352,6 +1394,46 @@ class TestRunFullAnalysis:
         # Verify callback was called with different analyzer names
         analyzer_names = set(name for name, _, _ in callback_data)
         assert "sender" in analyzer_names or len(callback_data) > 0
+
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_with_embedding_cache_returns_incremental_stats(self, mock_st_class):
+        """Test that providing embedding_cache triggers incremental mode and returns stats."""
+        from src.cache.embedding_cache import EmbeddingCache
+        import tempfile
+        import os
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(5, 1024)
+        mock_st_class.return_value = mock_model
+
+        emails = [
+            create_email(
+                id=str(i),
+                sender_email=f"sender{i}@example.com",
+                sender_domain="example.com",
+                subject=f"Test Subject {i}",
+                body_text=f"Test body content for email {i}",
+                received_date=datetime(2024, 1, 1) + timedelta(days=i)
+            )
+            for i in range(5)
+        ]
+        corpus = create_corpus(emails)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache = EmbeddingCache(cache_path=os.path.join(tmp_dir, "cache.npz"))
+            result, incremental_stats = run_full_analysis(
+                corpus, num_clusters=2, embedding_cache=cache
+            )
+
+            # With embedding_cache, incremental_stats should be a dict
+            assert incremental_stats is not None
+            assert isinstance(incremental_stats, dict)
+            assert "cached_count" in incremental_stats
+            assert "generated_count" in incremental_stats
+
+            # Results should still be valid
+            assert hasattr(result, 'sender_analysis')
+            assert hasattr(result, 'content_clusters')
 
 
 # ============================================================================
@@ -1725,3 +1807,218 @@ class TestClusterQualityMetrics:
             cluster_dict = cluster.model_dump()
             assert "silhouette_score" in cluster_dict
             assert "cohesion_score" in cluster_dict
+
+
+# ============================================================================
+# Test Cluster Visualization (Task 4.3)
+# ============================================================================
+
+
+class TestClusterVisualization:
+    """Test cases for generate_cluster_visualization function."""
+
+    def test_generates_png_with_silhouette_scores(self, tmp_path):
+        """Test that visualization creates a PNG file with scatter + bar chart."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(30, 10)
+        labels = np.array([0] * 10 + [1] * 10 + [2] * 10)
+        silhouette_scores = {0: 0.5, 1: 0.3, 2: 0.7}
+
+        output_path = tmp_path / "test_viz.png"
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+            cluster_silhouette_scores=silhouette_scores,
+        )
+
+        assert result is not None
+        assert result.exists()
+        assert result.suffix == ".png"
+        # File should be non-trivial in size (at least a few KB)
+        assert result.stat().st_size > 1000
+
+    def test_generates_png_without_silhouette_scores(self, tmp_path):
+        """Test that visualization works without silhouette scores (scatter only)."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(20, 10)
+        labels = np.array([0] * 10 + [1] * 10)
+
+        output_path = tmp_path / "test_viz_no_sil.png"
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+            cluster_silhouette_scores=None,
+        )
+
+        assert result is not None
+        assert result.exists()
+
+    def test_returns_none_when_matplotlib_unavailable(self, tmp_path):
+        """Test graceful handling when matplotlib is not installed."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 5)
+        labels = np.array([0] * 5 + [1] * 5)
+
+        output_path = tmp_path / "should_not_exist.png"
+
+        with patch.dict("sys.modules", {"matplotlib": None}):
+            result = generate_cluster_visualization(
+                embeddings=embeddings,
+                labels=labels,
+                output_path=output_path,
+            )
+
+        assert result is None
+        assert not output_path.exists()
+
+    def test_single_cluster_visualization(self, tmp_path):
+        """Test visualization with a single cluster."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 5)
+        labels = np.zeros(10, dtype=int)
+
+        output_path = tmp_path / "single_cluster.png"
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+        )
+
+        assert result is not None
+        assert result.exists()
+
+    def test_output_path_as_string(self, tmp_path):
+        """Test that output_path accepts string as well as Path."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 5)
+        labels = np.array([0] * 5 + [1] * 5)
+
+        output_path = str(tmp_path / "string_path.png")
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+        )
+
+        assert result is not None
+        assert result.exists()
+
+
+class TestClusterVizCLIFlag:
+    """Test that --cluster-viz CLI flag is properly configured."""
+
+    def test_analyze_command_has_cluster_viz_flag(self):
+        """Test that analyze command has --cluster-viz flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Without flag - default should be False
+        args = parser.parse_args(["analyze"])
+        assert args.cluster_viz is False
+
+        # With flag - should be True
+        args = parser.parse_args(["analyze", "--cluster-viz"])
+        assert args.cluster_viz is True
+
+
+class TestHTMLExporterVisualization:
+    """Test that HTML exporter includes cluster visualization when available."""
+
+    def test_html_includes_visualization_when_png_exists(self, tmp_path):
+        """Test that HTML report includes img tag when visualization exists."""
+        from src.exporters.html_exporter import export_categories_to_html
+        from src.models.category import Category, CategorySource
+
+        # Create a dummy visualization PNG
+        viz_path = tmp_path / "cluster_visualization.png"
+        viz_path.write_bytes(b"fake png data")
+
+        # Create a minimal category
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Test Category",
+                description="A test category",
+                confidence=0.8,
+                source=CategorySource.TEMPLATE,
+                email_count=10,
+            )
+        ]
+
+        output_path = tmp_path / "report.html"
+        export_categories_to_html(categories, output_path)
+
+        html_content = output_path.read_text(encoding="utf-8")
+        assert "cluster_visualization.png" in html_content
+        assert "Cluster Visualization" in html_content
+
+    def test_html_excludes_visualization_when_no_png(self, tmp_path):
+        """Test that HTML report omits visualization section when no PNG."""
+        from src.exporters.html_exporter import export_categories_to_html
+        from src.models.category import Category, CategorySource
+
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Test Category",
+                description="A test category",
+                confidence=0.8,
+                source=CategorySource.TEMPLATE,
+                email_count=10,
+            )
+        ]
+
+        output_path = tmp_path / "report.html"
+        export_categories_to_html(categories, output_path)
+
+        html_content = output_path.read_text(encoding="utf-8")
+        assert "Cluster Visualization" not in html_content
+
+    def test_html_accepts_explicit_visualization_path(self, tmp_path):
+        """Test that explicit cluster_visualization_path param works."""
+        from src.exporters.html_exporter import export_categories_to_html
+        from src.models.category import Category, CategorySource
+
+        # Put viz in a subdirectory
+        viz_dir = tmp_path / "viz"
+        viz_dir.mkdir()
+        viz_path = viz_dir / "my_clusters.png"
+        viz_path.write_bytes(b"fake png data")
+
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Test Category",
+                description="A test category",
+                confidence=0.8,
+                source=CategorySource.TEMPLATE,
+                email_count=10,
+            )
+        ]
+
+        output_path = tmp_path / "report.html"
+        export_categories_to_html(
+            categories,
+            output_path,
+            cluster_visualization_path=viz_path,
+        )
+
+        html_content = output_path.read_text(encoding="utf-8")
+        assert "Cluster Visualization" in html_content

@@ -37,7 +37,19 @@ class Email(BaseModel):
         description="List of message IDs in the thread (from References header)"
     )
 
+    def combined_text_with_limit(self, max_body_length: int = 1500) -> str:
+        """Combined subject + body for embeddings with configurable body length.
+
+        Args:
+            max_body_length: Maximum number of body characters to include.
+                Defaults to 1500 (embedding models typically support ~2000 tokens).
+
+        Returns:
+            Subject + truncated body text
+        """
+        return f"{self.subject} {self.body_text[:max_body_length]}"
+
     @property
     def combined_text(self) -> str:
-        """Combined subject + body for embeddings."""
-        return f"{self.subject} {self.body_text[:500]}"
+        """Combined subject + body for embeddings (default 1500 char limit)."""
+        return self.combined_text_with_limit(1500)

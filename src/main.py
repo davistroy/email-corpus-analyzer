@@ -25,7 +25,7 @@ from src.models.analysis_results import AnalysisResults
 from src.models.category import Category
 from src.models.corpus import Corpus
 from src.ui.category_review import cleanup_intermediate_files, review_categories
-from src.utils.file_manager import ensure_output_dir, load_json, save_json
+from src.utils.file_manager import atomic_write_text, ensure_output_dir, load_json, save_json
 from src.utils.logger import setup_logger
 
 logger = setup_logger(
@@ -155,7 +155,7 @@ class EmailProcessorCLI:
             print("5. Calculating volume statistics...")
             print()
 
-            results = run_full_analysis(
+            results, _incremental_stats = run_full_analysis(
                 corpus,
                 num_clusters=num_clusters,
                 progress_callback=progress_callback
@@ -229,11 +229,10 @@ class EmailProcessorCLI:
             save_json(suggestions_data, suggestions_path)
             print(f"Saved to: {suggestions_path}")
 
-            # Generate report
+            # Generate report (atomic write to prevent corruption)
             report = generator.generate_report(categories)
             report_path = self.output_dir / "category_suggestions_report.md"
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(report)
+            atomic_write_text(report_path, report)
             print(f"Report saved to: {report_path}")
 
             return True

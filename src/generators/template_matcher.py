@@ -5,12 +5,47 @@ Implements FR-024: Template Application
 Per generator_contract.md lines 32-45 and 79-82.
 """
 import logging
+import re
 
 from src.models.analysis_results import AnalysisResults
 from src.models.category import Category, CategorySource
 from src.models.category_template import PREDEFINED_TEMPLATES, CategoryTemplate
 
 logger = logging.getLogger(__name__)
+
+
+# Pre-compiled keyword patterns for word-boundary matching.
+# Built once at module load time, keyed by lowercase keyword string.
+_compiled_keyword_patterns: dict[str, re.Pattern] = {}
+
+
+def _get_keyword_pattern(keyword: str) -> re.Pattern:
+    """
+    Get or create a pre-compiled word-boundary regex for a keyword.
+
+    Uses a module-level cache so each keyword is compiled exactly once.
+    """
+    kw_lower = keyword.lower()
+    if kw_lower not in _compiled_keyword_patterns:
+        _compiled_keyword_patterns[kw_lower] = re.compile(
+            r'\b' + re.escape(kw_lower) + r'\b'
+        )
+    return _compiled_keyword_patterns[kw_lower]
+
+
+def _domain_matches(sender_domain: str, template_domain: str) -> bool:
+    """
+    Check if a sender domain matches a template domain using suffix matching.
+
+    Matches if the sender domain equals the template domain exactly,
+    or if the sender domain ends with '.' + template_domain.
+    This prevents 'notamazon.com' from matching 'amazon.com' while
+    still allowing 'mail.amazon.com' to match.
+    """
+    return (
+        sender_domain == template_domain
+        or sender_domain.endswith('.' + template_domain)
+    )
 
 
 def match_templates(
@@ -105,6 +140,9 @@ def _match_by_keywords(
     """
     Match emails by keywords in subject lines and cluster samples.
 
+    Uses word-boundary regex matching to avoid false positives
+    (e.g., "visa" should not match "provisioning").
+
     Args:
         analysis_results: Analysis results to search
         keywords: List of keywords to match (case-insensitive)
@@ -113,7 +151,7 @@ def _match_by_keywords(
         Set of matching email IDs
     """
     matching_ids = set()
-    keywords_lower = [kw.lower() for kw in keywords]
+    keyword_patterns = [_get_keyword_pattern(kw) for kw in keywords]
 
     # Match through content clusters (which contain subject/body preview info)
     for cluster in analysis_results.content_clusters:
@@ -124,8 +162,11 @@ def _match_by_keywords(
             subject_lower = sample.subject.lower()
             body_lower = sample.body_preview.lower()
 
-            # Check if any keyword appears in subject or body
-            if any(kw in subject_lower or kw in body_lower for kw in keywords_lower):
+            # Check if any keyword appears as a whole word in subject or body
+            if any(
+                pattern.search(subject_lower) or pattern.search(body_lower)
+                for pattern in keyword_patterns
+            ):
                 cluster_matches = True
                 break
 
@@ -137,9 +178,8 @@ def _match_by_keywords(
     for keyword_tuple in analysis_results.subject_patterns.top_keywords:
         keyword_from_pattern = keyword_tuple[0].lower()
 
-        # If this pattern keyword matches any template keyword
-        if any(kw in keyword_from_pattern or keyword_from_pattern in kw
-               for kw in keywords_lower):
+        # If this pattern keyword matches any template keyword (word-boundary)
+        if any(pattern.search(keyword_from_pattern) for pattern in keyword_patterns):
             # We can't get email IDs directly from top_keywords
             # This is more for logging/validation
             logger.debug(f"Subject pattern keyword '{keyword_tuple[0]}' matches template keywords")
@@ -152,11 +192,15 @@ def _match_by_domains(
     domains: list[str]
 ) -> set:
     """
-    Match emails by sender domains.
+    Match emails by sender domains using suffix-based matching.
+
+    A sender domain matches a template domain if it equals the template domain
+    exactly or ends with '.' + template_domain (subdomain match). This prevents
+    false positives like 'notamazon.com' matching 'amazon.com'.
 
     Args:
         analysis_results: Analysis results to search
-        domains: List of domain patterns to match (partial match supported)
+        domains: List of domain patterns to match
 
     Returns:
         Set of matching email IDs
@@ -168,8 +212,8 @@ def _match_by_domains(
     for sender in analysis_results.sender_analysis.top_senders:
         sender_domain_lower = sender.domain.lower()
 
-        # Check if sender domain contains or matches any template domain
-        if any(domain in sender_domain_lower or sender_domain_lower in domain
+        # Check if sender domain matches any template domain (exact or subdomain)
+        if any(_domain_matches(sender_domain_lower, domain)
                for domain in domains_lower):
             matching_ids.update(sender.email_ids)
             logger.debug(
@@ -182,7 +226,7 @@ def _match_by_domains(
         for domain_tuple in cluster.common_domains:
             cluster_domain_lower = domain_tuple[0].lower()
 
-            if any(domain in cluster_domain_lower or cluster_domain_lower in domain
+            if any(_domain_matches(cluster_domain_lower, domain)
                    for domain in domains_lower):
                 matching_ids.update(cluster.email_ids)
                 logger.debug(

@@ -1,11 +1,14 @@
 """
 Unit tests for data models.
 
-Tests the Category model and its hierarchical extensions.
+Tests the Category model, hierarchical extensions, and Email model.
 """
+from datetime import datetime
+
 import pytest
 
 from src.models.category import Category, CategorySource
+from src.models.email import Email
 
 
 # -----------------------------------------------------------------------------
@@ -342,3 +345,85 @@ class TestCategorySourceEnum:
         )
 
         assert category.source == CategorySource.CONTENT_CLUSTER
+
+
+# -----------------------------------------------------------------------------
+# Email Model Tests - combined_text
+# -----------------------------------------------------------------------------
+
+
+def _make_email(subject: str = "Test Subject", body_text: str = "Test body") -> Email:
+    """Helper to create an Email for combined_text tests."""
+    return Email(
+        id="test_1",
+        sender_email="sender@example.com",
+        sender_name="Sender",
+        sender_domain="example.com",
+        subject=subject,
+        body_text=body_text,
+        received_date=datetime(2024, 1, 15, 10, 0),
+        has_attachments=False,
+    )
+
+
+class TestEmailCombinedText:
+    """Test cases for Email.combined_text and combined_text_with_limit."""
+
+    def test_combined_text_default_returns_subject_plus_body(self):
+        """Test combined_text property returns subject + body."""
+        email = _make_email(subject="Hello", body_text="World")
+        assert email.combined_text == "Hello World"
+
+    def test_combined_text_default_truncates_body_at_1500(self):
+        """Test combined_text property truncates body at 1500 chars."""
+        long_body = "x" * 2000
+        email = _make_email(subject="Subj", body_text=long_body)
+        result = email.combined_text
+        # "Subj " + 1500 x's = 1505 chars total
+        assert len(result) == 5 + 1500
+
+    def test_combined_text_short_body_not_truncated(self):
+        """Test combined_text does not truncate short body."""
+        email = _make_email(subject="Subj", body_text="Short body")
+        assert email.combined_text == "Subj Short body"
+
+    def test_combined_text_with_limit_custom_length(self):
+        """Test combined_text_with_limit respects custom max_body_length."""
+        long_body = "a" * 3000
+        email = _make_email(subject="S", body_text=long_body)
+
+        result_500 = email.combined_text_with_limit(500)
+        assert len(result_500) == 2 + 500  # "S " + 500 a's
+
+        result_2000 = email.combined_text_with_limit(2000)
+        assert len(result_2000) == 2 + 2000  # "S " + 2000 a's
+
+    def test_combined_text_with_limit_default_matches_property(self):
+        """Test combined_text_with_limit(1500) matches combined_text property."""
+        long_body = "b" * 2000
+        email = _make_email(subject="Test", body_text=long_body)
+        assert email.combined_text == email.combined_text_with_limit(1500)
+
+    def test_combined_text_with_limit_200(self):
+        """Test minimum config boundary of 200 chars."""
+        long_body = "c" * 500
+        email = _make_email(subject="X", body_text=long_body)
+        result = email.combined_text_with_limit(200)
+        assert len(result) == 2 + 200  # "X " + 200 c's
+
+    def test_combined_text_with_limit_5000(self):
+        """Test maximum config boundary of 5000 chars."""
+        long_body = "d" * 6000
+        email = _make_email(subject="Y", body_text=long_body)
+        result = email.combined_text_with_limit(5000)
+        assert len(result) == 2 + 5000  # "Y " + 5000 d's
+
+    def test_combined_text_empty_body(self):
+        """Test combined_text with empty body."""
+        email = _make_email(subject="Only Subject", body_text="")
+        assert email.combined_text == "Only Subject "
+
+    def test_combined_text_empty_subject(self):
+        """Test combined_text with empty subject."""
+        email = _make_email(subject="", body_text="Only body")
+        assert email.combined_text == " Only body"

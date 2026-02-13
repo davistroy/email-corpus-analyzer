@@ -8,16 +8,32 @@ import logging
 import re
 from collections import Counter
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from ..models.analysis_results import SubjectPatterns
 from ..models.corpus import Corpus
 from .base import BaseAnalyzer
+
+if TYPE_CHECKING:
+    from ..config.models import AnalyzerThresholds
 
 logger = logging.getLogger(__name__)
 
 
 class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
     """Analyzer for email subject line patterns."""
+
+    def __init__(self, thresholds: "AnalyzerThresholds | None" = None):
+        """
+        Initialize SubjectAnalyzer.
+
+        Args:
+            thresholds: Optional analyzer thresholds config. Uses defaults if None.
+        """
+        if thresholds is None:
+            from ..config.models import AnalyzerThresholds
+            thresholds = AnalyzerThresholds()
+        self.thresholds = thresholds
 
     @property
     def name(self) -> str:
@@ -103,7 +119,7 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
             word: count for word, count in all_words.items()
             if word.lower() not in self.STOP_WORDS and len(word) > 1
         }
-        top_keywords = sorted(filtered_words.items(), key=lambda x: x[1], reverse=True)[:50]
+        top_keywords = sorted(filtered_words.items(), key=lambda x: x[1], reverse=True)[:self.thresholds.top_keywords]
 
         # Get top bracket tags (sorted by frequency)
         top_tags = sorted(bracket_tags.items(), key=lambda x: x[1], reverse=True)

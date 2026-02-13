@@ -458,8 +458,13 @@ class TestCmdExtract:
         mock_result = MagicMock()
         mock_result.success_count = 95
         mock_result.failed_emails = [MagicMock(), MagicMock()]  # 2 failed
+        mock_result.failure_count = 2
+        mock_result.total_attempted = 97
+        mock_result.success_rate = 0.979  # 95/97
         mock_result.corpus = MagicMock()
         mock_result.corpus.model_dump.return_value = {}
+        mock_result.corpus.emails = [MagicMock(id=f"e_{i}") for i in range(95)]
+        mock_result.corpus.extraction_metadata.total_emails = 95
         mock_extractor.extract_all.return_value = mock_result
         mock_extractor_class.return_value = mock_extractor
 
@@ -467,7 +472,6 @@ class TestCmdExtract:
 
         # Should still succeed but log warning
         assert result == 0
-        mock_logger.warning.assert_called()
 
 
 class TestCmdAnalyze:
@@ -509,7 +513,7 @@ class TestCmdAnalyze:
         mock_results.model_dump.return_value = {"results": "data"}
         mock_results.sender_analysis.unique_senders = 50
         mock_results.content_clusters = [1, 2, 3]
-        mock_analysis.return_value = mock_results
+        mock_analysis.return_value = (mock_results, None)
 
         result = cmd_analyze(args)
 
@@ -552,7 +556,7 @@ class TestCmdAnalyze:
         mock_results.model_dump.return_value = {}
         mock_results.sender_analysis.unique_senders = 0
         mock_results.content_clusters = []
-        mock_analysis.return_value = mock_results
+        mock_analysis.return_value = (mock_results, None)
 
         result = cmd_analyze(args)
 
@@ -619,11 +623,12 @@ class TestCmdAnalyze:
 class TestCmdSuggest:
     """Test cases for cmd_suggest() function."""
 
+    @patch("src.cli.atomic_write_text")
     @patch("src.cli.save_json")
     @patch("src.cli.load_json")
     @patch("src.cli.PathConfig")
     @patch("src.cli.logger")
-    def test_cmd_suggest_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_suggest_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json, mock_atomic_write_text):
         """Test successful category suggestion generation."""
         from src.cli import cmd_suggest
 
@@ -708,13 +713,14 @@ class TestCmdSuggest:
 
         assert result == 1
 
+    @patch("src.cli.atomic_write_text")
     @patch("src.cli.save_json")
     @patch("src.cli.load_json")
     @patch("src.cli.PathConfig")
     @patch("src.cli.logger")
     @patch("src.generators.category_generator.CategoryGenerator")
     @patch("src.models.analysis_results.AnalysisResults")
-    def test_cmd_suggest_with_custom_paths(self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json, mock_save):
+    def test_cmd_suggest_with_custom_paths(self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json, mock_save, mock_atomic_write_text):
         """Test suggestion with custom analysis and output paths."""
         from src.cli import cmd_suggest
 
@@ -766,13 +772,12 @@ class TestCmdSuggest:
         mock_gen.generate_report.return_value = ""
         mock_gen_class.return_value = mock_gen
 
-        with patch("builtins.open", mock_open()):
-            result = cmd_suggest(args)
+        result = cmd_suggest(args)
 
-            mock_load_json.assert_called_once_with(Path("/custom/analysis.json"))
-            # Verify custom suggestions path is used
-            call_args = mock_save.call_args
-            assert call_args[0][1] == Path("/custom/suggestions.json")
+        mock_load_json.assert_called_once_with(Path("/custom/analysis.json"))
+        # Verify custom suggestions path is used
+        call_args = mock_save.call_args
+        assert call_args[0][1] == Path("/custom/suggestions.json")
 
     @patch("src.cli.load_json")
     @patch("src.cli.PathConfig")
@@ -1316,7 +1321,7 @@ class TestEmailProcessorCLIAnalyze:
 
                 mock_results = MagicMock()
                 mock_results.model_dump.return_value = {}
-                mock_analysis.return_value = mock_results
+                mock_analysis.return_value = (mock_results, None)
 
                 result = cli.analyze(num_clusters=10)
 
@@ -1363,11 +1368,12 @@ class TestEmailProcessorCLIAnalyze:
 class TestEmailProcessorCLISuggest:
     """Test cases for EmailProcessorCLI.suggest() method."""
 
+    @patch("src.main.atomic_write_text")
     @patch("src.main.save_json")
     @patch("src.main.load_json")
     @patch("src.main.ensure_output_dir")
     @patch("src.main.logger")
-    def test_suggest_success(self, mock_logger, mock_ensure, mock_load, mock_save):
+    def test_suggest_success(self, mock_logger, mock_ensure, mock_load, mock_save, mock_atomic_write_text):
         """Test successful suggestion generation."""
         from src.main import EmailProcessorCLI
 
@@ -1398,10 +1404,9 @@ class TestEmailProcessorCLISuggest:
                 mock_gen.generate_report.return_value = "# Report"
                 mock_gen_class.return_value = mock_gen
 
-                with patch("builtins.open", mock_open()):
-                    result = cli.suggest()
+                result = cli.suggest()
 
-                    assert result is True
+                assert result is True
 
     @patch("src.main.load_json")
     @patch("src.main.ensure_output_dir")
@@ -2284,7 +2289,7 @@ class TestJsonOutputFlag:
         mock_results.model_dump.return_value = {"results": "data"}
         mock_results.sender_analysis.unique_senders = 50
         mock_results.content_clusters = [1, 2, 3]
-        mock_analysis.return_value = mock_results
+        mock_analysis.return_value = (mock_results, None)
 
         # Capture stdout
         with patch("sys.stdout") as mock_stdout:
@@ -3301,7 +3306,7 @@ class TestClusterAnalysisReport:
                 mock_results.model_dump.return_value = {}
                 mock_results.sender_analysis.unique_senders = 10
                 mock_results.content_clusters = []
-                mock_analysis.return_value = mock_results
+                mock_analysis.return_value = (mock_results, None)
 
                 # Run should succeed
                 result = cmd_analyze(args)

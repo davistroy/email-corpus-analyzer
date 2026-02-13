@@ -3,6 +3,10 @@ Checkpoint manager for resumable email extraction.
 
 Per FR-010, saves checkpoint every N emails to allow resumption
 of interrupted extractions.
+
+Checkpoint format v2 stores only lightweight metadata (< 1KB),
+not full email objects. On resume, extractors use the skip offset
+to re-fetch from the API at the correct position.
 """
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +16,9 @@ from src.utils.logger import get_logger
 from src.utils.paths import PathConfig
 
 logger = get_logger(__name__)
+
+# Current checkpoint format version
+CHECKPOINT_VERSION = 2
 
 
 class CheckpointManager:
@@ -40,22 +47,23 @@ class CheckpointManager:
         self,
         emails_processed: int,
         last_processed_id: str,
-        extracted_emails: list
+        source: str = "hotmail"
     ) -> None:
         """
-        Save extraction checkpoint.
+        Save extraction checkpoint with lightweight metadata only.
 
         Args:
             emails_processed: Number of emails processed so far
             last_processed_id: ID of last processed email
-            extracted_emails: List of extracted email dicts
+            source: Extraction source ("hotmail" or "gmail")
         """
         checkpoint_data = {
+            "version": CHECKPOINT_VERSION,
             "emails_processed": emails_processed,
             "last_processed_id": last_processed_id,
             "timestamp": datetime.now().isoformat(),
             "checkpoint_interval": self.checkpoint_interval,
-            "extracted_emails": extracted_emails
+            "source": source,
         }
 
         save_json(checkpoint_data, self.checkpoint_file)
@@ -66,7 +74,8 @@ class CheckpointManager:
         Load existing checkpoint.
 
         Returns:
-            Checkpoint data dict or None if no checkpoint exists
+            Checkpoint data dict or None if no checkpoint exists.
+            Returns None for v1 (legacy) checkpoints that stored full email objects.
         """
         if not self.checkpoint_file.exists():
             logger.debug("No checkpoint file found")
@@ -82,6 +91,24 @@ class CheckpointManager:
 
         try:
             checkpoint_data = load_json(self.checkpoint_file)
+
+            # Version check: reject v1 (legacy) checkpoints
+            version = checkpoint_data.get("version")
+            if version is None or version < CHECKPOINT_VERSION:
+                logger.warning(
+                    "Old checkpoint format detected, starting fresh extraction"
+                )
+                return None
+
+            # Integrity check: emails_processed must be a non-negative integer
+            emails_processed = checkpoint_data.get("emails_processed")
+            if not isinstance(emails_processed, int) or emails_processed < 0:
+                logger.warning(
+                    f"Invalid emails_processed value ({emails_processed}), "
+                    f"starting fresh extraction."
+                )
+                return None
+
             logger.info(
                 f"Checkpoint loaded: {checkpoint_data['emails_processed']} emails "
                 f"from {checkpoint_data['timestamp']}"
@@ -114,20 +141,19 @@ class CheckpointManager:
             self.checkpoint_file.unlink()
             logger.info("Checkpoint cleared")
 
-    def get_resume_point(self) -> tuple[int, str, list]:
+    def get_resume_point(self) -> tuple[int, str]:
         """
         Get resumption point from checkpoint.
 
         Returns:
-            Tuple of (emails_processed, last_id, extracted_emails)
-            Returns (0, "", []) if no checkpoint
+            Tuple of (emails_processed, last_id)
+            Returns (0, "") if no checkpoint
         """
         checkpoint = self.load_checkpoint()
         if not checkpoint:
-            return (0, "", [])
+            return (0, "")
 
         return (
             checkpoint["emails_processed"],
             checkpoint["last_processed_id"],
-            checkpoint.get("extracted_emails", [])
         )

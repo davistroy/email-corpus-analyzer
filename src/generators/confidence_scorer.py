@@ -5,8 +5,11 @@ Implements confidence scoring per generator_contract.md lines 47-62.
 Contract compliance: FR-025
 
 Enhanced with Task 5A.1: Weighted confidence factors and breakdown.
+Work Item 4.1: Improved scoring with logarithmic volume, percentage/10 scaling,
+mean-overlap distinctiveness, and configurable weights via GeneratorThresholds.
 """
 import logging
+import math
 from dataclasses import dataclass
 
 from ..models.category import Category, CategorySource
@@ -21,6 +24,8 @@ class ConfidenceWeights:
 
     Weights should sum to 1.0 for proper normalization.
     Default weights prioritize source reliability and volume.
+
+    Can be constructed from GeneratorThresholds via from_thresholds().
     """
 
     cohesion: float = 0.15  # Based on distinguishing features
@@ -29,6 +34,26 @@ class ConfidenceWeights:
     percentage: float = 0.15  # Based on corpus percentage
     name_quality: float = 0.10  # Based on name quality score
     distinctiveness: float = 0.15  # Based on overlap with other categories
+
+    @classmethod
+    def from_thresholds(cls, thresholds) -> "ConfidenceWeights":
+        """
+        Create ConfidenceWeights from a GeneratorThresholds config model.
+
+        Args:
+            thresholds: GeneratorThresholds instance with confidence_weight_* fields
+
+        Returns:
+            ConfidenceWeights populated from config
+        """
+        return cls(
+            cohesion=thresholds.confidence_weight_cohesion,
+            volume=thresholds.confidence_weight_volume,
+            source=thresholds.confidence_weight_source,
+            percentage=thresholds.confidence_weight_percentage,
+            name_quality=thresholds.confidence_weight_name_quality,
+            distinctiveness=thresholds.confidence_weight_distinctiveness,
+        )
 
 
 def calculate_confidence(category: Category, total_emails: int) -> float:
@@ -58,9 +83,9 @@ def calculate_confidence(category: Category, total_emails: int) -> float:
         total_emails
     )
 
-    # Calculate volume score: scale to 100 emails max
+    # Calculate volume score: logarithmic scaling so 100 emails = 1.0, 10 ≈ 0.5
     email_count = category.email_count or 0
-    volume_score = min(email_count / 100.0, 1.0)
+    volume_score = min(1.0, math.log10(email_count + 1) / math.log10(101))
     logger.debug("  volume_score: %.3f (email_count=%d)", volume_score, email_count)
 
     # Calculate source score based on CategorySource
@@ -73,9 +98,9 @@ def calculate_confidence(category: Category, total_emails: int) -> float:
     source_score = source_scores.get(category.source, 0.5)
     logger.debug("  source_score: %.3f (source=%s)", source_score, category.source)
 
-    # Calculate percentage score: convert from percentage to 0-1 range
+    # Calculate percentage score: 10% of corpus = 1.0
     percentage = category.percentage or 0.0
-    percentage_score = percentage / 100.0
+    percentage_score = min(1.0, percentage / 10.0)
     logger.debug("  percentage_score: %.3f (percentage=%.2f%%)", percentage_score, percentage)
 
     # Calculate average of three scores
@@ -136,9 +161,9 @@ def calculate_confidence_enhanced(
     cohesion_score = min(features_count / 5.0, 1.0)
     logger.debug("  cohesion_score: %.3f (features=%d)", cohesion_score, features_count)
 
-    # Calculate volume score: scale to 100 emails max
+    # Calculate volume score: logarithmic scaling so 100 emails = 1.0, 10 ≈ 0.5
     email_count = category.email_count or 0
-    volume_score = min(email_count / 100.0, 1.0)
+    volume_score = min(1.0, math.log10(email_count + 1) / math.log10(101))
     logger.debug("  volume_score: %.3f (email_count=%d)", volume_score, email_count)
 
     # Calculate source score based on CategorySource
@@ -151,20 +176,20 @@ def calculate_confidence_enhanced(
     source_score = source_scores.get(category.source, 0.5)
     logger.debug("  source_score: %.3f (source=%s)", source_score, category.source)
 
-    # Calculate percentage score: convert from percentage to 0-1 range
+    # Calculate percentage score: 10% of corpus = 1.0
     percentage = category.percentage or 0.0
-    percentage_score = percentage / 100.0
+    percentage_score = min(1.0, percentage / 10.0)
     logger.debug("  percentage_score: %.3f (percentage=%.2f%%)", percentage_score, percentage)
 
     # Calculate name quality score (use field value or default to 0.5)
     name_quality_score = category.name_quality_score if category.name_quality_score is not None else 0.5
     logger.debug("  name_quality_score: %.3f", name_quality_score)
 
-    # Calculate distinctiveness score (penalize based on overlap with other categories)
+    # Calculate distinctiveness score (penalize based on mean overlap with other categories)
     if overlap_scores:
-        # Use maximum overlap as the penalty basis
-        max_overlap = max(overlap_scores.values()) if overlap_scores else 0.0
-        distinctiveness_score = 1.0 - max_overlap
+        # Use mean overlap across all other categories for average separation
+        mean_overlap = sum(overlap_scores.values()) / len(overlap_scores) if overlap_scores else 0.0
+        distinctiveness_score = 1.0 - mean_overlap
     else:
         # Default to full score if no overlap data
         distinctiveness_score = 1.0
@@ -293,8 +318,9 @@ def calculate_distinctiveness_scores(categories: list[Category]) -> dict[str, fl
     """
     Calculate distinctiveness score for each category.
 
-    Task 5A.2: Distinctiveness is inversely related to maximum overlap.
-    Categories with high overlap get penalized.
+    Work Item 4.1: Distinctiveness is inversely related to mean overlap
+    across all other categories, reflecting average separation rather
+    than worst-case overlap.
 
     Args:
         categories: List of categories to score
@@ -310,9 +336,9 @@ def calculate_distinctiveness_scores(categories: list[Category]) -> dict[str, fl
             # No other categories to overlap with
             scores[cat_id] = 1.0
         else:
-            # Distinctiveness = 1 - max(overlaps)
-            max_overlap = max(others.values()) if others else 0.0
-            scores[cat_id] = 1.0 - max_overlap
+            # Distinctiveness = 1 - mean(overlaps) for average separation
+            mean_overlap = sum(others.values()) / len(others)
+            scores[cat_id] = 1.0 - mean_overlap
 
         logger.debug(
             "Distinctiveness score for '%s': %.3f",

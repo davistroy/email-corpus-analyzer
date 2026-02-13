@@ -124,6 +124,206 @@ class TestGmailClientExtractBody:
         body = gmail_client._extract_body({"body": {}, "parts": []})
         assert body == ""
 
+    def test_3_level_nested_mime(self, gmail_client):
+        """3-level nesting: multipart/mixed -> multipart/alternative -> text/html."""
+        html_content = "<h1>Deep HTML</h1>"
+        plain_content = "Deep plain"
+        payload = {
+            "mimeType": "multipart/mixed",
+            "body": {"size": 0},
+            "parts": [
+                {
+                    "mimeType": "multipart/alternative",
+                    "body": {"size": 0},
+                    "parts": [
+                        {
+                            "mimeType": "text/plain",
+                            "body": {
+                                "data": base64.urlsafe_b64encode(
+                                    plain_content.encode()
+                                ).decode()
+                            },
+                        },
+                        {
+                            "mimeType": "text/html",
+                            "body": {
+                                "data": base64.urlsafe_b64encode(
+                                    html_content.encode()
+                                ).decode()
+                            },
+                        },
+                    ],
+                },
+                {
+                    "mimeType": "application/pdf",
+                    "filename": "invoice.pdf",
+                    "body": {"attachmentId": "att_001", "size": 12345},
+                },
+            ],
+        }
+
+        body = gmail_client._extract_body(payload)
+        assert body == html_content
+        assert "<h1>" in body
+
+    def test_4_level_nested_mime(self, gmail_client):
+        """4-level nesting: multipart/mixed -> multipart/related -> multipart/alternative -> text/html."""
+        html_content = "<div>Very deep HTML</div>"
+        plain_content = "Very deep plain"
+        payload = {
+            "mimeType": "multipart/mixed",
+            "body": {"size": 0},
+            "parts": [
+                {
+                    "mimeType": "multipart/related",
+                    "body": {"size": 0},
+                    "parts": [
+                        {
+                            "mimeType": "multipart/alternative",
+                            "body": {"size": 0},
+                            "parts": [
+                                {
+                                    "mimeType": "text/plain",
+                                    "body": {
+                                        "data": base64.urlsafe_b64encode(
+                                            plain_content.encode()
+                                        ).decode()
+                                    },
+                                },
+                                {
+                                    "mimeType": "text/html",
+                                    "body": {
+                                        "data": base64.urlsafe_b64encode(
+                                            html_content.encode()
+                                        ).decode()
+                                    },
+                                },
+                            ],
+                        },
+                        {
+                            "mimeType": "image/png",
+                            "filename": "logo.png",
+                            "body": {"attachmentId": "att_img", "size": 5000},
+                        },
+                    ],
+                },
+                {
+                    "mimeType": "application/octet-stream",
+                    "filename": "data.bin",
+                    "body": {"attachmentId": "att_002", "size": 9999},
+                },
+            ],
+        }
+
+        body = gmail_client._extract_body(payload)
+        assert body == html_content
+
+    def test_4_level_plain_text_fallback(self, gmail_client):
+        """4-level nesting with only plain text available."""
+        plain_content = "Only plain text at depth 4"
+        payload = {
+            "mimeType": "multipart/mixed",
+            "body": {"size": 0},
+            "parts": [
+                {
+                    "mimeType": "multipart/related",
+                    "body": {"size": 0},
+                    "parts": [
+                        {
+                            "mimeType": "multipart/alternative",
+                            "body": {"size": 0},
+                            "parts": [
+                                {
+                                    "mimeType": "text/plain",
+                                    "body": {
+                                        "data": base64.urlsafe_b64encode(
+                                            plain_content.encode()
+                                        ).decode()
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        }
+
+        body = gmail_client._extract_body(payload)
+        assert body == plain_content
+
+    def test_max_depth_guard(self, gmail_client):
+        """Recursion stops at max_depth to prevent stack overflow on malformed messages."""
+        html_content = "<p>Too deep</p>"
+        # Build a chain 15 levels deep -- only leaf at depth 15 has content
+        leaf = {
+            "mimeType": "text/html",
+            "body": {
+                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
+            },
+        }
+        node = leaf
+        for _ in range(14):
+            node = {
+                "mimeType": "multipart/mixed",
+                "body": {"size": 0},
+                "parts": [node],
+            }
+
+        # With default max_depth=10, the leaf at depth 15 should NOT be reached
+        body = gmail_client._extract_body(node)
+        assert body == ""
+
+    def test_max_depth_allows_content_within_limit(self, gmail_client):
+        """Content at exactly max_depth is still reachable."""
+        html_content = "<p>At depth limit</p>"
+        leaf = {
+            "mimeType": "text/html",
+            "body": {
+                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
+            },
+        }
+        # Build chain of depth 9 wrappings -> leaf at depth 10 (0-indexed: root=0, leaf=10)
+        node = leaf
+        for _ in range(10):
+            node = {
+                "mimeType": "multipart/mixed",
+                "body": {"size": 0},
+                "parts": [node],
+            }
+
+        body = gmail_client._extract_body(node)
+        assert body == html_content
+
+    def test_html_preferred_over_plain_at_same_level(self, gmail_client):
+        """When both HTML and plain exist at the same nesting level, HTML wins."""
+        html_content = "<b>HTML wins</b>"
+        plain_content = "Plain loses"
+        payload = {
+            "mimeType": "multipart/alternative",
+            "body": {"size": 0},
+            "parts": [
+                {
+                    "mimeType": "text/plain",
+                    "body": {
+                        "data": base64.urlsafe_b64encode(
+                            plain_content.encode()
+                        ).decode()
+                    },
+                },
+                {
+                    "mimeType": "text/html",
+                    "body": {
+                        "data": base64.urlsafe_b64encode(
+                            html_content.encode()
+                        ).decode()
+                    },
+                },
+            ],
+        }
+
+        body = gmail_client._extract_body(payload)
+        assert body == html_content
+
 
 class TestGmailClientGetMessage:
     def test_normalize_to_graph_format(self, gmail_client, sample_gmail_message):

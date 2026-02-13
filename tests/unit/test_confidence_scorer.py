@@ -27,9 +27,10 @@ class TestConfidenceScorer:
 
         score = calculate_confidence(category, total_emails)
 
-        # Template source = 0.9, volume (150/100 capped at 1.0) = 1.0, percentage = 0.15
-        # Expected: avg(1.0, 0.9, 0.15) = 0.6833...
-        assert 0.68 <= score <= 0.69
+        # Template source = 0.9, volume log10(151)/log10(101) capped at 1.0,
+        # percentage min(1.0, 15/10) = 1.0
+        # Expected: avg(1.0, 0.9, 1.0) = 0.9667
+        assert 0.96 <= score <= 0.97
 
     def test_medium_confidence_cluster_category(self):
         """Test medium confidence for cluster-based category."""
@@ -47,9 +48,10 @@ class TestConfidenceScorer:
 
         score = calculate_confidence(category, total_emails)
 
-        # Cluster source = 0.8, volume = 0.5, percentage = 0.05
-        # Expected: avg(0.5, 0.8, 0.05) = 0.45
-        assert 0.44 <= score <= 0.46
+        # Cluster source = 0.8, volume log10(51)/log10(101) ≈ 0.852,
+        # percentage min(1.0, 5/10) = 0.5
+        # Expected: avg(0.852, 0.8, 0.5) ≈ 0.717
+        assert 0.71 <= score <= 0.73
 
     def test_low_confidence_sender_category(self):
         """Test lower confidence for sender-based category."""
@@ -67,9 +69,10 @@ class TestConfidenceScorer:
 
         score = calculate_confidence(category, total_emails)
 
-        # Sender source = 0.7, volume = 0.1, percentage = 0.01
-        # Expected: avg(0.1, 0.7, 0.01) = 0.27
-        assert 0.26 <= score <= 0.28
+        # Sender source = 0.7, volume log10(11)/log10(101) ≈ 0.520,
+        # percentage min(1.0, 1/10) = 0.1
+        # Expected: avg(0.520, 0.7, 0.1) ≈ 0.440
+        assert 0.43 <= score <= 0.45
 
     def test_very_low_confidence_custom_category(self):
         """Test very low confidence for custom category with low volume."""
@@ -87,9 +90,10 @@ class TestConfidenceScorer:
 
         score = calculate_confidence(category, total_emails)
 
-        # Custom source = 0.5, volume = 0.02, percentage = 0.002
-        # Expected: avg(0.02, 0.5, 0.002) = 0.174
-        assert 0.17 <= score <= 0.18
+        # Custom source = 0.5, volume log10(3)/log10(101) ≈ 0.238,
+        # percentage min(1.0, 0.2/10) = 0.02
+        # Expected: avg(0.238, 0.5, 0.02) ≈ 0.253
+        assert 0.25 <= score <= 0.26
 
     def test_maximum_confidence_template_100_percent(self):
         """Test maximum possible confidence score."""
@@ -111,8 +115,8 @@ class TestConfidenceScorer:
         # Expected: avg(1.0, 0.9, 1.0) = 0.9666...
         assert 0.96 <= score <= 0.97
 
-    def test_volume_score_capped_at_100(self):
-        """Test that volume score caps at 1.0 even with >100 emails."""
+    def test_volume_score_capped_at_high_count(self):
+        """Test that volume score caps at 1.0 even with very high email count."""
         category = Category(
             category_id="test_6",
             category_name="High Volume",
@@ -127,9 +131,9 @@ class TestConfidenceScorer:
 
         score = calculate_confidence(category, total_emails)
 
-        # Volume should be capped at 1.0 (not 5.0)
-        # Expected: avg(1.0, 0.9, 0.5) = 0.8
-        assert 0.79 <= score <= 0.81
+        # Volume log10(501)/log10(101) capped at 1.0, percentage capped at 1.0
+        # Expected: avg(1.0, 0.9, 1.0) ≈ 0.967
+        assert 0.96 <= score <= 0.97
 
     def test_zero_emails_zero_percentage(self):
         """Test handling of category with zero emails."""
@@ -167,9 +171,10 @@ class TestConfidenceScorer:
 
         score = calculate_confidence(category, total_emails)
 
-        # Volume = 0.5, source = 0.8, percentage = 0.5
-        # Expected: avg(0.5, 0.8, 0.5) = 0.6
-        assert 0.59 <= score <= 0.61
+        # Volume log10(51)/log10(101) ≈ 0.852, source = 0.8,
+        # percentage min(1.0, 50/10) capped at 1.0
+        # Expected: avg(0.852, 0.8, 1.0) ≈ 0.884
+        assert 0.88 <= score <= 0.89
 
     def test_all_category_sources(self):
         """Test that all CategorySource types produce different scores."""
@@ -1133,3 +1138,512 @@ class TestDistinctivenessScoring:
         # High overlap should result in low distinctiveness
         assert result["cat1"] < 0.5
         assert result["cat2"] < 0.5
+
+
+# =============================================================================
+# Work Item 4.1: Improved Confidence Scoring Tests
+# =============================================================================
+
+
+class TestLogarithmicVolumeScaling:
+    """Test logarithmic volume scaling: min(1.0, log10(count+1)/log10(101))."""
+
+    def test_volume_100_emails_equals_one(self):
+        """100 emails should produce volume score of 1.0."""
+        import math
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="vol_100",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=100,
+            percentage=10.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
+
+        # log10(101)/log10(101) = 1.0
+        assert abs(breakdown["volume"] - 1.0) < 0.001
+
+    def test_volume_10_emails_about_half(self):
+        """10 emails should produce volume score of approximately 0.52."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="vol_10",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=10,
+            percentage=5.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=200)
+
+        # log10(11)/log10(101) ≈ 0.5195
+        assert 0.50 <= breakdown["volume"] <= 0.54
+
+    def test_volume_1_email_low_but_nonzero(self):
+        """1 email should produce a low but nonzero volume score."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="vol_1",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=1,
+            percentage=0.5,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=200)
+
+        # log10(2)/log10(101) ≈ 0.150
+        assert 0.14 <= breakdown["volume"] <= 0.16
+
+    def test_volume_0_emails_is_zero(self):
+        """0 emails should produce volume score of 0.0."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="vol_0",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=0,
+            percentage=0.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=200)
+
+        # log10(1)/log10(101) = 0.0
+        assert breakdown["volume"] == 0.0
+
+    def test_volume_above_100_still_capped(self):
+        """Email counts above 100 should still cap at 1.0."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="vol_1000",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=1000,
+            percentage=50.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=2000)
+
+        assert breakdown["volume"] == 1.0
+
+
+class TestPercentageScoring:
+    """Test percentage scoring: min(1.0, percentage / 10.0)."""
+
+    def test_10_percent_category_scores_one(self):
+        """A category at 10% of corpus should get percentage score of 1.0."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="pct_10",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=100,
+            percentage=10.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
+
+        assert abs(breakdown["percentage"] - 1.0) < 0.001
+
+    def test_5_percent_category_scores_half(self):
+        """A category at 5% of corpus should get percentage score of 0.5."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="pct_5",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
+
+        assert abs(breakdown["percentage"] - 0.5) < 0.001
+
+    def test_1_percent_category_scores_tenth(self):
+        """A category at 1% of corpus should get percentage score of 0.1."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="pct_1",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=10,
+            percentage=1.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
+
+        assert abs(breakdown["percentage"] - 0.1) < 0.001
+
+    def test_above_10_percent_capped_at_one(self):
+        """Percentages above 10% should cap at 1.0."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="pct_50",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=500,
+            percentage=50.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+        _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
+
+        assert breakdown["percentage"] == 1.0
+
+
+class TestMeanOverlapDistinctiveness:
+    """Test that distinctiveness uses mean overlap instead of max overlap."""
+
+    def test_mean_overlap_with_mixed_overlaps(self):
+        """Distinctiveness should use mean, not max, when multiple overlaps exist."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="test_mean",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+
+        # One high overlap, one low overlap
+        # max would give 1.0 - 0.9 = 0.1
+        # mean gives 1.0 - (0.9 + 0.1) / 2 = 1.0 - 0.5 = 0.5
+        overlap_scores = {"cat_high": 0.9, "cat_low": 0.1}
+
+        _, breakdown = calculate_confidence_enhanced(
+            category, total_emails=1000, overlap_scores=overlap_scores
+        )
+
+        assert abs(breakdown["distinctiveness"] - 0.5) < 0.001
+
+    def test_mean_overlap_single_category_same_as_max(self):
+        """With only one other category, mean and max are the same."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="test_single",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=[]
+        )
+
+        overlap_scores = {"other": 0.6}
+
+        _, breakdown = calculate_confidence_enhanced(
+            category, total_emails=1000, overlap_scores=overlap_scores
+        )
+
+        # 1.0 - 0.6 = 0.4
+        assert abs(breakdown["distinctiveness"] - 0.4) < 0.001
+
+    def test_distinctiveness_uses_mean_in_calculate_distinctiveness_scores(self):
+        """calculate_distinctiveness_scores should use mean overlap, not max."""
+        from src.generators.confidence_scorer import calculate_distinctiveness_scores
+
+        # 3 categories: cat1 overlaps highly with cat2 but not cat3
+        cat1 = Category(
+            category_id="cat1",
+            category_name="Cat1",
+            description="Test",
+            confidence=0.5,
+            email_count=10,
+            percentage=1.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=[],
+            example_email_ids=["a", "b", "c", "d", "e"]
+        )
+        cat2 = Category(
+            category_id="cat2",
+            category_name="Cat2",
+            description="Test",
+            confidence=0.5,
+            email_count=10,
+            percentage=1.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=[],
+            example_email_ids=["a", "b", "c", "d", "e"]  # 100% overlap with cat1
+        )
+        cat3 = Category(
+            category_id="cat3",
+            category_name="Cat3",
+            description="Test",
+            confidence=0.5,
+            email_count=10,
+            percentage=1.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=[],
+            example_email_ids=["f", "g", "h", "i", "j"]  # 0% overlap with cat1
+        )
+
+        result = calculate_distinctiveness_scores([cat1, cat2, cat3])
+
+        # cat1: overlaps with cat2=1.0, cat3=0.0 -> mean=0.5 -> distinctiveness=0.5
+        # With max it would be 1.0-1.0=0.0
+        assert abs(result["cat1"] - 0.5) < 0.001
+
+        # cat3: overlaps with cat1=0.0, cat2=0.0 -> mean=0.0 -> distinctiveness=1.0
+        assert abs(result["cat3"] - 1.0) < 0.001
+
+
+class TestSmallCorpusReasonableConfidence:
+    """Test that small categories in small corpora get reasonable confidence scores.
+
+    Acceptance criterion: 10-email category in 200-email corpus should NOT
+    get a tiny score like 0.05. The new formulas should produce meaningful
+    confidence values even for small categories.
+    """
+
+    def test_10_emails_in_200_corpus_reasonable_confidence(self):
+        """10-email category in 200-email corpus gets reasonable confidence (not 0.05)."""
+        category = Category(
+            category_id="small_cat",
+            category_name="Small Category",
+            description="Small but valid category",
+            confidence=0.0,
+            email_count=10,
+            percentage=5.0,  # 10/200 = 5%
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["feature1", "feature2"]
+        )
+
+        score = calculate_confidence(category, total_emails=200)
+
+        # With new formulas:
+        # volume = log10(11)/log10(101) ≈ 0.520
+        # source = 0.8 (content cluster)
+        # percentage = min(1.0, 5/10) = 0.5
+        # avg ≈ 0.607
+        assert score > 0.30, f"Score {score} is unreasonably low for a 10-email / 200-corpus category"
+        assert score < 1.0
+
+    def test_small_corpus_20_emails_total(self):
+        """Categories in very small corpus (20 emails) get reasonable scores."""
+        category = Category(
+            category_id="tiny_corpus",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=5,
+            percentage=25.0,  # 5/20 = 25%
+            source=CategorySource.SENDER,
+            distinguishing_features=["f1"]
+        )
+
+        score = calculate_confidence(category, total_emails=20)
+
+        # volume = log10(6)/log10(101) ≈ 0.388
+        # source = 0.7
+        # percentage = min(1.0, 25/10) = 1.0
+        # avg ≈ 0.696
+        assert score > 0.40, f"Score {score} too low for 25% of corpus"
+
+    def test_medium_corpus_500_emails(self):
+        """Medium corpus scenario: 30 emails in 500 email corpus."""
+        category = Category(
+            category_id="med_corpus",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=30,
+            percentage=6.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["f1", "f2", "f3"]
+        )
+
+        score = calculate_confidence(category, total_emails=500)
+
+        # volume = log10(31)/log10(101) ≈ 0.743
+        # source = 0.8
+        # percentage = min(1.0, 6/10) = 0.6
+        # avg ≈ 0.714
+        assert score > 0.50, f"Score {score} too low for 6% of medium corpus"
+
+    def test_large_corpus_5000_emails(self):
+        """Large corpus scenario: 100 emails in 5000 email corpus."""
+        category = Category(
+            category_id="large_corpus",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=100,
+            percentage=2.0,
+            source=CategorySource.TEMPLATE,
+            distinguishing_features=["f1", "f2"]
+        )
+
+        score = calculate_confidence(category, total_emails=5000)
+
+        # volume = log10(101)/log10(101) = 1.0
+        # source = 0.9
+        # percentage = min(1.0, 2/10) = 0.2
+        # avg ≈ 0.700
+        assert score > 0.50, f"Score {score} too low for 100-email template category"
+
+    def test_enhanced_10_emails_in_200_corpus(self):
+        """Enhanced scorer: 10 emails in 200 corpus with features gets decent score."""
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        category = Category(
+            category_id="small_enhanced",
+            category_name="Test Category",
+            description="Test",
+            confidence=0.0,
+            email_count=10,
+            percentage=5.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["f1", "f2", "f3"],
+            name_quality_score=0.7
+        )
+
+        score, breakdown = calculate_confidence_enhanced(category, total_emails=200)
+
+        # With 3 features, good name quality, and no overlap penalty:
+        # cohesion = 3/5 = 0.6
+        # volume ≈ 0.520
+        # source = 0.8
+        # percentage = 0.5
+        # name_quality = 0.7
+        # distinctiveness = 1.0
+        assert score > 0.30, f"Enhanced score {score} too low for small but valid category"
+
+
+class TestConfigurableWeights:
+    """Test that confidence weights are configurable via GeneratorThresholds."""
+
+    def test_from_thresholds_creates_weights(self):
+        """ConfidenceWeights.from_thresholds creates weights from config."""
+        from src.generators.confidence_scorer import ConfidenceWeights
+        from src.config.models import GeneratorThresholds
+
+        thresholds = GeneratorThresholds()
+        weights = ConfidenceWeights.from_thresholds(thresholds)
+
+        assert weights.cohesion == thresholds.confidence_weight_cohesion
+        assert weights.volume == thresholds.confidence_weight_volume
+        assert weights.source == thresholds.confidence_weight_source
+        assert weights.percentage == thresholds.confidence_weight_percentage
+        assert weights.name_quality == thresholds.confidence_weight_name_quality
+        assert weights.distinctiveness == thresholds.confidence_weight_distinctiveness
+
+    def test_custom_thresholds_produce_different_scores(self):
+        """Custom weights from config should produce different scores."""
+        from src.generators.confidence_scorer import (
+            ConfidenceWeights,
+            calculate_confidence_enhanced
+        )
+        from src.config.models import GeneratorThresholds
+
+        category = Category(
+            category_id="config_test",
+            category_name="Test",
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["f1", "f2"],
+            name_quality_score=0.7
+        )
+
+        # Default weights
+        default_weights = ConfidenceWeights()
+        default_score, _ = calculate_confidence_enhanced(
+            category, total_emails=1000, weights=default_weights
+        )
+
+        # Volume-heavy weights from config
+        heavy_volume_thresholds = GeneratorThresholds(
+            confidence_weight_cohesion=0.05,
+            confidence_weight_volume=0.60,
+            confidence_weight_source=0.10,
+            confidence_weight_percentage=0.10,
+            confidence_weight_name_quality=0.05,
+            confidence_weight_distinctiveness=0.10,
+        )
+        custom_weights = ConfidenceWeights.from_thresholds(heavy_volume_thresholds)
+        custom_score, _ = calculate_confidence_enhanced(
+            category, total_emails=1000, weights=custom_weights
+        )
+
+        # Scores should differ because volume is emphasized differently
+        assert default_score != custom_score
+
+    def test_default_thresholds_match_default_weights(self):
+        """Default GeneratorThresholds should produce same weights as ConfidenceWeights()."""
+        from src.generators.confidence_scorer import ConfidenceWeights
+        from src.config.models import GeneratorThresholds
+
+        default_weights = ConfidenceWeights()
+        from_config = ConfidenceWeights.from_thresholds(GeneratorThresholds())
+
+        assert default_weights.cohesion == from_config.cohesion
+        assert default_weights.volume == from_config.volume
+        assert default_weights.source == from_config.source
+        assert default_weights.percentage == from_config.percentage
+        assert default_weights.name_quality == from_config.name_quality
+        assert default_weights.distinctiveness == from_config.distinctiveness
+
+    def test_generator_thresholds_weight_fields_exist(self):
+        """GeneratorThresholds has all confidence_weight_* fields."""
+        from src.config.models import GeneratorThresholds
+
+        thresholds = GeneratorThresholds()
+
+        assert hasattr(thresholds, "confidence_weight_cohesion")
+        assert hasattr(thresholds, "confidence_weight_volume")
+        assert hasattr(thresholds, "confidence_weight_source")
+        assert hasattr(thresholds, "confidence_weight_percentage")
+        assert hasattr(thresholds, "confidence_weight_name_quality")
+        assert hasattr(thresholds, "confidence_weight_distinctiveness")
+
+    def test_generator_thresholds_weights_sum_to_one(self):
+        """Default confidence weights from GeneratorThresholds should sum to 1.0."""
+        from src.config.models import GeneratorThresholds
+
+        thresholds = GeneratorThresholds()
+        total = (
+            thresholds.confidence_weight_cohesion +
+            thresholds.confidence_weight_volume +
+            thresholds.confidence_weight_source +
+            thresholds.confidence_weight_percentage +
+            thresholds.confidence_weight_name_quality +
+            thresholds.confidence_weight_distinctiveness
+        )
+        assert 0.99 <= total <= 1.01

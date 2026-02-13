@@ -5,6 +5,7 @@ Orchestrates the complete email analysis pipeline.
 Decoupled from CLI for independent use.
 
 Per Phase 7, Track 7B specification.
+Work Item 3.4: All critical JSON outputs use atomic writes.
 """
 import logging
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from src.models.corpus import Corpus
 from src.services.analysis_service import AnalysisService
 from src.services.extraction_service import ExtractionService
 from src.services.suggestion_service import SuggestionService
+from src.utils.file_manager import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +116,9 @@ class PipelineService:
             progress_callback=progress_callback,
         )
 
-        # Save analysis
+        # Save analysis (atomic write to prevent corruption)
         analysis_path = output_dir / "corpus_analysis_results.json"
-        analysis_path.write_text(analysis.model_dump_json(indent=2))
+        atomic_write_text(analysis_path, analysis.model_dump_json(indent=2))
 
         if progress_callback:
             progress_callback(f"Saved analysis to {analysis_path}")
@@ -132,11 +134,10 @@ class PipelineService:
             progress_callback=progress_callback,
         )
 
-        # Save suggestions
+        # Save suggestions (atomic write to prevent corruption)
         suggestions_path = output_dir / "category_suggestions.json"
-        suggestions_path.write_text(
-            "[" + ",\n".join(c.model_dump_json() for c in categories) + "]"
-        )
+        suggestions_content = "[" + ",\n".join(c.model_dump_json() for c in categories) + "]"
+        atomic_write_text(suggestions_path, suggestions_content)
 
         if progress_callback:
             progress_callback(f"Saved suggestions to {suggestions_path}")

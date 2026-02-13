@@ -7,11 +7,12 @@ Provides Pydantic models for all CLI configuration options with:
 - Nested configuration structure for each command
 
 Per Task 1A.1 specification.
+Task 2.2: Added AnalyzerThresholds and GeneratorThresholds for externalizing magic numbers.
 """
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class ExtractConfig(BaseModel):
@@ -33,6 +34,115 @@ class ExtractConfig(BaseModel):
         default=None,
         description="Custom path for corpus JSON file"
     )
+    source: str = Field(
+        default="hotmail",
+        description="Email source: hotmail, gmail, or both"
+    )
+    gmail_email: str | None = Field(
+        default=None,
+        description="Gmail address (required when source is gmail or both)"
+    )
+
+    @field_validator("source")
+    @classmethod
+    def validate_source(cls, v: str) -> str:
+        """Validate source is one of the allowed values."""
+        allowed = ("hotmail", "gmail", "both")
+        if v not in allowed:
+            raise ValueError(f"source must be one of {allowed}, got '{v}'")
+        return v
+
+    @model_validator(mode="after")
+    def validate_gmail_email_required(self) -> "ExtractConfig":
+        """Ensure gmail_email is provided when source requires it."""
+        if self.source in ("gmail", "both") and not self.gmail_email:
+            raise ValueError(
+                "gmail_email is required when source is "
+                f"'{self.source}'"
+            )
+        return self
+
+
+class AnalyzerThresholds(BaseModel):
+    """
+    Configurable thresholds for analyzer modules.
+
+    All defaults match the previously-hardcoded values so behavior
+    is unchanged without explicit configuration.
+    """
+
+    # SenderAnalyzer thresholds
+    top_senders: int = Field(
+        default=50,
+        ge=1,
+        le=1000,
+        description="Number of top senders to extract by frequency"
+    )
+    top_domains: int = Field(
+        default=30,
+        ge=1,
+        le=500,
+        description="Number of top domains to extract by frequency"
+    )
+    marketing_min_emails: int = Field(
+        default=10,
+        ge=1,
+        le=10000,
+        description="Minimum email count to classify sender as marketing"
+    )
+
+    # SubjectAnalyzer thresholds
+    top_keywords: int = Field(
+        default=50,
+        ge=1,
+        le=1000,
+        description="Number of top keywords to extract from subject lines"
+    )
+
+    # SemanticAnalyzer thresholds
+    max_auto_clusters: int = Field(
+        default=15,
+        ge=2,
+        le=100,
+        description="Maximum number of clusters for auto-clustering optimization"
+    )
+    representative_samples: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        description="Number of representative samples per cluster (closest to centroid)"
+    )
+    random_state: int = Field(
+        default=42,
+        ge=0,
+        description="Random state seed for KMeans clustering reproducibility"
+    )
+
+    # TemporalAnalyzer thresholds
+    frequency_daily_threshold_days: float = Field(
+        default=2.0,
+        gt=0,
+        le=365,
+        description="Average interval (days) below which sender is classified as daily"
+    )
+    frequency_weekly_threshold_days: float = Field(
+        default=8.0,
+        gt=0,
+        le=365,
+        description="Average interval (days) below which sender is classified as weekly"
+    )
+    frequency_monthly_threshold_days: float = Field(
+        default=35.0,
+        gt=0,
+        le=365,
+        description="Average interval (days) below which sender is classified as monthly"
+    )
+    min_emails_for_frequency: int = Field(
+        default=10,
+        ge=2,
+        le=10000,
+        description="Minimum email count required for frequency classification beyond one-time"
+    )
 
 
 class AnalyzeConfig(BaseModel):
@@ -44,6 +154,24 @@ class AnalyzeConfig(BaseModel):
         le=1000,
         description="Number of semantic clusters"
     )
+    max_embedding_text_length: int = Field(
+        default=1500,
+        ge=200,
+        le=5000,
+        description="Maximum body text characters for embedding generation"
+    )
+    auto_cluster_min: int = Field(
+        default=3,
+        ge=2,
+        le=50,
+        description="Minimum max_k bound for auto-clustering"
+    )
+    auto_cluster_max: int = Field(
+        default=25,
+        ge=3,
+        le=100,
+        description="Maximum max_k cap for auto-clustering"
+    )
     corpus_file: Path | None = Field(
         default=None,
         description="Path to corpus JSON file"
@@ -52,6 +180,105 @@ class AnalyzeConfig(BaseModel):
         default=None,
         description="Custom path for analysis results"
     )
+    thresholds: AnalyzerThresholds = Field(
+        default_factory=AnalyzerThresholds,
+        description="Configurable thresholds for analyzer modules"
+    )
+
+    @model_validator(mode="after")
+    def validate_auto_cluster_bounds(self) -> "AnalyzeConfig":
+        """Ensure auto_cluster_min <= auto_cluster_max."""
+        if self.auto_cluster_min > self.auto_cluster_max:
+            raise ValueError(
+                f"auto_cluster_min ({self.auto_cluster_min}) must be <= "
+                f"auto_cluster_max ({self.auto_cluster_max})"
+            )
+        return self
+
+
+class GeneratorThresholds(BaseModel):
+    """
+    Configurable thresholds for generator modules.
+
+    All defaults match the previously-hardcoded values so behavior
+    is unchanged without explicit configuration.
+    """
+
+    # CategoryGenerator thresholds
+    max_senders_for_categories: int = Field(
+        default=20,
+        ge=1,
+        le=1000,
+        description="Maximum number of top senders to consider for sender-based categories"
+    )
+    merge_name_similarity: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Name similarity threshold for merging categories (SequenceMatcher ratio)"
+    )
+    merge_email_overlap: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Email ID overlap threshold (Jaccard) for merging categories"
+    )
+
+    # Confidence weight fields (Work Item 4.1)
+    # These weights are used by calculate_confidence_enhanced and should sum to 1.0
+    confidence_weight_cohesion: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for cohesion (distinguishing features count)"
+    )
+    confidence_weight_volume: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for volume (logarithmic email count scaling)"
+    )
+    confidence_weight_source: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for source type reliability"
+    )
+    confidence_weight_percentage: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for corpus percentage (10% = 1.0)"
+    )
+    confidence_weight_name_quality: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for name quality score"
+    )
+    confidence_weight_distinctiveness: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for distinctiveness (mean overlap penalty)"
+    )
+
+    @model_validator(mode="after")
+    def validate_confidence_weights_sum(self) -> "GeneratorThresholds":
+        """Ensure confidence weights sum to approximately 1.0."""
+        total = (
+            self.confidence_weight_cohesion
+            + self.confidence_weight_volume
+            + self.confidence_weight_source
+            + self.confidence_weight_percentage
+            + self.confidence_weight_name_quality
+            + self.confidence_weight_distinctiveness
+        )
+        if not (0.99 <= total <= 1.01):
+            raise ValueError(
+                f"confidence_weight_* fields must sum to 1.0, got {total:.4f}"
+            )
+        return self
 
 
 class SuggestConfig(BaseModel):
@@ -75,6 +302,30 @@ class SuggestConfig(BaseModel):
     suggestions_file: Path | None = Field(
         default=None,
         description="Custom path for suggestions JSON"
+    )
+    thresholds: GeneratorThresholds = Field(
+        default_factory=GeneratorThresholds,
+        description="Configurable thresholds for generator modules"
+    )
+
+
+class LearningConfig(BaseModel):
+    """
+    Configuration for the feedback learning system.
+
+    Controls temporal decay of pattern detection and other
+    learning-related parameters.
+    """
+
+    pattern_half_life_days: float = Field(
+        default=90.0,
+        gt=0,
+        le=3650,
+        description=(
+            "Half-life in days for temporal decay of pattern confidence. "
+            "A decision this many days old contributes 50% of a brand-new "
+            "decision's weight. Default 90 days."
+        ),
     )
 
 
@@ -133,6 +384,7 @@ class AppConfig(BaseModel):
     suggest: SuggestConfig = Field(default_factory=SuggestConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    learning: LearningConfig = Field(default_factory=LearningConfig)
 
     @field_validator("output_dir", mode="before")
     @classmethod
@@ -219,6 +471,7 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
         ("suggest", SuggestConfig),
         ("review", ReviewConfig),
         ("pipeline", PipelineConfig),
+        ("learning", LearningConfig),
     ]:
         base_nested = getattr(base, config_name)
         override_nested = getattr(override, config_name)

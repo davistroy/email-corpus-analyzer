@@ -5,11 +5,13 @@ Performs semantic clustering of email corpus using sentence transformers and KMe
 Per analyzer_contract.md lines 153-221 and research.md lines 15-68.
 
 Task 4B.4: Enhanced with incremental analysis support using embedding cache.
+Task 2.2: Externalized magic numbers to AnalyzerThresholds config.
 """
 import logging
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -21,10 +23,11 @@ from sklearn.metrics.pairwise import cosine_distances
 from ..models.content_cluster import ContentCluster, RepresentativeSample
 from ..models.corpus import Corpus
 from .base import BaseAnalyzer
-from .cluster_optimizer import ElbowOptimizer, SilhouetteOptimizer
+from .cluster_optimizer import ElbowOptimizer, SilhouetteOptimizer, compute_max_k
 
 if TYPE_CHECKING:
     from src.cache.embedding_cache import EmbeddingCache
+    from src.config.models import AnalyzerThresholds
 
 logger = logging.getLogger(__name__)
 
@@ -53,15 +56,27 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         """Return True as semantic analyzer supports incremental analysis."""
         return True
 
-    def __init__(self, model_name: str = "mixedbread-ai/mxbai-embed-large-v1"):
+    def __init__(
+        self,
+        model_name: str = "mixedbread-ai/mxbai-embed-large-v1",
+        max_embedding_text_length: int = 1500,
+        thresholds: "AnalyzerThresholds | None" = None,
+    ):
         """
         Initialize with sentence transformer model.
 
         Args:
             model_name: Hugging Face model identifier
+            max_embedding_text_length: Max body chars for embedding text (default 1500)
+            thresholds: Optional analyzer thresholds config. Uses defaults if None.
         """
+        if thresholds is None:
+            from ..config.models import AnalyzerThresholds
+            thresholds = AnalyzerThresholds()
+        self.thresholds = thresholds
         self.model_name = model_name
         self.model = None
+        self.max_embedding_text_length = max_embedding_text_length
         logger.debug("SemanticAnalyzer initialized (model will load on first use)")
 
     def _ensure_model_loaded(self):
@@ -77,6 +92,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         num_clusters: int = 10,
         auto_clusters: bool = False,
         cluster_method: str = "silhouette",
+        auto_cluster_min: int = 3,
+        auto_cluster_max: int = 25,
         progress_callback: Callable[[int, int], None] | None = None
     ) -> list[ContentCluster]:
         """
@@ -95,6 +112,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             num_clusters: Number of clusters (default 10)
             auto_clusters: If True, automatically determine optimal k
             cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+            auto_cluster_min: Minimum max_k for auto-clustering (default 3)
+            auto_cluster_max: Maximum max_k for auto-clustering (default 25)
             progress_callback: Optional callback(current, total)
 
         Returns:
@@ -115,9 +134,15 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         self._ensure_model_loaded()
 
         # Step 1: Generate embeddings (FR-015)
-        # Combine subject + first 500 chars of body using Email.combined_text property
-        logger.debug("Extracting combined text for embeddings")
-        texts = [email.combined_text for email in corpus.emails]
+        # Combine subject + body text using configurable length limit
+        logger.debug(
+            f"Extracting combined text for embeddings "
+            f"(max_body_length={self.max_embedding_text_length})"
+        )
+        texts = [
+            email.combined_text_with_limit(self.max_embedding_text_length)
+            for email in corpus.emails
+        ]
 
         logger.info("Generating embeddings with sentence transformer")
         if progress_callback:
@@ -138,12 +163,20 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         # Determine effective number of clusters
         if auto_clusters and total_emails >= 3:
             # Auto-determine optimal k using specified method
-            logger.info(f"Auto-determining optimal clusters using {cluster_method} method...")
+            max_k = compute_max_k(
+                total_emails,
+                min_k=auto_cluster_min,
+                max_k_cap=auto_cluster_max
+            )
+            logger.info(
+                f"Auto-determining optimal clusters using {cluster_method} method "
+                f"(max_k={max_k}, corpus_size={total_emails})..."
+            )
 
             if cluster_method == "elbow":
-                optimizer = ElbowOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = ElbowOptimizer(max_k=max_k)
             else:  # silhouette (default)
-                optimizer = SilhouetteOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = SilhouetteOptimizer(max_k=max_k)
 
             optimization_result = optimizer.find_optimal_k(embeddings)
             effective_clusters = optimization_result.optimal_k
@@ -167,7 +200,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         logger.info(f"Performing KMeans clustering with {effective_clusters} clusters")
         kmeans = KMeans(
             n_clusters=effective_clusters,
-            random_state=42,
+            random_state=self.thresholds.random_state,
             n_init=10
         )
         cluster_labels = kmeans.fit_predict(embeddings)
@@ -205,7 +238,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             cluster_emails = [corpus.emails[i] for i in cluster_indices]
             email_ids = [email.id for email in cluster_emails]
 
-            # Find 5 representative samples (closest to centroid) (FR-017)
+            # Find representative samples (closest to centroid) (FR-017)
             cluster_embeddings = embeddings[cluster_mask]
             centroid = cluster_centers[cluster_id]
 
@@ -215,8 +248,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 centroid.reshape(1, -1)
             ).flatten()
 
-            # Get indices of 5 closest samples (or fewer if cluster is small)
-            num_samples = min(5, cluster_size)
+            # Get indices of N closest samples (or fewer if cluster is small)
+            num_samples = min(self.thresholds.representative_samples, cluster_size)
             closest_indices = np.argsort(distances)[:num_samples]
 
             # Map back to original corpus indices
@@ -281,6 +314,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         num_clusters: int = 10,
         auto_clusters: bool = False,
         cluster_method: str = "silhouette",
+        auto_cluster_min: int = 3,
+        auto_cluster_max: int = 25,
         progress_callback: Callable[[int, int], None] | None = None
     ) -> IncrementalAnalysisResult:
         """
@@ -294,6 +329,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             num_clusters: Number of clusters (default 10)
             auto_clusters: If True, automatically determine optimal k
             cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+            auto_cluster_min: Minimum max_k for auto-clustering (default 3)
+            auto_cluster_max: Maximum max_k for auto-clustering (default 25)
             progress_callback: Optional callback(current, total)
 
         Returns:
@@ -327,7 +364,10 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             self._ensure_model_loaded()
 
             uncached_texts = [
-                id_to_email[email_id].combined_text for email_id in uncached_ids
+                id_to_email[email_id].combined_text_with_limit(
+                    self.max_embedding_text_length
+                )
+                for email_id in uncached_ids
             ]
 
             logger.info(f"Generating {len(uncached_texts)} new embeddings")
@@ -359,7 +399,9 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 logger.warning(f"Missing embedding for {email_id}")
                 # Generate on-the-fly
                 self._ensure_model_loaded()
-                text = id_to_email[email_id].combined_text
+                text = id_to_email[email_id].combined_text_with_limit(
+                    self.max_embedding_text_length
+                )
                 embedding = self.model.encode([text], convert_to_numpy=True)[0]
                 embeddings_list.append(embedding)
 
@@ -378,7 +420,8 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         # Now perform clustering using the combined embeddings
         # (Reuse clustering logic from analyze method)
         effective_clusters = self._determine_clusters(
-            embeddings, total_emails, num_clusters, auto_clusters, cluster_method
+            embeddings, total_emails, num_clusters, auto_clusters, cluster_method,
+            auto_cluster_min, auto_cluster_max
         )
 
         clusters = self._perform_clustering(
@@ -393,16 +436,26 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         total_emails: int,
         num_clusters: int,
         auto_clusters: bool,
-        cluster_method: str
+        cluster_method: str,
+        auto_cluster_min: int = 3,
+        auto_cluster_max: int = 25,
     ) -> int:
         """Determine effective number of clusters."""
         if auto_clusters and total_emails >= 3:
-            logger.info(f"Auto-determining optimal clusters using {cluster_method} method...")
+            max_k = compute_max_k(
+                total_emails,
+                min_k=auto_cluster_min,
+                max_k_cap=auto_cluster_max
+            )
+            logger.info(
+                f"Auto-determining optimal clusters using {cluster_method} method "
+                f"(max_k={max_k}, corpus_size={total_emails})..."
+            )
 
             if cluster_method == "elbow":
-                optimizer = ElbowOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = ElbowOptimizer(max_k=max_k)
             else:
-                optimizer = SilhouetteOptimizer(max_k=min(15, total_emails - 1))
+                optimizer = SilhouetteOptimizer(max_k=max_k)
 
             optimization_result = optimizer.find_optimal_k(embeddings)
             effective_clusters = optimization_result.optimal_k
@@ -433,7 +486,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         logger.info(f"Performing KMeans clustering with {effective_clusters} clusters")
         kmeans = KMeans(
             n_clusters=effective_clusters,
-            random_state=42,
+            random_state=self.thresholds.random_state,
             n_init=10
         )
         cluster_labels = kmeans.fit_predict(embeddings)
@@ -468,7 +521,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 cluster_embeddings, centroid.reshape(1, -1)
             ).flatten()
 
-            num_samples = min(5, cluster_size)
+            num_samples = min(self.thresholds.representative_samples, cluster_size)
             closest_indices = np.argsort(distances)[:num_samples]
             representative_indices = cluster_indices[closest_indices]
 
@@ -505,3 +558,108 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             clusters.append(cluster)
 
         return clusters
+
+
+def generate_cluster_visualization(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    output_path: str | Path,
+    cluster_silhouette_scores: dict[int, float] | None = None,
+) -> Path | None:
+    """
+    Generate cluster quality visualization as a PNG file.
+
+    Produces a two-panel figure:
+    1. PCA scatter plot of embeddings colored by cluster label
+    2. Bar chart of per-cluster average silhouette scores (if provided)
+
+    Args:
+        embeddings: 2D numpy array of shape (n_samples, n_features)
+        labels: 1D numpy array of cluster labels for each sample
+        output_path: Path to save the output PNG file
+        cluster_silhouette_scores: Optional dict mapping cluster_id to average
+            silhouette score. If None, only the scatter plot is generated.
+
+    Returns:
+        Path to the saved PNG file, or None if matplotlib is not available.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")  # Non-interactive backend for file output
+        import matplotlib.pyplot as plt
+        from sklearn.decomposition import PCA
+    except ImportError:
+        logger.warning(
+            "matplotlib required for visualization. "
+            "Install with: pip install matplotlib"
+        )
+        return None
+
+    output_path = Path(output_path)
+
+    has_silhouette = (
+        cluster_silhouette_scores is not None
+        and len(cluster_silhouette_scores) > 0
+    )
+    ncols = 2 if has_silhouette else 1
+    fig, axes = plt.subplots(1, ncols, figsize=(8 * ncols, 6))
+
+    if ncols == 1:
+        axes = [axes]
+
+    # --- Panel 1: PCA scatter plot ---
+    ax_scatter = axes[0]
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(embeddings)
+
+    unique_labels = np.unique(labels)
+    cmap = plt.colormaps.get_cmap("tab10").resampled(max(len(unique_labels), 1))
+
+    for idx, label in enumerate(unique_labels):
+        mask = labels == label
+        ax_scatter.scatter(
+            coords[mask, 0],
+            coords[mask, 1],
+            c=[cmap(idx)],
+            label=f"Cluster {label}",
+            alpha=0.6,
+            s=20,
+        )
+
+    ax_scatter.set_title("Email Clusters (PCA Projection)")
+    ax_scatter.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.1%} var)")
+    ax_scatter.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.1%} var)")
+    ax_scatter.legend(fontsize=7, loc="best", ncol=2)
+
+    # --- Panel 2: Silhouette bar chart ---
+    if has_silhouette:
+        ax_bar = axes[1]
+        sorted_ids = sorted(cluster_silhouette_scores.keys())
+        scores = [cluster_silhouette_scores[cid] for cid in sorted_ids]
+        bar_labels = [f"C{cid}" for cid in sorted_ids]
+        colors = [cmap(i % cmap.N) for i in range(len(sorted_ids))]
+
+        bars = ax_bar.bar(bar_labels, scores, color=colors, edgecolor="white")
+        ax_bar.set_title("Per-Cluster Silhouette Scores")
+        ax_bar.set_xlabel("Cluster")
+        ax_bar.set_ylabel("Avg Silhouette Score")
+        ax_bar.set_ylim(-1.0, 1.0)
+        ax_bar.axhline(y=0, color="gray", linestyle="--", linewidth=0.8)
+
+        # Add value labels on bars
+        for bar, score in zip(bars, scores, strict=True):
+            ax_bar.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.02,
+                f"{score:.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+            )
+
+    fig.tight_layout()
+    fig.savefig(str(output_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    logger.info(f"Cluster visualization saved to {output_path}")
+    return output_path
