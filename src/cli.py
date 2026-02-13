@@ -91,7 +91,7 @@ def _show_cluster_analysis(corpus, args: argparse.Namespace) -> int:
     analyzer = SemanticAnalyzer()
     analyzer._ensure_model_loaded()
 
-    texts = [email.combined_text for email in corpus.emails]
+    texts = [email.combined_text_with_limit() for email in corpus.emails]
     embeddings = analyzer.model.encode(
         texts,
         show_progress_bar=True,

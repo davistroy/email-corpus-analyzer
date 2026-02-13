@@ -53,15 +53,21 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         """Return True as semantic analyzer supports incremental analysis."""
         return True
 
-    def __init__(self, model_name: str = "mixedbread-ai/mxbai-embed-large-v1"):
+    def __init__(
+        self,
+        model_name: str = "mixedbread-ai/mxbai-embed-large-v1",
+        max_embedding_text_length: int = 1500,
+    ):
         """
         Initialize with sentence transformer model.
 
         Args:
             model_name: Hugging Face model identifier
+            max_embedding_text_length: Max body chars for embedding text (default 1500)
         """
         self.model_name = model_name
         self.model = None
+        self.max_embedding_text_length = max_embedding_text_length
         logger.debug("SemanticAnalyzer initialized (model will load on first use)")
 
     def _ensure_model_loaded(self):
@@ -115,9 +121,15 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         self._ensure_model_loaded()
 
         # Step 1: Generate embeddings (FR-015)
-        # Combine subject + first 500 chars of body using Email.combined_text property
-        logger.debug("Extracting combined text for embeddings")
-        texts = [email.combined_text for email in corpus.emails]
+        # Combine subject + body text using configurable length limit
+        logger.debug(
+            f"Extracting combined text for embeddings "
+            f"(max_body_length={self.max_embedding_text_length})"
+        )
+        texts = [
+            email.combined_text_with_limit(self.max_embedding_text_length)
+            for email in corpus.emails
+        ]
 
         logger.info("Generating embeddings with sentence transformer")
         if progress_callback:
@@ -327,7 +339,10 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             self._ensure_model_loaded()
 
             uncached_texts = [
-                id_to_email[email_id].combined_text for email_id in uncached_ids
+                id_to_email[email_id].combined_text_with_limit(
+                    self.max_embedding_text_length
+                )
+                for email_id in uncached_ids
             ]
 
             logger.info(f"Generating {len(uncached_texts)} new embeddings")
@@ -359,7 +374,9 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 logger.warning(f"Missing embedding for {email_id}")
                 # Generate on-the-fly
                 self._ensure_model_loaded()
-                text = id_to_email[email_id].combined_text
+                text = id_to_email[email_id].combined_text_with_limit(
+                    self.max_embedding_text_length
+                )
                 embedding = self.model.encode([text], convert_to_numpy=True)[0]
                 embeddings_list.append(embedding)
 

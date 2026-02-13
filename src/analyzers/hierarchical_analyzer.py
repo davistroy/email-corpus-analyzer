@@ -90,6 +90,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
         max_top_clusters: int = 10,
         min_subclusters: int = 2,
         max_subclusters: int = 5,
+        max_embedding_text_length: int = 1500,
     ):
         """
         Initialize the hierarchical analyzer.
@@ -100,6 +101,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             max_top_clusters: Maximum number of top-level clusters (default 10)
             min_subclusters: Minimum subclusters per parent (default 2)
             max_subclusters: Maximum subclusters per parent (default 5)
+            max_embedding_text_length: Max body chars for embedding text (default 1500)
         """
         self.model_name = model_name
         self.model = None
@@ -107,6 +109,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
         self.max_top_clusters = max_top_clusters
         self.min_subclusters = min_subclusters
         self.max_subclusters = max_subclusters
+        self.max_embedding_text_length = max_embedding_text_length
 
         # Internal state for fallback
         self._flat_clusters: list[HierarchicalCluster] = []
@@ -159,8 +162,14 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
         if progress_callback:
             progress_callback(0, total_emails)
 
-        logger.debug("Extracting combined text for embeddings")
-        texts = [email.combined_text for email in corpus.emails]
+        logger.debug(
+            f"Extracting combined text for embeddings "
+            f"(max_body_length={self.max_embedding_text_length})"
+        )
+        texts = [
+            email.combined_text_with_limit(self.max_embedding_text_length)
+            for email in corpus.emails
+        ]
 
         logger.info("Generating embeddings with sentence transformer")
         self._embeddings = self.model.encode(

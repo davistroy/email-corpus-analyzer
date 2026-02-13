@@ -103,7 +103,9 @@ class AnalysisService:
         if progress_callback:
             progress_callback("Running Semantic Analyzer...")
 
-        semantic_analyzer = SemanticAnalyzer()
+        semantic_analyzer = SemanticAnalyzer(
+            max_embedding_text_length=self.config.max_embedding_text_length,
+        )
         content_clusters = semantic_analyzer.analyze(
             corpus,
             num_clusters=self.config.num_clusters,

@@ -92,6 +92,7 @@ class TestAnalyzeConfig:
         config = AnalyzeConfig()
 
         assert config.num_clusters == 10
+        assert config.max_embedding_text_length == 1500
         assert config.corpus_file is None
         assert config.analysis_file is None
 
@@ -101,11 +102,13 @@ class TestAnalyzeConfig:
 
         config = AnalyzeConfig(
             num_clusters=15,
+            max_embedding_text_length=2000,
             corpus_file=Path("/input/corpus.json"),
             analysis_file=Path("/output/analysis.json")
         )
 
         assert config.num_clusters == 15
+        assert config.max_embedding_text_length == 2000
         assert config.corpus_file == Path("/input/corpus.json")
         assert config.analysis_file == Path("/output/analysis.json")
 
@@ -126,6 +129,48 @@ class TestAnalyzeConfig:
 
         with pytest.raises(ValidationError):
             AnalyzeConfig(num_clusters=1001)
+
+    def test_analyze_config_max_embedding_text_length_default(self):
+        """Test max_embedding_text_length defaults to 1500."""
+        from src.config.models import AnalyzeConfig
+
+        config = AnalyzeConfig()
+        assert config.max_embedding_text_length == 1500
+
+    def test_analyze_config_max_embedding_text_length_custom(self):
+        """Test max_embedding_text_length accepts valid custom values."""
+        from src.config.models import AnalyzeConfig
+
+        config = AnalyzeConfig(max_embedding_text_length=3000)
+        assert config.max_embedding_text_length == 3000
+
+    def test_analyze_config_max_embedding_text_length_min_boundary(self):
+        """Test max_embedding_text_length must be at least 200."""
+        from src.config.models import AnalyzeConfig
+        from pydantic import ValidationError
+
+        # Exactly 200 should work
+        config = AnalyzeConfig(max_embedding_text_length=200)
+        assert config.max_embedding_text_length == 200
+
+        # Below 200 should fail
+        with pytest.raises(ValidationError) as exc_info:
+            AnalyzeConfig(max_embedding_text_length=199)
+        assert "max_embedding_text_length" in str(exc_info.value)
+
+    def test_analyze_config_max_embedding_text_length_max_boundary(self):
+        """Test max_embedding_text_length must not exceed 5000."""
+        from src.config.models import AnalyzeConfig
+        from pydantic import ValidationError
+
+        # Exactly 5000 should work
+        config = AnalyzeConfig(max_embedding_text_length=5000)
+        assert config.max_embedding_text_length == 5000
+
+        # Above 5000 should fail
+        with pytest.raises(ValidationError) as exc_info:
+            AnalyzeConfig(max_embedding_text_length=5001)
+        assert "max_embedding_text_length" in str(exc_info.value)
 
 
 class TestSuggestConfig:

@@ -71,6 +71,12 @@ class AnalyzeConfig(BaseModel):
         le=1000,
         description="Number of semantic clusters"
     )
+    max_embedding_text_length: int = Field(
+        default=1500,
+        ge=200,
+        le=5000,
+        description="Maximum body text characters for embedding generation"
+    )
     corpus_file: Path | None = Field(
         default=None,
         description="Path to corpus JSON file"

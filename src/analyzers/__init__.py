@@ -38,6 +38,7 @@ def run_full_analysis(
     num_clusters: int = 10,
     auto_clusters: bool = False,
     cluster_method: str = "silhouette",
+    max_embedding_text_length: int = 1500,
     progress_callback: Callable[[str, int, int], None] | None = None
 ) -> AnalysisResults:
     """
@@ -48,6 +49,7 @@ def run_full_analysis(
         num_clusters: Number of semantic clusters (default: 10)
         auto_clusters: If True, automatically determine optimal k
         cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+        max_embedding_text_length: Max body chars for embedding text (default 1500)
         progress_callback: Optional callback(analyzer_name, current, total)
 
     Returns:
@@ -82,7 +84,9 @@ def run_full_analysis(
 
     # FR-015: Semantic analysis
     logger.info("Running semantic analysis...")
-    semantic_analyzer = SemanticAnalyzer()
+    semantic_analyzer = SemanticAnalyzer(
+        max_embedding_text_length=max_embedding_text_length,
+    )
     content_clusters = semantic_analyzer.analyze(
         corpus,
         num_clusters=num_clusters,
@@ -129,6 +133,7 @@ def run_full_analysis_incremental(
     num_clusters: int = 10,
     auto_clusters: bool = False,
     cluster_method: str = "silhouette",
+    max_embedding_text_length: int = 1500,
     progress_callback: Callable[[str, int, int], None] | None = None
 ) -> tuple[AnalysisResults, dict]:
     """
@@ -142,6 +147,7 @@ def run_full_analysis_incremental(
         num_clusters: Number of semantic clusters (default: 10)
         auto_clusters: If True, automatically determine optimal k
         cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+        max_embedding_text_length: Max body chars for embedding text (default 1500)
         progress_callback: Optional callback(analyzer_name, current, total)
 
     Returns:
@@ -176,7 +182,9 @@ def run_full_analysis_incremental(
 
     # FR-015: Semantic analysis (INCREMENTAL)
     logger.info("Running incremental semantic analysis...")
-    semantic_analyzer = SemanticAnalyzer()
+    semantic_analyzer = SemanticAnalyzer(
+        max_embedding_text_length=max_embedding_text_length,
+    )
     incremental_result = semantic_analyzer.analyze_incremental(
         corpus,
         embedding_cache=embedding_cache,

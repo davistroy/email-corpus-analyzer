@@ -1242,6 +1242,45 @@ class TestSemanticAnalyzer:
             analyzer._ensure_model_loaded()
             mock_st.assert_not_called()
 
+    def test_init_default_max_embedding_text_length(self, analyzer):
+        """Test default max_embedding_text_length is 1500."""
+        assert analyzer.max_embedding_text_length == 1500
+
+    def test_init_custom_max_embedding_text_length(self):
+        """Test custom max_embedding_text_length initialization."""
+        custom_analyzer = SemanticAnalyzer(max_embedding_text_length=3000)
+        assert custom_analyzer.max_embedding_text_length == 3000
+
+    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    def test_analyze_uses_configurable_text_length(self, mock_st_class, mock_ensure_model):
+        """Test that analyze uses max_embedding_text_length for text preparation."""
+        custom_analyzer = SemanticAnalyzer(max_embedding_text_length=300)
+
+        long_body = "z" * 1000
+        emails = [
+            create_email(
+                id="1",
+                sender_email="sender@example.com",
+                sender_domain="example.com",
+                subject="Subj",
+                body_text=long_body,
+            )
+        ]
+        corpus = create_corpus(emails)
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(1, 384)
+        custom_analyzer.model = mock_model
+
+        custom_analyzer.analyze(corpus, num_clusters=1)
+
+        # Check that model.encode was called with text truncated at 300 chars
+        call_args = mock_model.encode.call_args
+        texts = call_args[0][0]
+        expected_text = f"Subj {long_body[:300]}"
+        assert texts[0] == expected_text
+
 
 # ============================================================================
 # Test run_full_analysis
