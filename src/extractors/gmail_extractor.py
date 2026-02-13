@@ -4,24 +4,35 @@ Gmail Email Extractor.
 Extracts emails from Gmail via the Gmail API with OAuth 2.0 authentication.
 Follows the same interface and patterns as EmailExtractor (m365_extractor.py)
 for seamless integration with the CLI and pipeline.
+
+Refactored in Work Item 1.3: Now inherits from BaseExtractor.
 """
-import hashlib
-import time
-from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from src.extractors.checkpoint_manager import CheckpointManager
+from src.extractors.base_extractor import (
+    BaseExtractor,
+    ExtractionError,
+    ExtractionResult,
+    IncrementalExtractionResult,
+)
 from src.extractors.html_parser import extract_plain_text
-from src.extractors.m365_extractor import ExtractionError, ExtractionResult, IncrementalExtractionResult
-from src.models.corpus import Corpus, CorpusMetadata
+from src.models.corpus import Corpus
 from src.models.email import Email
 from src.utils.logger import get_logger
+
+# Re-export for any code importing from this module
+__all__ = [
+    "GmailExtractor",
+    "ExtractionError",
+    "ExtractionResult",
+    "IncrementalExtractionResult",
+]
 
 logger = get_logger(__name__)
 
 
-class GmailExtractor:
+class GmailExtractor(BaseExtractor):
     """Extract emails from Gmail via the Gmail API."""
 
     def __init__(
@@ -40,244 +51,44 @@ class GmailExtractor:
         """
         from src.extractors.gmail_client import GmailClient
 
-        self.user_email = user_email
-        checkpoint_path = Path(checkpoint_dir) / "gmail_extraction_checkpoint.json"
-        self.checkpoint_manager = CheckpointManager(checkpoint_path=checkpoint_path)
+        super().__init__(
+            user_email=user_email,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_filename="gmail_extraction_checkpoint.json",
+        )
         self.gmail_client = GmailClient(
             user_email,
             credentials_path=credentials_path,
         )
-        self.logger = get_logger(__name__)
 
-    def extract_all(
-        self,
-        max_batch_size: int = 500,
-        checkpoint_interval: int = 100,
-        progress_callback: Callable[[int, int], None] | None = None,
-    ) -> ExtractionResult:
+    # ── BaseExtractor abstract method implementations ─────────────────
+
+    def _get_source_name(self) -> str:
+        """Return 'Gmail' as the source identifier."""
+        return "Gmail"
+
+    def _get_checkpoint_source(self) -> str:
+        """Return 'gmail' as the checkpoint source tag."""
+        return "gmail"
+
+    def _fetch_batch(self, start: int, end: int, last_id: str = "") -> list[dict]:
         """
-        Extract all emails from Gmail inbox.
+        Fetch a batch of emails from Gmail.
 
         Args:
-            max_batch_size: Maximum emails per API request
-            checkpoint_interval: Save checkpoint every N emails
-            progress_callback: Optional callback(current, total) for progress
+            start: Starting index/offset
+            end: Ending index/offset
+            last_id: Last email ID (unused for Gmail)
 
         Returns:
-            ExtractionResult with corpus and error summary
+            List of normalized email dictionaries
         """
-        self.logger.info("Starting Gmail email extraction...")
+        batch_size = end - start
+        self.logger.debug(f"Fetching emails starting at {start} (batch_size={batch_size})")
 
-        # Check for existing checkpoint
-        emails_processed, last_id = self.checkpoint_manager.get_resume_point()
-        if emails_processed > 0:
-            self.logger.info(f"Resuming from checkpoint: {emails_processed} emails already processed")
-
-        failed_emails: list[ExtractionError] = []
-        all_emails: list[Email] = []
-
-        # Process in batches
-        current_batch = emails_processed // max_batch_size
-
-        while True:
-            batch_start = current_batch * max_batch_size
-            self.logger.debug(f"Processing batch {current_batch + 1}: starting at {batch_start}")
-
-            try:
-                batch_emails = self.gmail_client.fetch_emails(
-                    max_results=max_batch_size,
-                    skip=batch_start,
-                )
-
-                if not batch_emails:
-                    self.logger.info("No more emails to fetch, stopping pagination")
-                    break
-
-                for email_data in batch_emails:
-                    try:
-                        email = self._process_email(email_data)
-                        all_emails.append(email)
-                        emails_processed += 1
-                        last_id = email.id
-
-                        if self.checkpoint_manager.should_checkpoint(emails_processed):
-                            self.checkpoint_manager.save_checkpoint(
-                                emails_processed,
-                                email.id,
-                                source="gmail",
-                            )
-
-                        if progress_callback:
-                            progress_callback(emails_processed, len(all_emails))
-
-                    except Exception as e:
-                        self.logger.warning(f"Failed to process email: {e}")
-                        failed_emails.append(ExtractionError(
-                            email_id=email_data.get("id", "unknown"),
-                            error_type="malformed",
-                            error_message=str(e),
-                            timestamp=datetime.now(),
-                        ))
-
-                # Fewer than requested = end of inbox
-                if len(batch_emails) < max_batch_size:
-                    self.logger.info(f"Received {len(batch_emails)} (< {max_batch_size}), reached end")
-                    break
-
-            except Exception as e:
-                self.logger.error(f"Batch fetch failed: {e}")
-                if "rate" in str(e).lower():
-                    self._handle_rate_limit(current_batch)
-                else:
-                    failed_emails.append(ExtractionError(
-                        email_id=f"batch_{current_batch}",
-                        error_type="timeout",
-                        error_message=str(e),
-                        timestamp=datetime.now(),
-                    ))
-                    break
-
-            current_batch += 1
-
-        # Build corpus
-        email_ids_hash = self._compute_email_ids_hash(all_emails)
-        metadata = CorpusMetadata(
-            extraction_date=datetime.now(),
-            total_emails=len(all_emails),
-            source="Gmail",
-            user_email=self.user_email,
-            last_extraction_date=datetime.now(),
-            email_ids_hash=email_ids_hash,
-            extraction_params={
-                "batch_size": max_batch_size,
-                "checkpoint_interval": checkpoint_interval,
-            },
-        )
-        corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
-
-        self.checkpoint_manager.clear_checkpoint()
-        self.logger.info(f"Gmail extraction complete: {len(all_emails)} emails, {len(failed_emails)} failed")
-
-        return ExtractionResult(
-            corpus=corpus,
-            failed_emails=failed_emails,
-            success_count=len(all_emails),
-            failure_count=len(failed_emails),
-            total_attempted=len(all_emails) + len(failed_emails),
-        )
-
-    def extract_incremental(
-        self,
-        existing_corpus: Corpus,
-        max_batch_size: int = 500,
-        checkpoint_interval: int = 100,
-        progress_callback: Callable[[int, int], None] | None = None,
-    ) -> IncrementalExtractionResult:
-        """
-        Incremental extraction — only fetch new emails since last extraction.
-
-        Args:
-            existing_corpus: Existing corpus to merge into
-            max_batch_size: Maximum emails per batch
-            checkpoint_interval: Checkpoint interval
-            progress_callback: Progress callback
-
-        Returns:
-            IncrementalExtractionResult with merged corpus
-        """
-        self.logger.info("Starting incremental Gmail extraction...")
-
-        existing_ids = {email.id for email in existing_corpus.emails}
-        previous_count = len(existing_corpus.emails)
-
-        # Build Gmail search query for emails after last extraction
-        since_date = existing_corpus.extraction_metadata.last_extraction_date
-        query = ""
-        if since_date:
-            query = f"after:{since_date.strftime('%Y/%m/%d')}"
-            self.logger.info(f"Fetching Gmail messages: {query}")
-
-        failed_emails: list[ExtractionError] = []
-        new_emails: list[Email] = []
-        current_batch = 0
-        emails_processed = 0
-
-        while True:
-            batch_start = current_batch * max_batch_size
-
-            try:
-                batch_emails = self.gmail_client.fetch_emails(
-                    max_results=max_batch_size,
-                    skip=batch_start,
-                    query=query,
-                )
-
-                if not batch_emails:
-                    break
-
-                for email_data in batch_emails:
-                    try:
-                        email_id = email_data.get("id", "")
-                        if email_id in existing_ids:
-                            continue
-
-                        email = self._process_email(email_data)
-                        new_emails.append(email)
-                        existing_ids.add(email_id)
-                        emails_processed += 1
-
-                        if progress_callback:
-                            progress_callback(emails_processed, emails_processed)
-
-                    except Exception as e:
-                        self.logger.warning(f"Failed to process email: {e}")
-                        failed_emails.append(ExtractionError(
-                            email_id=email_data.get("id", "unknown"),
-                            error_type="malformed",
-                            error_message=str(e),
-                            timestamp=datetime.now(),
-                        ))
-
-                if len(batch_emails) < max_batch_size:
-                    break
-
-            except Exception as e:
-                self.logger.error(f"Batch fetch failed: {e}")
-                if "rate" in str(e).lower():
-                    self._handle_rate_limit(current_batch)
-                else:
-                    break
-
-            current_batch += 1
-
-        # Merge
-        all_emails = list(existing_corpus.emails) + new_emails
-        email_ids_hash = self._compute_email_ids_hash(all_emails)
-
-        metadata = CorpusMetadata(
-            extraction_date=existing_corpus.extraction_metadata.extraction_date,
-            total_emails=len(all_emails),
-            source="Gmail",
-            user_email=self.user_email,
-            last_extraction_date=datetime.now(),
-            email_ids_hash=email_ids_hash,
-            extraction_params={
-                "batch_size": max_batch_size,
-                "checkpoint_interval": checkpoint_interval,
-                "incremental": True,
-            },
-        )
-
-        merged_corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
-
-        self.logger.info(f"Added {len(new_emails)} new Gmail emails ({previous_count} -> {len(all_emails)} total)")
-
-        return IncrementalExtractionResult(
-            corpus=merged_corpus,
-            failed_emails=failed_emails,
-            new_emails_count=len(new_emails),
-            previous_count=previous_count,
-            total_count=len(all_emails),
+        return self.gmail_client.fetch_emails(
+            max_results=batch_size,
+            skip=start,
         )
 
     def _process_email(self, email_data: dict) -> Email:
@@ -307,7 +118,7 @@ class GmailExtractor:
 
         received_dt_str = email_data.get("receivedDateTime", "")
 
-        email = Email(
+        return Email(
             id=email_data.get("id", ""),
             sender_email=sender_email,
             sender_name=email_data.get("from", {}).get("emailAddress", {}).get("name", ""),
@@ -327,19 +138,47 @@ class GmailExtractor:
             references=references,
         )
 
-        return email
+    # ── Gmail-specific overrides ──────────────────────────────────────
 
-    def _handle_rate_limit(self, attempt: int) -> None:
-        """Exponential backoff for rate limiting."""
-        backoff = min(2**attempt, 8)
-        self.logger.warning(f"Rate limited, backing off {backoff}s")
-        time.sleep(backoff)
+    def _fetch_incremental_batch(
+        self,
+        start: int,
+        batch_size: int,
+        **kwargs,
+    ) -> list[dict]:
+        """
+        Fetch a batch for incremental extraction with Gmail query filter.
 
-    @staticmethod
-    def _compute_email_ids_hash(emails: list[Email]) -> str:
-        """SHA256 hash of sorted email IDs for change detection."""
-        if not emails:
-            return ""
-        sorted_ids = sorted(email.id for email in emails)
-        combined = "|".join(sorted_ids)
-        return hashlib.sha256(combined.encode()).hexdigest()
+        Args:
+            start: Starting offset
+            batch_size: Number of emails to fetch
+            **kwargs: May contain 'query' for Gmail search filter
+
+        Returns:
+            List of normalized email data dicts
+        """
+        query = kwargs.get("query", "")
+        return self.gmail_client.fetch_emails(
+            max_results=batch_size,
+            skip=start,
+            query=query,
+        )
+
+    def _get_incremental_kwargs(self, existing_corpus: Corpus) -> dict:
+        """
+        Build Gmail-specific query for incremental extraction.
+
+        Uses the last_extraction_date to construct an 'after:' Gmail search query.
+
+        Args:
+            existing_corpus: Existing corpus with metadata
+
+        Returns:
+            Dict with 'query' key for Gmail search
+        """
+        since_date = existing_corpus.extraction_metadata.last_extraction_date
+        query = ""
+        if since_date:
+            query = f"after:{since_date.strftime('%Y/%m/%d')}"
+            self.logger.info(f"Fetching Gmail messages: {query}")
+        return {"query": query}
