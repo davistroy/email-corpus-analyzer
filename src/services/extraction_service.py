@@ -1,10 +1,12 @@
 """
 Extraction Service module.
 
-Orchestrates email extraction from M365/Hotmail.
-Decoupled from CLI for independent use.
+Orchestrates email extraction from M365/Hotmail via the real
+GraphAPIClient-backed EmailExtractor. Decoupled from CLI for
+independent use.
 
 Per Phase 7, Track 7B specification.
+Rewired in Work Item 1.1 to use real extractors instead of MCP stubs.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from src.config.models import ExtractConfig
 from src.models.corpus import Corpus
 
 if TYPE_CHECKING:
-    from src.extractors.m365_mcp_extractor import M365MCPExtractor
+    from src.extractors.m365_extractor import EmailExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,8 @@ class ExtractionService:
     Service for orchestrating email extraction.
 
     Provides high-level extraction API independent of CLI.
+    Uses EmailExtractor (backed by GraphAPIClient with real MSAL auth)
+    for M365/Hotmail extraction.
     """
 
     def __init__(
@@ -46,17 +50,19 @@ class ExtractionService:
         self.config = config
         self.user_email = user_email
         self.output_dir = output_dir
-        self._extractor: M365MCPExtractor | None = None
+        self._extractor: EmailExtractor | None = None
 
-    def _get_extractor(self) -> M365MCPExtractor:
-        """Get or create the M365 MCP extractor."""
+    def _get_extractor(self) -> EmailExtractor:
+        """Get or create the M365 email extractor."""
         if self._extractor is None:
-            from src.extractors.m365_mcp_extractor import M365MCPExtractor
+            from src.extractors.m365_extractor import EmailExtractor
 
-            self._extractor = M365MCPExtractor(
+            # Determine checkpoint directory from output_dir or default
+            checkpoint_dir = str(self.output_dir) if self.output_dir else "outputs"
+
+            self._extractor = EmailExtractor(
                 user_email=self.user_email,
-                batch_size=self.config.batch_size,
-                checkpoint_interval=self.config.checkpoint_interval,
+                checkpoint_dir=checkpoint_dir,
             )
         return self._extractor
 
@@ -78,7 +84,8 @@ class ExtractionService:
             Extracted email corpus
 
         Raises:
-            ExtractionError: If extraction fails
+            ConnectionError: If M365 server is unreachable
+            AuthenticationError: If M365 authentication fails
         """
         if progress_callback:
             progress_callback("Starting email extraction...")
@@ -89,15 +96,49 @@ class ExtractionService:
             progress_callback(f"Extracting emails for {self.user_email}...")
 
         try:
-            corpus = extractor.extract(
-                since_last=since_last,
-                existing_corpus=existing_corpus,
-            )
-
-            if progress_callback:
-                progress_callback(
-                    f"Extracted {corpus.extraction_metadata.total_emails} emails"
+            if since_last and existing_corpus is not None:
+                # Incremental extraction: only fetch new emails
+                incremental_result = extractor.extract_incremental(
+                    existing_corpus=existing_corpus,
+                    max_batch_size=self.config.batch_size,
+                    checkpoint_interval=self.config.checkpoint_interval,
                 )
+
+                corpus = incremental_result.corpus
+
+                if incremental_result.failed_emails:
+                    logger.warning(
+                        f"{len(incremental_result.failed_emails)} emails failed "
+                        f"during incremental extraction"
+                    )
+
+                if progress_callback:
+                    progress_callback(
+                        f"Incremental extraction complete: "
+                        f"{incremental_result.new_emails_count} new emails "
+                        f"({incremental_result.previous_count} -> "
+                        f"{incremental_result.total_count} total)"
+                    )
+            else:
+                # Full extraction
+                result = extractor.extract_all(
+                    max_batch_size=self.config.batch_size,
+                    checkpoint_interval=self.config.checkpoint_interval,
+                )
+
+                corpus = result.corpus
+
+                if result.failed_emails:
+                    logger.warning(
+                        f"{result.failure_count} of {result.total_attempted} "
+                        f"emails failed during extraction "
+                        f"(success rate: {result.success_rate:.1%})"
+                    )
+
+                if progress_callback:
+                    progress_callback(
+                        f"Extracted {corpus.extraction_metadata.total_emails} emails"
+                    )
 
             return corpus
 

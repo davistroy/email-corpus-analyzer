@@ -1,8 +1,8 @@
 """
 Unit tests for extractor modules.
 
-Tests CheckpointManager, EmailExtractor, M365MCPClient, and M365MCPExtractor
-with mocked MCP calls and file operations.
+Tests CheckpointManager and EmailExtractor (backed by GraphAPIClient)
+with mocked API calls and file operations.
 """
 import json
 from datetime import datetime
@@ -13,8 +13,6 @@ import pytest
 
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.extractors.m365_extractor import EmailExtractor, ExtractionError, ExtractionResult
-from src.extractors.m365_mcp_client import M365MCPClient
-from src.extractors.m365_mcp_extractor import extract_emails_via_mcp
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 
@@ -238,35 +236,6 @@ class TestCLIExtractSinceLastFlag:
         # With flag - should be True
         args = parser.parse_args(["extract", "--user-email", "test@test.com", "--since-last"])
         assert args.since_last is True
-
-
-class TestM365MCPClient:
-    """Test cases for M365MCPClient class."""
-
-    def test_init(self):
-        """Test client initialization."""
-        client = M365MCPClient(user_email="user@example.com")
-        assert client.user_email == "user@example.com"
-
-    def test_fetch_emails_stub_returns_empty(self):
-        """Test that stub fetch_emails returns empty list."""
-        client = M365MCPClient(user_email="user@example.com")
-        result = client.fetch_emails(max_results=100, skip=0)
-        assert result == []
-        assert isinstance(result, list)
-
-    def test_fetch_emails_with_pagination_params(self):
-        """Test fetch_emails accepts pagination parameters."""
-        client = M365MCPClient(user_email="user@example.com")
-        result = client.fetch_emails(max_results=500, skip=100)
-        assert result == []
-
-    def test_get_message_body_stub_returns_empty(self):
-        """Test that stub get_message_body returns empty string."""
-        client = M365MCPClient(user_email="user@example.com")
-        result = client.get_message_body(message_id="test_message_id")
-        assert result == ""
-        assert isinstance(result, str)
 
 
 class TestEmailExtractor:
@@ -603,58 +572,6 @@ class TestExtractionError:
                 timestamp=datetime.now()
             )
             assert error.error_type == error_type
-
-
-class TestM365MCPExtractor:
-    """Test cases for M365MCPExtractor module functions."""
-
-    def test_extract_emails_via_mcp_returns_empty_corpus_in_stub_mode(self):
-        """Test that extract_emails_via_mcp returns empty corpus in stub mode."""
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=100,
-            max_emails=None
-        )
-
-        assert isinstance(corpus, Corpus)
-        assert len(corpus.emails) == 0
-        assert corpus.extraction_metadata.user_email == "test@example.com"
-        assert corpus.extraction_metadata.source == "M365/Hotmail"
-
-    def test_extract_emails_via_mcp_with_max_emails(self):
-        """Test extraction with max_emails limit."""
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=50,
-            max_emails=100
-        )
-
-        assert isinstance(corpus, Corpus)
-        assert len(corpus.emails) == 0  # Stub returns empty
-
-    def test_extract_emails_via_mcp_with_progress_callback(self):
-        """Test extraction with progress callback."""
-        callback_calls = []
-
-        def progress_callback(current, total):
-            callback_calls.append((current, total))
-
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            progress_callback=progress_callback
-        )
-
-        # In stub mode, callback may not be called since no emails are processed
-        assert isinstance(corpus, Corpus)
-
-    def test_extract_emails_via_mcp_metadata_correctness(self):
-        """Test that corpus metadata is populated correctly."""
-        corpus = extract_emails_via_mcp(user_email="user@test.com")
-
-        assert corpus.extraction_metadata.user_email == "user@test.com"
-        assert corpus.extraction_metadata.total_emails == 0
-        assert corpus.extraction_metadata.source == "M365/Hotmail"
-        assert isinstance(corpus.extraction_metadata.extraction_date, datetime)
 
 
 class TestEmailExtractorResume:
@@ -1075,96 +992,6 @@ class TestEmailExtractorEdgeCases:
 
             # Returns 999999 sentinel since M365 doesn't provide count
             assert count == 999999
-
-
-class TestM365MCPExtractorWithMockedBatches:
-    """Test M365MCPExtractor with mocked batch data to achieve higher coverage."""
-
-    @pytest.fixture
-    def mock_batch_messages(self):
-        """Create mock batch of M365 message data."""
-        return [
-            {
-                "id": "msg_001",
-                "subject": "Test Email 1",
-                "from": {
-                    "emailAddress": {
-                        "address": "sender1@example.com",
-                        "name": "Sender One"
-                    }
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": "recipient@example.com",
-                            "name": "Recipient"
-                        }
-                    }
-                ],
-                "body": {
-                    "contentType": "html",
-                    "content": "<p>Email body 1</p>"
-                },
-                "receivedDateTime": "2024-01-15T10:30:00Z",
-                "hasAttachments": False
-            },
-            {
-                "id": "msg_002",
-                "subject": "Test Email 2",
-                "from": {
-                    "emailAddress": {
-                        "address": "sender2@company.com",
-                        "name": "Sender Two"
-                    }
-                },
-                "toRecipients": [
-                    {
-                        "emailAddress": {
-                            "address": "recipient@example.com",
-                            "name": "Recipient"
-                        }
-                    }
-                ],
-                "body": {
-                    "contentType": "html",
-                    "content": "<p>Email body 2</p>"
-                },
-                "receivedDateTime": "2024-01-16T14:00:00Z",
-                "hasAttachments": True
-            }
-        ]
-
-    def test_extract_with_mocked_mcp_response(self, mock_batch_messages):
-        """Test extraction when MCP returns actual data."""
-        # We can't easily mock the MCP response in extract_emails_via_mcp
-        # because the batch_messages variable is set to [] in the stub code.
-        # This test documents the expected behavior.
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=10
-        )
-        # In stub mode, corpus is empty
-        assert len(corpus.emails) == 0
-
-    def test_extract_handles_malformed_message(self):
-        """Test that extraction handles malformed messages gracefully."""
-        # The actual processing happens in the while loop which never executes
-        # in stub mode, but this documents expected behavior
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            batch_size=5,
-            max_emails=10
-        )
-        assert isinstance(corpus, Corpus)
-
-    def test_extract_respects_max_emails_parameter(self):
-        """Test that max_emails parameter is respected."""
-        corpus = extract_emails_via_mcp(
-            user_email="test@example.com",
-            max_emails=50
-        )
-        # Even if there were more emails, max_emails would limit
-        assert len(corpus.emails) <= 50
 
 
 class TestCorpusMetadataEnhancements:

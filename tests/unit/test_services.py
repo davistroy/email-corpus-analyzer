@@ -362,30 +362,47 @@ class TestExtractionServiceRun:
 
     def test_run_with_mocked_extractor(self):
         """Test that run returns Corpus with mocked extractor."""
+        from src.extractors.m365_extractor import ExtractionResult
         from src.services.extraction_service import ExtractionService
 
         config = ExtractConfig()
         service = ExtractionService(config, user_email="test@example.com")
 
-        # Mock the extractor
+        # Mock the extractor to return ExtractionResult
         mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=len(mock_corpus.emails),
+            failure_count=0,
+            total_attempted=len(mock_corpus.emails),
+        )
         service._extractor = MagicMock()
-        service._extractor.extract.return_value = mock_corpus
+        service._extractor.extract_all.return_value = mock_result
 
         result = service.run()
 
         assert isinstance(result, Corpus)
+        service._extractor.extract_all.assert_called_once()
 
     def test_run_calls_progress_callback(self):
         """Test that run calls progress callback."""
+        from src.extractors.m365_extractor import ExtractionResult
         from src.services.extraction_service import ExtractionService
 
         config = ExtractConfig()
         service = ExtractionService(config, user_email="test@example.com")
 
         mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=len(mock_corpus.emails),
+            failure_count=0,
+            total_attempted=len(mock_corpus.emails),
+        )
         service._extractor = MagicMock()
-        service._extractor.extract.return_value = mock_corpus
+        service._extractor.extract_all.return_value = mock_result
 
         callback_calls = []
 
@@ -395,6 +412,55 @@ class TestExtractionServiceRun:
         service.run(progress_callback=progress_callback)
 
         assert len(callback_calls) > 0
+
+    def test_run_incremental_with_existing_corpus(self):
+        """Test that run with since_last=True calls extract_incremental."""
+        from src.extractors.m365_extractor import IncrementalExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig()
+        service = ExtractionService(config, user_email="test@example.com")
+
+        existing_corpus = create_test_corpus()
+        mock_result = IncrementalExtractionResult(
+            corpus=existing_corpus,
+            failed_emails=[],
+            new_emails_count=5,
+            previous_count=10,
+            total_count=15,
+        )
+        service._extractor = MagicMock()
+        service._extractor.extract_incremental.return_value = mock_result
+
+        result = service.run(since_last=True, existing_corpus=existing_corpus)
+
+        assert isinstance(result, Corpus)
+        service._extractor.extract_incremental.assert_called_once()
+
+    def test_run_full_extraction_when_since_last_without_corpus(self):
+        """Test that run does full extraction when since_last=True but no existing corpus."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig()
+        service = ExtractionService(config, user_email="test@example.com")
+
+        mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=len(mock_corpus.emails),
+            failure_count=0,
+            total_attempted=len(mock_corpus.emails),
+        )
+        service._extractor = MagicMock()
+        service._extractor.extract_all.return_value = mock_result
+
+        # since_last=True but no existing_corpus => falls through to full extraction
+        result = service.run(since_last=True, existing_corpus=None)
+
+        assert isinstance(result, Corpus)
+        service._extractor.extract_all.assert_called_once()
 
 
 # =============================================================================
