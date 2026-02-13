@@ -4,11 +4,13 @@ Unit tests for expanded template library.
 Tests that the template library has been expanded from 6 to 15+ templates
 with comprehensive keyword and domain coverage.
 """
-import pytest
 
-from src.generators.template_matcher import match_templates, _match_by_keywords, _match_by_domains
-from src.models.category_template import CategoryTemplate, PREDEFINED_TEMPLATES
-from src.models.category import CategorySource
+from src.generators.template_matcher import (
+    _domain_matches,
+    _get_keyword_pattern,
+    match_templates,
+)
+from src.models.category_template import PREDEFINED_TEMPLATES, CategoryTemplate
 
 
 # Helper to create minimal analysis results for testing
@@ -21,11 +23,11 @@ def create_test_analysis(
     """Create minimal analysis results for template testing."""
     from src.models.analysis_results import (
         AnalysisResults,
+        DomainCount,
         SenderAnalysis,
         SubjectPatterns,
         TemporalPatterns,
         VolumeStats,
-        DomainCount,
     )
     from src.models.content_cluster import ContentCluster, RepresentativeSample
     from src.models.sender import Sender, SenderType
@@ -37,7 +39,7 @@ def create_test_analysis(
         body_previews = cluster_body_previews or ["Preview"] * len(cluster_subjects)
         samples = [
             RepresentativeSample(subject=subj, sender="test@test.com", body_preview=body)
-            for subj, body in zip(cluster_subjects, body_previews)
+            for subj, body in zip(cluster_subjects, body_previews, strict=True)
         ]
         clusters.append(ContentCluster(
             cluster_id=0,
@@ -65,7 +67,7 @@ def create_test_analysis(
             top_senders=senders,
             top_domains=[DomainCount(domain=s.domain, count=50) for s in senders] if senders else [],
             unique_senders=len(senders),
-            unique_domains=len(set(s.domain for s in senders)) if senders else 0,
+            unique_domains=len({s.domain for s in senders}) if senders else 0,
         ),
         subject_patterns=SubjectPatterns(
             common_prefixes={},
@@ -356,3 +358,504 @@ class TestTemplateUniqueness:
                 categories.add("other")
 
         assert len(categories) >= 8, f"Should cover at least 8 diverse categories, got {len(categories)}"
+
+
+# -----------------------------------------------------------------------------
+# Word-Boundary Keyword Matching Tests (false-positive prevention)
+# -----------------------------------------------------------------------------
+
+class TestKeywordWordBoundaryMatching:
+    """Test that keyword matching uses word boundaries to prevent false positives."""
+
+    def test_visa_does_not_match_provisioning(self):
+        """'visa' keyword should NOT match 'provisioning' in subject/body."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Server provisioning complete"],
+            cluster_body_previews=["Your provisioning request has been processed"],
+        )
+
+        # Government template contains "visa" keyword
+        gov_template = next(t for t in PREDEFINED_TEMPLATES if "Government" in t.name)
+        categories = match_templates(analysis, [gov_template])
+
+        assert len(categories) == 0, (
+            "'visa' should not match 'provisioning' — word-boundary matching required"
+        )
+
+    def test_visa_does_not_match_advisory(self):
+        """'visa' keyword should NOT match 'advisory' in subject/body."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Security advisory notice"],
+            cluster_body_previews=["Please review this advisory for your team"],
+        )
+
+        gov_template = next(t for t in PREDEFINED_TEMPLATES if "Government" in t.name)
+        categories = match_templates(analysis, [gov_template])
+
+        # "advisory" should not trigger the "visa" keyword, but might match other
+        # government keywords. Let's test directly with a minimal template.
+        minimal_template = CategoryTemplate(
+            name="Visa Only Test",
+            keywords=["visa"],
+            domains=[],
+            description="Test template with only visa keyword",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'visa' should not match 'advisory' — word-boundary matching required"
+        )
+
+    def test_visa_matches_actual_visa_word(self):
+        """'visa' keyword SHOULD match when 'visa' appears as a whole word."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Your visa application status"],
+            cluster_body_previews=["Your visa has been approved"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Visa Test",
+            keywords=["visa"],
+            domains=[],
+            description="Test template with visa keyword",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 1, "'visa' should match 'visa' as a whole word"
+
+    def test_bill_does_not_match_billboard(self):
+        """'bill' keyword should NOT match 'billboard'."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Billboard Hot 100 charts"],
+            cluster_body_previews=["Check out the latest billboard rankings"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Bill Test",
+            keywords=["bill"],
+            domains=[],
+            description="Test template with bill keyword",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'bill' should not match 'billboard' — word-boundary matching required"
+        )
+
+    def test_bill_matches_actual_bill_word(self):
+        """'bill' keyword SHOULD match when 'bill' appears as a whole word."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Your monthly bill is ready"],
+            cluster_body_previews=["Your bill of $45.99 is due"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Bill Test",
+            keywords=["bill"],
+            domains=[],
+            description="Test template with bill keyword",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 1, "'bill' should match 'bill' as a whole word"
+
+    def test_tax_does_not_match_taxonomy(self):
+        """'tax' keyword should NOT match 'taxonomy'."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Updated product taxonomy"],
+            cluster_body_previews=["The taxonomy has been reorganized"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Tax Test",
+            keywords=["tax"],
+            domains=[],
+            description="Test template with tax keyword",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'tax' should not match 'taxonomy' — word-boundary matching required"
+        )
+
+    def test_multiword_keyword_matches(self):
+        """Multi-word keywords like 'direct deposit' should match correctly."""
+        analysis = create_test_analysis(
+            cluster_subjects=["Your direct deposit is pending"],
+            cluster_body_previews=["Direct deposit of $3,500 will arrive Friday"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Direct Deposit Test",
+            keywords=["direct deposit"],
+            domains=[],
+            description="Test multi-word keyword",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 1, "Multi-word keyword 'direct deposit' should match"
+
+
+# -----------------------------------------------------------------------------
+# Domain Suffix Matching Tests (false-positive prevention)
+# -----------------------------------------------------------------------------
+
+class TestDomainSuffixMatching:
+    """Test that domain matching uses suffix-based logic to prevent false positives."""
+
+    def test_amazon_com_does_not_match_notamazon_com(self):
+        """'amazon.com' should NOT match 'notamazon.com'."""
+        analysis = create_test_analysis(
+            sender_domains=["notamazon.com"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Amazon Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["amazon.com"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'amazon.com' should not match 'notamazon.com' — suffix matching required"
+        )
+
+    def test_amazon_com_matches_exact_amazon_com(self):
+        """'amazon.com' SHOULD match 'amazon.com' exactly."""
+        analysis = create_test_analysis(
+            sender_domains=["amazon.com"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Amazon Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["amazon.com"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 1, "'amazon.com' should match 'amazon.com' exactly"
+
+    def test_amazon_com_matches_subdomain(self):
+        """'amazon.com' SHOULD match 'mail.amazon.com' (subdomain)."""
+        analysis = create_test_analysis(
+            sender_domains=["mail.amazon.com"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Amazon Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["amazon.com"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 1, (
+            "'amazon.com' should match 'mail.amazon.com' via subdomain suffix"
+        )
+
+    def test_mail_domain_does_not_match_email_example_com(self):
+        """'mail' in domain list should NOT match 'email.example.com'."""
+        # The old code would match because 'mail' is a substring of 'email'
+        analysis = create_test_analysis(
+            sender_domains=["email.example.com"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Mail Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["mail"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'mail' domain should not match 'email.example.com' — "
+            "suffix matching requires exact or .suffix match"
+        )
+
+    def test_paypal_com_does_not_match_fakepaypal_com(self):
+        """'paypal.com' should NOT match 'fakepaypal.com'."""
+        analysis = create_test_analysis(
+            sender_domains=["fakepaypal.com"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="PayPal Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["paypal.com"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'paypal.com' should not match 'fakepaypal.com'"
+        )
+
+    def test_domain_matching_is_case_insensitive(self):
+        """Domain matching should be case-insensitive."""
+        analysis = create_test_analysis(
+            sender_domains=["Amazon.COM"],
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Amazon Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["amazon.com"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 1, "Domain matching should be case-insensitive"
+
+    def test_cluster_domain_false_positive_prevented(self):
+        """Domain false positive prevention should apply to cluster domains too."""
+        from src.models.analysis_results import (
+            AnalysisResults,
+            SenderAnalysis,
+            SubjectPatterns,
+            TemporalPatterns,
+            VolumeStats,
+        )
+        from src.models.content_cluster import ContentCluster, RepresentativeSample
+
+        # Create analysis with a cluster that has a false-positive domain
+        cluster = ContentCluster(
+            cluster_id=0,
+            size=100,
+            percentage=10.0,
+            representative_samples=[
+                RepresentativeSample(subject="Test", sender="test@test.com", body_preview="Test")
+            ],
+            common_domains=[("notamazon.com", 50)],
+            email_ids=[f"e{i}" for i in range(100)],
+        )
+
+        analysis = AnalysisResults(
+            sender_analysis=SenderAnalysis(
+                top_senders=[], top_domains=[], unique_senders=0, unique_domains=0,
+            ),
+            subject_patterns=SubjectPatterns(
+                common_prefixes={}, numbered_patterns={}, top_keywords=[],
+                bracket_tags=[], total_subjects_analyzed=1000,
+            ),
+            content_clusters=[cluster],
+            temporal_patterns=TemporalPatterns(
+                frequency_distribution={}, sender_frequencies={},
+            ),
+            volume_stats=VolumeStats(
+                total_emails=1000, unique_senders=1,
+                date_range={"oldest": "2024-01-01", "newest": "2024-12-31", "span_days": "365"},
+                with_attachments=0, attachment_percentage=0.0,
+                avg_body_length_chars=500, emails_per_day=2.7,
+            ),
+        )
+
+        minimal_template = CategoryTemplate(
+            name="Amazon Test",
+            keywords=["zzz_no_match_placeholder"],
+            domains=["amazon.com"],
+            description="Test domain matching",
+        )
+        categories = match_templates(analysis, [minimal_template])
+        assert len(categories) == 0, (
+            "'amazon.com' should not match 'notamazon.com' in cluster common_domains"
+        )
+
+
+# -----------------------------------------------------------------------------
+# Pre-compiled Pattern Tests
+# -----------------------------------------------------------------------------
+
+class TestPrecompiledPatterns:
+    """Test that the pre-compiled pattern caching works correctly."""
+
+    def test_get_keyword_pattern_returns_compiled_regex(self):
+        """_get_keyword_pattern should return a compiled regex Pattern."""
+        import re
+        pattern = _get_keyword_pattern("visa")
+        assert isinstance(pattern, re.Pattern), "Should return a compiled regex pattern"
+
+    def test_get_keyword_pattern_caches_results(self):
+        """Same keyword should return the same compiled pattern object."""
+        pattern1 = _get_keyword_pattern("invoice")
+        pattern2 = _get_keyword_pattern("invoice")
+        assert pattern1 is pattern2, "Same keyword should return cached pattern (same object)"
+
+    def test_get_keyword_pattern_case_insensitive_caching(self):
+        """Keywords differing only in case should use the same cached pattern."""
+        pattern1 = _get_keyword_pattern("Payment")
+        pattern2 = _get_keyword_pattern("payment")
+        assert pattern1 is pattern2, "Case-different keywords should use same cached pattern"
+
+    def test_keyword_pattern_matches_whole_word(self):
+        """Compiled pattern should match whole words only."""
+        pattern = _get_keyword_pattern("visa")
+        assert pattern.search("apply for a visa today") is not None
+        assert pattern.search("visa application pending") is not None
+        assert pattern.search("provisioning complete") is None
+        assert pattern.search("advisory notice") is None
+
+    def test_keyword_pattern_with_special_chars(self):
+        """Keywords with special regex characters should be properly escaped."""
+        pattern = _get_keyword_pattern("two-factor")
+        assert pattern.search("enable two-factor authentication") is not None
+
+    def test_domain_matches_exact(self):
+        """_domain_matches should match exact domain."""
+        assert _domain_matches("amazon.com", "amazon.com") is True
+
+    def test_domain_matches_subdomain(self):
+        """_domain_matches should match subdomain."""
+        assert _domain_matches("mail.amazon.com", "amazon.com") is True
+        assert _domain_matches("shipping.amazon.com", "amazon.com") is True
+
+    def test_domain_matches_rejects_prefix_collision(self):
+        """_domain_matches should reject domains that merely contain the template domain."""
+        assert _domain_matches("notamazon.com", "amazon.com") is False
+        assert _domain_matches("fakepaypal.com", "paypal.com") is False
+
+    def test_domain_matches_rejects_unrelated(self):
+        """_domain_matches should reject completely unrelated domains."""
+        assert _domain_matches("google.com", "amazon.com") is False
+
+
+# -----------------------------------------------------------------------------
+# All 18 Templates Still Match Their Intended Emails
+# -----------------------------------------------------------------------------
+
+class TestAll18TemplatesMatchIntendedEmails:
+    """Verify each of the 18 predefined templates matches its intended content."""
+
+    def test_financial_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your payment has been received"],
+            sender_domains=["chase.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[0]])
+        assert len(cats) == 1, "Financial template should match payment emails from chase.com"
+
+    def test_shopping_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your order has shipped"],
+            sender_domains=["amazon.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[1]])
+        assert len(cats) == 1, "Shopping template should match order emails from amazon.com"
+
+    def test_social_media_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["You have a new notification"],
+            sender_domains=["facebook.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[2]])
+        assert len(cats) == 1, "Social Media template should match notification emails"
+
+    def test_newsletters_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Weekly newsletter digest"],
+            sender_domains=["mailchimp.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[3]])
+        assert len(cats) == 1, "Newsletters template should match newsletter emails"
+
+    def test_travel_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your flight booking confirmation"],
+            sender_domains=["expedia.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[4]])
+        assert len(cats) == 1, "Travel template should match booking emails"
+
+    def test_security_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Password reset requested"],
+            cluster_body_previews=["Your password has been changed"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[5]])
+        assert len(cats) == 1, "Security template should match password reset emails"
+
+    def test_work_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Meeting invitation: Q4 planning"],
+            sender_domains=["zoom.us"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[6]])
+        assert len(cats) == 1, "Work template should match meeting emails"
+
+    def test_healthcare_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your appointment is confirmed"],
+            sender_domains=["mychart.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[7]])
+        assert len(cats) == 1, "Healthcare template should match appointment emails"
+
+    def test_education_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["New assignment posted for your course"],
+            sender_domains=["coursera.org"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[8]])
+        assert len(cats) == 1, "Education template should match course/assignment emails"
+
+    def test_entertainment_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["New episode available for streaming"],
+            sender_domains=["netflix.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[9]])
+        assert len(cats) == 1, "Entertainment template should match streaming emails"
+
+    def test_government_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your tax return has been accepted"],
+            sender_domains=["irs.gov"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[10]])
+        assert len(cats) == 1, "Government template should match tax emails"
+
+    def test_utilities_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your electric bill is ready"],
+            sender_domains=["xfinity.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[11]])
+        assert len(cats) == 1, "Utilities template should match utility bill emails"
+
+    def test_real_estate_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["New property listing matches your search"],
+            sender_domains=["zillow.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[12]])
+        assert len(cats) == 1, "Real Estate template should match property listing emails"
+
+    def test_insurance_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your policy renewal is due"],
+            sender_domains=["geico.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[13]])
+        assert len(cats) == 1, "Insurance template should match policy renewal emails"
+
+    def test_food_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your food delivery is on the way"],
+            sender_domains=["doordash.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[14]])
+        assert len(cats) == 1, "Food template should match delivery emails"
+
+    def test_fitness_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your workout summary for today"],
+            sender_domains=["peloton.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[15]])
+        assert len(cats) == 1, "Fitness template should match workout emails"
+
+    def test_charity_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Thank you for your donation"],
+            sender_domains=["gofundme.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[16]])
+        assert len(cats) == 1, "Charity template should match donation emails"
+
+    def test_jobs_template_matches(self):
+        analysis = create_test_analysis(
+            cluster_subjects=["Your job application was received"],
+            sender_domains=["indeed.com"],
+        )
+        cats = match_templates(analysis, [PREDEFINED_TEMPLATES[17]])
+        assert len(cats) == 1, "Jobs template should match application emails"
