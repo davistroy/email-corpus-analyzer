@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 pip install -e ".[dev]"  # Install with dev dependencies
 
-# Run tests (1403 tests, 83% coverage)
+# Run tests (1663 tests, 86% coverage)
 pytest                                  # All tests with coverage
 pytest tests/unit/                      # Unit tests only
 pytest tests/unit/test_html_parser.py   # Single test file
@@ -29,6 +29,7 @@ python -m src.cli pipeline --user-email user@hotmail.com --source both --gmail-e
 python -m src.cli extract --user-email user@hotmail.com
 python -m src.cli extract --user-email user@gmail.com --source gmail
 python -m src.cli analyze --auto-clusters
+python -m src.cli analyze --auto-clusters --cluster-viz
 python -m src.cli suggest
 python -m src.cli review
 python -m src.cli info
@@ -50,12 +51,13 @@ Extract → Analyze → Suggest → Review → Export
 ### Core Pipeline Modules
 
 - **`src/extractors/`** - Email extraction from M365/Hotmail and Gmail:
-  - `graph_api_client.py` - Microsoft Graph API client with MSAL device code auth (works with personal Hotmail/Outlook.com accounts)
-  - `gmail_client.py` - Gmail API client with OAuth 2.0 authentication
-  - `gmail_extractor.py` - Gmail extractor with full/incremental extraction and checkpointing
-  - `m365_extractor.py` - M365/Hotmail extractor with batched extraction and checkpointing
+  - `base_extractor.py` - BaseExtractor ABC with shared batch loop, checkpoint, error handling
+  - `graph_api_client.py` - Microsoft Graph API client with MSAL device code auth (supports server-side date filtering)
+  - `gmail_client.py` - Gmail API client with OAuth 2.0 authentication (recursive MIME extraction)
+  - `gmail_extractor.py` - Gmail extractor inheriting BaseExtractor
+  - `m365_extractor.py` - M365/Hotmail extractor inheriting BaseExtractor
   - `html_parser.py` - HTML to plain text conversion for email bodies
-  - `checkpoint_manager.py` - Checkpoint/resume for interrupted extractions
+  - `checkpoint_manager.py` - Compact v2 checkpoint format (metadata-only, <1KB)
   - Supports `--source hotmail|gmail|both` flag for multi-source extraction
 
 - **`src/analyzers/`** - 5 core + 2 optional analyzers inheriting from `BaseAnalyzer` ABC:
@@ -66,12 +68,12 @@ Extract → Analyze → Suggest → Review → Export
   - `temporal_analyzer.py` - Time-based patterns
   - `volume_analyzer.py` - Statistical metrics
   - `hierarchical_analyzer.py` - Hierarchical clustering with scipy
-  - `cluster_optimizer.py` - Elbow/Silhouette methods for optimal k
-  - `thread_analyzer.py` - Email thread/conversation grouping
+  - `cluster_optimizer.py` - Elbow/Silhouette methods with sigmoid scoring and corpus-scaled max_k
+  - `thread_analyzer.py` - Email thread/conversation grouping with subject-based fallback
 
 - **`src/generators/`** - Category suggestion from analysis results:
-  - `template_matcher.py` - Matches 18 predefined templates
-  - `confidence_scorer.py` - Enhanced multi-factor confidence scoring
+  - `template_matcher.py` - Matches 18 predefined templates (word-boundary regex, no false positives)
+  - `confidence_scorer.py` - Logarithmic volume scoring, configurable weights
   - `name_generator.py` - TF-IDF based name generation
   - `category_generator.py` - Main generator with learning integration
 
@@ -80,16 +82,16 @@ Extract → Analyze → Suggest → Review → Export
   - `tui/` - Textual-based TUI for interactive review with bulk operations and search/filter
 
 - **`src/services/`** - Service layer (CLI-agnostic orchestration):
-  - `extraction_service.py` - M365 email extraction orchestration
+  - `extraction_service.py` - Multi-source extraction (hotmail/gmail/both) with corpus merge
   - `analysis_service.py` - Runs all analyzers with progress callbacks
   - `suggestion_service.py` - Category generation orchestration
   - `pipeline_service.py` - Full workflow orchestration
 
-- **`src/exceptions.py`** - Custom exception hierarchy with recovery hints
+- **`src/exceptions.py`** - Custom exception hierarchy with recovery hints (includes ExportError)
 
 - **`src/learning/`** - Feedback learning system:
   - `decision_logger.py` - Logs review decisions to JSONL
-  - `pattern_detector.py` - Detects recurring patterns
+  - `pattern_detector.py` - Detects recurring patterns with temporal decay (90-day half-life)
 
 - **`src/exporters/`** - Export formats:
   - `csv_exporter.py` - CSV export with Excel compatibility
@@ -97,7 +99,7 @@ Extract → Analyze → Suggest → Review → Export
   - `rule_exporter.py` - Outlook and Gmail rule/filter export
 
 - **`src/cache/`** - Performance optimization:
-  - `embedding_cache.py` - Caches embeddings for incremental analysis
+  - `embedding_cache.py` - Caches embeddings with model metadata versioning (auto-invalidation)
 
 - **`src/config/`** - Configuration system:
   - `models.py` - Pydantic config models
@@ -113,7 +115,7 @@ All models in `src/models/` use Pydantic v2. Key models:
 - `AnalysisResults` - Combined output from all analyzers
 - `Category` - Suggested category with confidence score, hierarchy support
 - `CategoryTemplate` - Predefined category patterns (18 templates)
-- `ContentCluster` - Cluster with quality metrics (silhouette, cohesion)
+- `ContentCluster` - Cluster with quality metrics (silhouette, cohesion, interpretation labels)
 
 ### Entry Points
 
@@ -125,7 +127,7 @@ All models in `src/models/` use Pydantic v2. Key models:
 | Command | Description |
 |---------|-------------|
 | `extract` | Extract emails from Hotmail/Gmail (supports `--source`, `--since-last`) |
-| `analyze` | Analyze corpus (supports `--auto-clusters`, `--incremental`) |
+| `analyze` | Analyze corpus (supports `--auto-clusters`, `--incremental`, `--cluster-viz`) |
 | `suggest` | Generate category suggestions |
 | `review` | Interactive review (TUI by default, `--no-tui` for CLI) |
 | `pipeline` | Run complete workflow |
@@ -157,7 +159,8 @@ Default output: `~/data/outputs/` (configurable via `--output-dir` or config fil
 | `category_suggestions.json` | Generated categories |
 | `category_suggestions_report.md` | Human-readable report |
 | `approved_categories.json` | Final approved categories |
-| `embeddings_cache.npz` | Cached embeddings |
+| `embeddings_cache.npz` | Cached embeddings (with .meta.json sidecar) |
+| `cluster_visualization.png` | PCA scatter + silhouette chart (optional) |
 | `~/.email-analyzer/decisions.jsonl` | Review decision history |
 | `~/.email-analyzer/config.yaml` | Global configuration |
 
@@ -171,9 +174,23 @@ user_email: "user@example.com"
 output_dir: "~/data/outputs"
 analyze:
   num_clusters: 10
+  max_embedding_text_length: 1500  # chars of body for embeddings (200-5000)
+  auto_cluster_min: 3              # min clusters in auto mode
+  auto_cluster_max: 25             # max clusters in auto mode
+  thresholds:
+    top_senders: 50
+    top_domains: 30
+    frequency_daily_threshold_days: 2.0
+    representative_samples: 5
 suggest:
   min_cluster_percentage: 5.0
   min_sender_count: 20
+  thresholds:
+    max_senders_for_categories: 20
+    merge_name_similarity: 0.8
+    merge_email_overlap: 0.7
+learning:
+  pattern_half_life_days: 90.0     # temporal decay for pattern detection
 ```
 
 Generate template: `python -m src.cli config init`
