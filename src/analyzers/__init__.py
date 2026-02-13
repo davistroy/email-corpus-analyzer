@@ -18,8 +18,10 @@ from src.analyzers.cluster_optimizer import (
     ElbowOptimizer,
     SilhouetteOptimizer,
     compute_max_k,
+    interpret_silhouette,
+    silhouette_to_confidence,
 )
-from src.analyzers.semantic_analyzer import SemanticAnalyzer
+from src.analyzers.semantic_analyzer import SemanticAnalyzer, generate_cluster_visualization
 from src.analyzers.sender_analyzer import SenderAnalyzer
 from src.analyzers.subject_analyzer import SubjectAnalyzer
 from src.analyzers.temporal_analyzer import TemporalAnalyzer
@@ -187,4 +189,7 @@ __all__ = [
     'SilhouetteOptimizer',
     'ClusterOptimizationResult',
     'compute_max_k',
+    'interpret_silhouette',
+    'silhouette_to_confidence',
+    'generate_cluster_visualization',
 ]

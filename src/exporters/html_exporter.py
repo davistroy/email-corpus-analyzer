@@ -34,6 +34,7 @@ def export_categories_to_html(
     categories: list[Category],
     output_path: Path | str,
     title: str = "Category Report",
+    cluster_visualization_path: Path | str | None = None,
 ) -> Path:
     """
     Export categories to standalone HTML report.
@@ -42,6 +43,8 @@ def export_categories_to_html(
         categories: List of Category objects to export
         output_path: Path for the output HTML file
         title: Report title (default: "Category Report")
+        cluster_visualization_path: Optional path to cluster visualization PNG.
+            If None, will auto-detect in the output directory.
 
     Returns:
         Path to the created HTML file
@@ -105,6 +108,25 @@ def export_categories_to_html(
     # Build parent name lookup
     parent_names = {cat.category_id: cat.category_name for cat in categories}
 
+    # Detect cluster visualization PNG (Task 4.3)
+    viz_relative_path = None
+    if cluster_visualization_path is not None:
+        viz_file = Path(cluster_visualization_path)
+        if viz_file.exists():
+            # Compute path relative to the output HTML file
+            try:
+                viz_relative_path = str(
+                    viz_file.resolve().relative_to(output_path.resolve().parent)
+                )
+            except ValueError:
+                # Not relative; use absolute path
+                viz_relative_path = str(viz_file.resolve())
+    else:
+        # Auto-detect in same directory as output
+        auto_viz = output_path.parent / "cluster_visualization.png"
+        if auto_viz.exists():
+            viz_relative_path = "cluster_visualization.png"
+
     # Render template
     html_content = template.render(
         title=title,
@@ -115,6 +137,7 @@ def export_categories_to_html(
         avg_confidence=avg_confidence,
         source_counts=source_counts,
         parent_names=parent_names,
+        cluster_visualization_path=viz_relative_path,
     )
 
     # Write output

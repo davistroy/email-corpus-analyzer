@@ -5,14 +5,17 @@ Tests the PatternDetector class for identifying recurring patterns
 in user review decisions.
 
 Task 5B.2: Pattern Detection
+Task 4.2: Temporal Decay tests
 """
+import json
+import math
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
-from src.learning.decision_logger import DecisionAction, DecisionLogger
+from src.learning.decision_logger import DecisionAction, DecisionLogger, ReviewDecision
 from src.learning.pattern_detector import (
     DetectedPattern,
     PatternDetector,
@@ -527,3 +530,536 @@ class TestPatternDetectorCustomThreshold:
             patterns_low = detector_low.detect_patterns()
 
             assert len(patterns_low) > len(patterns_default)
+
+
+# ======================================================================
+# Helper for writing decisions with explicit timestamps
+# ======================================================================
+
+def _write_decisions(path: Path, decisions: list[ReviewDecision]) -> None:
+    """Write pre-built ReviewDecision objects directly to a JSONL file."""
+    with open(path, "w", encoding="utf-8") as f:
+        for d in decisions:
+            f.write(json.dumps(d.to_dict()) + "\n")
+
+
+def _make_decision(
+    category: str,
+    action: DecisionAction,
+    days_ago: float,
+    now: datetime,
+    **context,
+) -> ReviewDecision:
+    """Create a ReviewDecision at a specific age relative to ``now``."""
+    return ReviewDecision(
+        timestamp=now - timedelta(days=days_ago),
+        category_name=category,
+        action=action,
+        context=context,
+    )
+
+
+# ======================================================================
+# Task 4.2 — Temporal Decay Tests
+# ======================================================================
+
+class TestTemporalDecayInit:
+    """Test PatternDetector initialization with half_life_days."""
+
+    def test_default_half_life_is_90(self):
+        """Default half_life_days should be 90."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            detector = PatternDetector(decision_logger=dl)
+            assert detector.half_life_days == 90.0
+
+    def test_custom_half_life(self):
+        """Custom half_life_days should be stored."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            detector = PatternDetector(decision_logger=dl, half_life_days=30.0)
+            assert detector.half_life_days == 30.0
+
+    def test_reference_time_exposed(self):
+        """reference_time should be settable for deterministic testing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            ref = datetime(2025, 6, 1, tzinfo=timezone.utc)
+            detector = PatternDetector(decision_logger=dl, reference_time=ref)
+            assert detector._reference_time == ref
+
+
+class TestDecisionWeightFormula:
+    """Verify the exponential decay weight formula directly."""
+
+    def test_brand_new_decision_weight_is_one(self):
+        """A decision at exactly now should have weight ~1.0."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+            detector = PatternDetector(decision_logger=dl, half_life_days=90.0)
+            decision = _make_decision("X", DecisionAction.ACCEPT, 0, now)
+            assert abs(detector._decision_weight(decision, now) - 1.0) < 1e-9
+
+    def test_one_half_life_weight_is_half(self):
+        """A decision exactly one half-life old should have weight ~0.5."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+            detector = PatternDetector(decision_logger=dl, half_life_days=90.0)
+            decision = _make_decision("X", DecisionAction.ACCEPT, 90, now)
+            weight = detector._decision_weight(decision, now)
+            assert abs(weight - 0.5) < 1e-9
+
+    def test_two_half_lives_weight_is_quarter(self):
+        """A decision two half-lives old should have weight ~0.25."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+            detector = PatternDetector(decision_logger=dl, half_life_days=90.0)
+            decision = _make_decision("X", DecisionAction.ACCEPT, 180, now)
+            weight = detector._decision_weight(decision, now)
+            assert abs(weight - 0.25) < 1e-9
+
+    def test_180_day_old_contributes_about_25_percent(self):
+        """
+        Acceptance criterion: pattern from 180 days ago contributes ~25%
+        of a recent pattern's weight (with default half-life of 90 days).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+            detector = PatternDetector(decision_logger=dl, half_life_days=90.0)
+
+            recent = _make_decision("X", DecisionAction.ACCEPT, 0, now)
+            old = _make_decision("X", DecisionAction.ACCEPT, 180, now)
+
+            ratio = detector._decision_weight(old, now) / detector._decision_weight(recent, now)
+            assert abs(ratio - 0.25) < 0.01
+
+    def test_very_old_patterns_negligible(self):
+        """
+        Acceptance criterion: decisions older than 365 days should have
+        negligible influence (weight < 0.06 with 90-day half-life).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+            detector = PatternDetector(decision_logger=dl, half_life_days=90.0)
+
+            ancient = _make_decision("X", DecisionAction.ACCEPT, 365, now)
+            weight = detector._decision_weight(ancient, now)
+            # 365/90 ≈ 4.06 half-lives → weight ≈ 0.060
+            # This is negligible — less than 7% of a fresh decision
+            assert weight < 0.07
+            # More precisely, ~6% of a fresh decision
+            assert weight < 0.065
+
+
+class TestTemporalDecayOldVsRecent:
+    """Compare pattern detection for old-only vs recent-only decisions."""
+
+    def test_recent_decisions_produce_higher_confidence(self):
+        """
+        3 recent decisions should produce higher confidence than
+        3 old decisions of the same type.
+        """
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        # --- Recent decisions (all within 1 day) ---
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            recent_decisions = [
+                _make_decision("Cat", DecisionAction.ACCEPT, i * 0.1, now)
+                for i in range(5)
+            ]
+            _write_decisions(path, recent_decisions)
+
+            detector_recent = PatternDetector(
+                decision_logger=dl, half_life_days=90.0, reference_time=now
+            )
+            patterns_recent = detector_recent.detect_patterns()
+
+        # --- Old decisions (all ~200 days ago) ---
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            old_decisions = [
+                _make_decision("Cat", DecisionAction.ACCEPT, 200 + i * 0.1, now)
+                for i in range(5)
+            ]
+            _write_decisions(path, old_decisions)
+
+            detector_old = PatternDetector(
+                decision_logger=dl, half_life_days=90.0, reference_time=now
+            )
+            patterns_old = detector_old.detect_patterns()
+
+        # Recent should have higher confidence
+        recent_accept = [p for p in patterns_recent if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+        old_accept = [p for p in patterns_old if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+
+        assert len(recent_accept) == 1
+        # Old decisions at ~200 days with half_life=90:
+        # weight ≈ exp(-200*ln2/90) ≈ 0.215 each → sum ≈ 1.07 < 3 threshold
+        # So old_accept may be empty (below threshold).
+        if len(old_accept) > 0:
+            assert recent_accept[0].confidence > old_accept[0].confidence
+        else:
+            # Old patterns didn't even meet the threshold — proves recency bias
+            assert len(old_accept) == 0
+
+    def test_old_decisions_fall_below_threshold(self):
+        """
+        3 decisions from 200 days ago (with 90-day half-life) should have
+        weighted sum < 3, so no pattern is detected even though raw count = 3.
+        """
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            old_decisions = [
+                _make_decision("Cat", DecisionAction.ACCEPT, 200, now)
+                for _ in range(3)
+            ]
+            _write_decisions(path, old_decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+                min_occurrences=3,
+            )
+            patterns = detector.detect_patterns()
+
+            # weighted sum ≈ 3 * 0.215 ≈ 0.64, well below threshold of 3
+            accept_patterns = [
+                p for p in patterns if p.pattern_type == PatternType.ALWAYS_ACCEPT
+            ]
+            assert len(accept_patterns) == 0
+
+    def test_recent_only_patterns_reach_high_confidence_faster(self):
+        """
+        Acceptance criterion: recent-only patterns should reach high
+        confidence faster (fewer raw decisions needed) than old-only patterns.
+        """
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        # 5 recent decisions — each has weight ~1.0, sum ~5.0
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            recent = [_make_decision("Cat", DecisionAction.ACCEPT, 0.1 * i, now) for i in range(5)]
+            _write_decisions(path, recent)
+            detector = PatternDetector(
+                decision_logger=dl, half_life_days=90.0, reference_time=now
+            )
+            patterns_recent = detector.detect_patterns()
+
+        # 10 old decisions (~150 days old) — weight ≈ 0.316 each, sum ≈ 3.16
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            old = [_make_decision("Cat", DecisionAction.ACCEPT, 150, now) for _ in range(10)]
+            _write_decisions(path, old)
+            detector = PatternDetector(
+                decision_logger=dl, half_life_days=90.0, reference_time=now
+            )
+            patterns_old = detector.detect_patterns()
+
+        accept_recent = [p for p in patterns_recent if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+        accept_old = [p for p in patterns_old if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+
+        # Both should be detected, but recent has higher confidence
+        assert len(accept_recent) == 1
+        assert len(accept_old) == 1
+        # 5 recent (weighted ~5) vs 10 old (weighted ~3.16) → recent confidence > old
+        assert accept_recent[0].confidence > accept_old[0].confidence
+
+
+class TestTemporalDecayConfigurable:
+    """Test that half_life_days is configurable and affects detection."""
+
+    def test_shorter_half_life_penalizes_old_more(self):
+        """
+        With a shorter half-life, old decisions should be penalized more
+        heavily — same decisions may not meet threshold with short half-life
+        but may with a longer one.
+        """
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        # 5 decisions from 60 days ago
+        decisions = [
+            _make_decision("Cat", DecisionAction.ACCEPT, 60, now)
+            for _ in range(5)
+        ]
+
+        # With 90-day half-life: weight ≈ exp(-60*ln2/90) ≈ 0.63 each, sum ≈ 3.15 → above threshold
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            _write_decisions(path, decisions)
+
+            detector_long = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns_long = detector_long.detect_patterns()
+
+        # With 30-day half-life: weight ≈ exp(-60*ln2/30) ≈ 0.25 each, sum ≈ 1.25 → below threshold
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            _write_decisions(path, decisions)
+
+            detector_short = PatternDetector(
+                decision_logger=dl,
+                half_life_days=30.0,
+                reference_time=now,
+            )
+            patterns_short = detector_short.detect_patterns()
+
+        accept_long = [p for p in patterns_long if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+        accept_short = [p for p in patterns_short if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+
+        assert len(accept_long) == 1, "90-day half-life should detect pattern at 60 days"
+        assert len(accept_short) == 0, "30-day half-life should NOT detect pattern at 60 days"
+
+    def test_very_long_half_life_behaves_like_no_decay(self):
+        """
+        With a very long half-life (e.g. 100000 days), old decisions should
+        still contribute nearly full weight, behaving like the original code.
+        """
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        # 4 decisions from 300 days ago — with very long half-life, each
+        # weighs ~0.998, sum ~3.99 → comfortably above threshold of 3
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            decisions = [
+                _make_decision("Cat", DecisionAction.ACCEPT, 300, now)
+                for _ in range(4)
+            ]
+            _write_decisions(path, decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=100000.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+
+        accept = [p for p in patterns if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+        assert len(accept) == 1
+
+    def test_half_life_from_config(self):
+        """LearningConfig should provide the half_life_days default."""
+        from src.config.models import LearningConfig
+        config = LearningConfig()
+        assert config.pattern_half_life_days == 90.0
+
+        custom = LearningConfig(pattern_half_life_days=45.0)
+        assert custom.pattern_half_life_days == 45.0
+
+
+class TestTemporalDecayRenamePattern:
+    """Verify decay applies to rename pattern detection."""
+
+    def test_old_renames_below_threshold(self):
+        """Old rename decisions should not reach pattern threshold."""
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            decisions = [
+                _make_decision(
+                    "New",
+                    DecisionAction.RENAME,
+                    250,
+                    now,
+                    old_name="Old",
+                    new_name="New",
+                )
+                for _ in range(3)
+            ]
+            _write_decisions(path, decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+            rename = [p for p in patterns if p.pattern_type == PatternType.RENAME]
+            assert len(rename) == 0
+
+    def test_recent_renames_above_threshold(self):
+        """Recent rename decisions should reach pattern threshold."""
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            # 4 decisions from 1 day ago: weight ≈ 0.992 each, sum ≈ 3.97
+            decisions = [
+                _make_decision(
+                    "New",
+                    DecisionAction.RENAME,
+                    1,
+                    now,
+                    old_name="Old",
+                    new_name="New",
+                )
+                for _ in range(4)
+            ]
+            _write_decisions(path, decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+            rename = [p for p in patterns if p.pattern_type == PatternType.RENAME]
+            assert len(rename) == 1
+
+
+class TestTemporalDecayMergePattern:
+    """Verify decay applies to merge pattern detection."""
+
+    def test_old_merges_below_threshold(self):
+        """Old merge decisions should not reach pattern threshold."""
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            decisions = [
+                _make_decision(
+                    "Source",
+                    DecisionAction.MERGE,
+                    250,
+                    now,
+                    merge_target="Target",
+                )
+                for _ in range(3)
+            ]
+            _write_decisions(path, decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+            merge = [p for p in patterns if p.pattern_type == PatternType.MERGE]
+            assert len(merge) == 0
+
+
+class TestTemporalDecayDeleteLowConfPattern:
+    """Verify decay applies to delete-low-confidence pattern detection."""
+
+    def test_old_delete_low_conf_below_threshold(self):
+        """Old delete-low-confidence decisions should not reach threshold."""
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            decisions = [
+                _make_decision(
+                    f"LowQ{i}",
+                    DecisionAction.DELETE,
+                    250,
+                    now,
+                    confidence=0.2,
+                )
+                for i in range(3)
+            ]
+            _write_decisions(path, decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+            delete = [p for p in patterns if p.pattern_type == PatternType.DELETE_LOW_CONFIDENCE]
+            assert len(delete) == 0
+
+
+class TestTemporalDecayMixedAges:
+    """Test patterns with a mix of old and recent decisions."""
+
+    def test_mix_of_old_and_recent_still_detects_pattern(self):
+        """
+        A mix of 2 recent + 5 old decisions. The recent ones contribute ~2.0,
+        the old ones contribute a bit each. With enough old decisions the
+        total can still cross the threshold.
+        """
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+
+            # 2 recent (weight ~1.0 each → sum ~2.0)
+            recent = [
+                _make_decision("Cat", DecisionAction.ACCEPT, 1, now),
+                _make_decision("Cat", DecisionAction.ACCEPT, 2, now),
+            ]
+            # 5 old at 120 days (weight ≈ 0.40 each → sum ≈ 2.0)
+            old = [
+                _make_decision("Cat", DecisionAction.ACCEPT, 120, now)
+                for _ in range(5)
+            ]
+            _write_decisions(path, recent + old)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+
+        accept = [p for p in patterns if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+        # total weighted ≈ 2.0 + 2.0 = 4.0 → above min_occurrences=3
+        assert len(accept) == 1
+        assert accept[0].occurrences == 7  # raw count is 7
+
+    def test_occurrences_reflects_raw_count(self):
+        """Even with decay, occurrences should report the raw count."""
+        now = datetime(2025, 6, 1, tzinfo=timezone.utc)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            dl = DecisionLogger(decisions_path=path)
+            decisions = [
+                _make_decision("Cat", DecisionAction.ACCEPT, 1, now)
+                for _ in range(4)
+            ]
+            _write_decisions(path, decisions)
+
+            detector = PatternDetector(
+                decision_logger=dl,
+                half_life_days=90.0,
+                reference_time=now,
+            )
+            patterns = detector.detect_patterns()
+
+        accept = [p for p in patterns if p.pattern_type == PatternType.ALWAYS_ACCEPT]
+        assert len(accept) == 1
+        assert accept[0].occurrences == 4

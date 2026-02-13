@@ -58,6 +58,53 @@ def compute_max_k(n_emails: int, min_k: int = 3, max_k_cap: int = 25) -> int:
     return min(clamped, n_emails - 1)
 
 
+def silhouette_to_confidence(score: float) -> float:
+    """
+    Convert a silhouette score to a confidence value using sigmoid normalization.
+
+    Unlike linear normalization ((score + 1) / 2), which maps the full [-1, 1]
+    range uniformly to [0, 1], a sigmoid provides better discrimination in the
+    useful range: negative scores map to clearly low confidence, while positive
+    scores above ~0.5 map to high confidence.
+
+    Mapping examples:
+      - score =  0.5 -> confidence ≈ 0.92 (good clustering)
+      - score =  0.0 -> confidence = 0.50 (neutral / ambiguous)
+      - score = -0.3 -> confidence ≈ 0.18 (clearly bad)
+
+    Args:
+        score: Silhouette score in [-1, 1].
+
+    Returns:
+        Confidence value in (0, 1).
+    """
+    return 1.0 / (1.0 + math.exp(-5.0 * score))
+
+
+def interpret_silhouette(score: float) -> str:
+    """
+    Return a human-readable interpretation label for a silhouette score.
+
+    The score is first mapped through sigmoid normalization, then classified:
+      - confidence > 0.7:  "strong"
+      - 0.4 <= confidence <= 0.7: "moderate"
+      - confidence < 0.4:  "weak"
+
+    Args:
+        score: Raw silhouette score in [-1, 1].
+
+    Returns:
+        One of "strong", "moderate", or "weak".
+    """
+    confidence = silhouette_to_confidence(score)
+    if confidence > 0.7:
+        return "strong"
+    elif confidence >= 0.4:
+        return "moderate"
+    else:
+        return "weak"
+
+
 @dataclass
 class ClusterOptimizationResult:
     """Result from cluster optimization analysis."""
@@ -67,6 +114,7 @@ class ClusterOptimizationResult:
     method: str
     k_scores: dict[int, float]
     per_cluster_scores: dict[int, float] | None = None
+    interpretation: str | None = None
 
 
 class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
@@ -417,14 +465,16 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
             if np.any(cluster_mask):
                 per_cluster_scores[cluster_id] = float(np.mean(sample_scores[cluster_mask]))
 
-        # Calculate confidence based on the maximum silhouette score
-        # Silhouette scores range from -1 to 1
-        # We normalize to [0, 1] for confidence
-        confidence = (max_score + 1.0) / 2.0
+        # Calculate confidence using sigmoid normalization of the silhouette score.
+        # Sigmoid provides better discrimination than linear: negative scores map
+        # to clearly low confidence, scores above ~0.5 map to high confidence.
+        confidence = silhouette_to_confidence(max_score)
+        interpretation = interpret_silhouette(max_score)
 
         logger.info(
             f"Silhouette method found optimal k={optimal_k} "
-            f"with score={max_score:.4f}, confidence={confidence:.2f}"
+            f"with score={max_score:.4f}, confidence={confidence:.2f} "
+            f"({interpretation})"
         )
 
         return ClusterOptimizationResult(
@@ -432,7 +482,8 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
             confidence_score=confidence,
             method="silhouette",
             k_scores=k_scores,
-            per_cluster_scores=per_cluster_scores
+            per_cluster_scores=per_cluster_scores,
+            interpretation=interpretation,
         )
 
 
@@ -442,4 +493,6 @@ __all__ = [
     'ElbowOptimizer',
     'SilhouetteOptimizer',
     'compute_max_k',
+    'interpret_silhouette',
+    'silhouette_to_confidence',
 ]

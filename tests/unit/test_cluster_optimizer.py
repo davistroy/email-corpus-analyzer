@@ -3,9 +3,12 @@ Unit tests for cluster optimizer module.
 
 Tests the following cluster optimization components:
 - compute_max_k function - corpus-size-aware max_k calculation
+- silhouette_to_confidence - sigmoid normalization of silhouette scores
+- interpret_silhouette - human-readable interpretation labels
 - ElbowOptimizer class - finds optimal k using inertia curve
 - SilhouetteOptimizer class - finds optimal k using silhouette scores
 """
+import math
 from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
@@ -15,6 +18,8 @@ from src.analyzers.cluster_optimizer import (
     SilhouetteOptimizer,
     ClusterOptimizationResult,
     compute_max_k,
+    interpret_silhouette,
+    silhouette_to_confidence,
 )
 
 
@@ -106,6 +111,133 @@ class TestComputeMaxK:
 
 
 # ============================================================================
+# Test silhouette_to_confidence (sigmoid normalization)
+# ============================================================================
+
+
+class TestSilhouetteToConfidence:
+    """Test cases for sigmoid-based silhouette-to-confidence mapping."""
+
+    def test_positive_score_0_5_maps_high(self):
+        """score = 0.5 -> confidence ≈ 0.924 (good clustering)."""
+        conf = silhouette_to_confidence(0.5)
+        assert abs(conf - 1.0 / (1.0 + math.exp(-2.5))) < 1e-6
+        assert conf > 0.9
+
+    def test_zero_score_maps_neutral(self):
+        """score = 0.0 -> confidence = 0.50 exactly (neutral)."""
+        conf = silhouette_to_confidence(0.0)
+        assert conf == pytest.approx(0.5, abs=1e-9)
+
+    def test_negative_score_maps_low(self):
+        """score = -0.3 -> confidence ≈ 0.18 (clearly bad)."""
+        conf = silhouette_to_confidence(-0.3)
+        assert conf < 0.3
+
+    def test_strong_positive_near_1(self):
+        """score = 1.0 -> confidence very close to 1.0."""
+        conf = silhouette_to_confidence(1.0)
+        assert conf > 0.99
+
+    def test_strong_negative_near_0(self):
+        """score = -1.0 -> confidence very close to 0.0."""
+        conf = silhouette_to_confidence(-1.0)
+        assert conf < 0.01
+
+    def test_monotonically_increasing(self):
+        """Higher silhouette scores must always produce higher confidence."""
+        scores = [-1.0, -0.5, -0.3, 0.0, 0.2, 0.5, 0.8, 1.0]
+        confidences = [silhouette_to_confidence(s) for s in scores]
+        for i in range(len(confidences) - 1):
+            assert confidences[i] < confidences[i + 1], (
+                f"Not monotonic: conf({scores[i]})={confidences[i]} "
+                f">= conf({scores[i+1]})={confidences[i+1]}"
+            )
+
+    def test_output_always_in_0_1(self):
+        """Confidence is always strictly between 0 and 1."""
+        for score in [-1.0, -0.5, 0.0, 0.5, 1.0]:
+            conf = silhouette_to_confidence(score)
+            assert 0.0 < conf < 1.0
+
+    def test_acceptance_negative_scores_below_0_3(self):
+        """Acceptance: negative silhouette scores map to confidence < 0.3."""
+        for score in [-0.3, -0.5, -0.8, -1.0]:
+            conf = silhouette_to_confidence(score)
+            assert conf < 0.3, (
+                f"Negative score {score} mapped to confidence {conf}, "
+                f"expected < 0.3"
+            )
+
+    def test_acceptance_positive_above_0_5_maps_high(self):
+        """Acceptance: positive scores above 0.5 map to confidence > 0.9."""
+        for score in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+            conf = silhouette_to_confidence(score)
+            assert conf > 0.9, (
+                f"Score {score} mapped to confidence {conf}, expected > 0.9"
+            )
+
+
+# ============================================================================
+# Test interpret_silhouette
+# ============================================================================
+
+
+class TestInterpretSilhouette:
+    """Test cases for silhouette interpretation labels."""
+
+    def test_strong_for_good_score(self):
+        """score = 0.5 -> 'strong' (confidence > 0.7)."""
+        assert interpret_silhouette(0.5) == "strong"
+
+    def test_strong_for_high_score(self):
+        """score = 0.8 -> 'strong'."""
+        assert interpret_silhouette(0.8) == "strong"
+
+    def test_moderate_for_zero_score(self):
+        """score = 0.0 -> 'moderate' (confidence = 0.5, in [0.4, 0.7])."""
+        assert interpret_silhouette(0.0) == "moderate"
+
+    def test_weak_for_negative_score(self):
+        """score = -0.3 -> 'weak' (confidence ≈ 0.18 < 0.4)."""
+        assert interpret_silhouette(-0.3) == "weak"
+
+    def test_weak_for_very_negative_score(self):
+        """score = -1.0 -> 'weak'."""
+        assert interpret_silhouette(-1.0) == "weak"
+
+    def test_strong_for_perfect_score(self):
+        """score = 1.0 -> 'strong'."""
+        assert interpret_silhouette(1.0) == "strong"
+
+    def test_boundary_moderate_to_strong(self):
+        """Verify the moderate/strong boundary around confidence = 0.7.
+
+        confidence = 0.7 corresponds to sigmoid(x) = 0.7
+        => -5x = ln(1/0.7 - 1) = ln(3/7) ≈ -0.847
+        => x ≈ 0.169
+        So score = 0.17 should be right near the boundary.
+        """
+        # Slightly above boundary -> strong
+        assert interpret_silhouette(0.2) == "strong"
+        # Slightly below boundary -> moderate
+        assert interpret_silhouette(0.1) == "moderate"
+
+    def test_boundary_weak_to_moderate(self):
+        """Verify the weak/moderate boundary around confidence = 0.4.
+
+        confidence = 0.4 corresponds to sigmoid(x) = 0.4
+        => -5x = ln(1/0.4 - 1) = ln(1.5) ≈ 0.405
+        => x ≈ -0.081
+        So score = -0.08 should be right near the boundary.
+        """
+        # Slightly above boundary -> moderate
+        assert interpret_silhouette(0.0) == "moderate"
+        # Clearly below boundary -> weak
+        assert interpret_silhouette(-0.2) == "weak"
+
+
+# ============================================================================
 # Test ClusterOptimizationResult
 # ============================================================================
 
@@ -126,20 +258,33 @@ class TestClusterOptimizationResult:
         assert result.confidence_score == 0.85
         assert result.method == "elbow"
         assert len(result.k_scores) == 5
+        assert result.interpretation is None  # optional field defaults to None
 
     def test_creation_with_all_fields(self):
-        """Test creation with all fields including per_cluster_scores."""
+        """Test creation with all fields including per_cluster_scores and interpretation."""
         result = ClusterOptimizationResult(
             optimal_k=3,
             confidence_score=0.75,
             method="silhouette",
             k_scores={2: 0.5, 3: 0.7, 4: 0.6},
             per_cluster_scores={0: 0.8, 1: 0.7, 2: 0.6},
+            interpretation="strong",
         )
 
         assert result.optimal_k == 3
         assert result.per_cluster_scores is not None
         assert len(result.per_cluster_scores) == 3
+        assert result.interpretation == "strong"
+
+    def test_interpretation_defaults_to_none(self):
+        """Test that interpretation defaults to None when not provided."""
+        result = ClusterOptimizationResult(
+            optimal_k=5,
+            confidence_score=0.5,
+            method="elbow",
+            k_scores={2: 100.0},
+        )
+        assert result.interpretation is None
 
 
 # ============================================================================
@@ -340,7 +485,8 @@ class TestSilhouetteOptimizer:
 
         # Should identify around 3 clusters
         assert 2 <= result.optimal_k <= 5
-        assert result.confidence_score > 0.3
+        # With sigmoid normalization, well-separated clusters should give high confidence
+        assert result.confidence_score > 0.5
 
     def test_find_optimal_k_returns_k_scores(self, optimizer):
         """Test that k_scores dictionary is populated."""
@@ -414,16 +560,53 @@ class TestSilhouetteOptimizer:
         assert max_score > 0.5
 
     def test_confidence_based_on_max_silhouette(self, optimizer):
-        """Test that confidence is based on maximum silhouette score."""
+        """Test that confidence matches sigmoid of maximum silhouette score."""
         np.random.seed(42)
         embeddings = np.random.rand(30, 10)
 
         result = optimizer.find_optimal_k(embeddings)
 
-        # Confidence should be derived from the silhouette score
+        # Confidence should equal sigmoid of the max silhouette score
         max_score = max(result.k_scores.values())
-        # Confidence should be non-negative
-        assert result.confidence_score >= 0.0
+        expected_confidence = silhouette_to_confidence(max_score)
+        assert result.confidence_score == pytest.approx(expected_confidence, abs=1e-6)
+
+    def test_interpretation_included_in_result(self, optimizer):
+        """Test that interpretation label is present in the result."""
+        np.random.seed(42)
+        embeddings = np.random.rand(30, 10)
+
+        result = optimizer.find_optimal_k(embeddings)
+
+        assert result.interpretation is not None
+        assert result.interpretation in ("strong", "moderate", "weak")
+
+    def test_interpretation_matches_confidence(self, optimizer):
+        """Test that interpretation label is consistent with confidence value."""
+        np.random.seed(42)
+        embeddings = np.random.rand(30, 10)
+
+        result = optimizer.find_optimal_k(embeddings)
+
+        if result.confidence_score > 0.7:
+            assert result.interpretation == "strong"
+        elif result.confidence_score >= 0.4:
+            assert result.interpretation == "moderate"
+        else:
+            assert result.interpretation == "weak"
+
+    def test_well_separated_clusters_give_strong_interpretation(self, optimizer):
+        """Test that well-separated clusters produce 'strong' interpretation."""
+        np.random.seed(42)
+        cluster1 = np.random.randn(20, 5) * 0.1 + np.array([0, 0, 0, 0, 0])
+        cluster2 = np.random.randn(20, 5) * 0.1 + np.array([10, 10, 10, 10, 10])
+        embeddings = np.vstack([cluster1, cluster2])
+
+        result = optimizer.find_optimal_k(embeddings)
+
+        # Well-separated clusters -> high silhouette -> strong
+        assert result.interpretation == "strong"
+        assert result.confidence_score > 0.9
 
 
 # ============================================================================

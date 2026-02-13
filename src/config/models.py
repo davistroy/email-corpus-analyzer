@@ -224,6 +224,45 @@ class GeneratorThresholds(BaseModel):
         description="Email ID overlap threshold (Jaccard) for merging categories"
     )
 
+    # Confidence weight fields (Work Item 4.1)
+    # These weights are used by calculate_confidence_enhanced and should sum to 1.0
+    confidence_weight_cohesion: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for cohesion (distinguishing features count)"
+    )
+    confidence_weight_volume: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for volume (logarithmic email count scaling)"
+    )
+    confidence_weight_source: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for source type reliability"
+    )
+    confidence_weight_percentage: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for corpus percentage (10% = 1.0)"
+    )
+    confidence_weight_name_quality: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for name quality score"
+    )
+    confidence_weight_distinctiveness: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description="Confidence weight for distinctiveness (mean overlap penalty)"
+    )
+
 
 class SuggestConfig(BaseModel):
     """Configuration for suggest command."""
@@ -250,6 +289,26 @@ class SuggestConfig(BaseModel):
     thresholds: GeneratorThresholds = Field(
         default_factory=GeneratorThresholds,
         description="Configurable thresholds for generator modules"
+    )
+
+
+class LearningConfig(BaseModel):
+    """
+    Configuration for the feedback learning system.
+
+    Controls temporal decay of pattern detection and other
+    learning-related parameters.
+    """
+
+    pattern_half_life_days: float = Field(
+        default=90.0,
+        gt=0,
+        le=3650,
+        description=(
+            "Half-life in days for temporal decay of pattern confidence. "
+            "A decision this many days old contributes 50% of a brand-new "
+            "decision's weight. Default 90 days."
+        ),
     )
 
 
@@ -308,6 +367,7 @@ class AppConfig(BaseModel):
     suggest: SuggestConfig = Field(default_factory=SuggestConfig)
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    learning: LearningConfig = Field(default_factory=LearningConfig)
 
     @field_validator("output_dir", mode="before")
     @classmethod
@@ -394,6 +454,7 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
         ("suggest", SuggestConfig),
         ("review", ReviewConfig),
         ("pipeline", PipelineConfig),
+        ("learning", LearningConfig),
     ]:
         base_nested = getattr(base, config_name)
         override_nested = getattr(override, config_name)

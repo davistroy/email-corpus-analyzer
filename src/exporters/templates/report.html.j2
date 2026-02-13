@@ -332,6 +332,18 @@
         </div>
     </div>
 
+    {% if cluster_visualization_path %}
+    <!-- Cluster Visualization (Task 4.3) -->
+    <div class="chart-container" style="margin-bottom: 30px;">
+        <h2>Cluster Visualization</h2>
+        <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">
+            PCA projection of email clusters with per-cluster silhouette scores.
+        </p>
+        <img src="{{ cluster_visualization_path }}" alt="Cluster visualization scatter plot and silhouette chart"
+             style="max-width: 100%; height: auto; border-radius: 4px;">
+    </div>
+    {% endif %}
+
     <!-- Category List -->
     <div class="categories-section">
         <h2>Category Details</h2>

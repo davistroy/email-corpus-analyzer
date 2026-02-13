@@ -11,6 +11,7 @@ import logging
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -557,3 +558,108 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             clusters.append(cluster)
 
         return clusters
+
+
+def generate_cluster_visualization(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    output_path: str | Path,
+    cluster_silhouette_scores: dict[int, float] | None = None,
+) -> Path | None:
+    """
+    Generate cluster quality visualization as a PNG file.
+
+    Produces a two-panel figure:
+    1. PCA scatter plot of embeddings colored by cluster label
+    2. Bar chart of per-cluster average silhouette scores (if provided)
+
+    Args:
+        embeddings: 2D numpy array of shape (n_samples, n_features)
+        labels: 1D numpy array of cluster labels for each sample
+        output_path: Path to save the output PNG file
+        cluster_silhouette_scores: Optional dict mapping cluster_id to average
+            silhouette score. If None, only the scatter plot is generated.
+
+    Returns:
+        Path to the saved PNG file, or None if matplotlib is not available.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")  # Non-interactive backend for file output
+        import matplotlib.pyplot as plt
+        from sklearn.decomposition import PCA
+    except ImportError:
+        logger.warning(
+            "matplotlib required for visualization. "
+            "Install with: pip install matplotlib"
+        )
+        return None
+
+    output_path = Path(output_path)
+
+    has_silhouette = (
+        cluster_silhouette_scores is not None
+        and len(cluster_silhouette_scores) > 0
+    )
+    ncols = 2 if has_silhouette else 1
+    fig, axes = plt.subplots(1, ncols, figsize=(8 * ncols, 6))
+
+    if ncols == 1:
+        axes = [axes]
+
+    # --- Panel 1: PCA scatter plot ---
+    ax_scatter = axes[0]
+    pca = PCA(n_components=2, random_state=42)
+    coords = pca.fit_transform(embeddings)
+
+    unique_labels = np.unique(labels)
+    cmap = plt.colormaps.get_cmap("tab10").resampled(max(len(unique_labels), 1))
+
+    for idx, label in enumerate(unique_labels):
+        mask = labels == label
+        ax_scatter.scatter(
+            coords[mask, 0],
+            coords[mask, 1],
+            c=[cmap(idx)],
+            label=f"Cluster {label}",
+            alpha=0.6,
+            s=20,
+        )
+
+    ax_scatter.set_title("Email Clusters (PCA Projection)")
+    ax_scatter.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]:.1%} var)")
+    ax_scatter.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]:.1%} var)")
+    ax_scatter.legend(fontsize=7, loc="best", ncol=2)
+
+    # --- Panel 2: Silhouette bar chart ---
+    if has_silhouette:
+        ax_bar = axes[1]
+        sorted_ids = sorted(cluster_silhouette_scores.keys())
+        scores = [cluster_silhouette_scores[cid] for cid in sorted_ids]
+        bar_labels = [f"C{cid}" for cid in sorted_ids]
+        colors = [cmap(i % cmap.N) for i in range(len(sorted_ids))]
+
+        bars = ax_bar.bar(bar_labels, scores, color=colors, edgecolor="white")
+        ax_bar.set_title("Per-Cluster Silhouette Scores")
+        ax_bar.set_xlabel("Cluster")
+        ax_bar.set_ylabel("Avg Silhouette Score")
+        ax_bar.set_ylim(-1.0, 1.0)
+        ax_bar.axhline(y=0, color="gray", linestyle="--", linewidth=0.8)
+
+        # Add value labels on bars
+        for bar, score in zip(bars, scores, strict=True):
+            ax_bar.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.02,
+                f"{score:.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+            )
+
+    fig.tight_layout()
+    fig.savefig(str(output_path), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+    logger.info(f"Cluster visualization saved to {output_path}")
+    return output_path

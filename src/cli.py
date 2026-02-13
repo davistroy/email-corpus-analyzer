@@ -135,6 +135,7 @@ def _show_cluster_analysis(corpus, args: argparse.Namespace) -> int:
             "silhouette_method": {
                 "optimal_k": silhouette_result.optimal_k,
                 "confidence": silhouette_result.confidence_score,
+                "interpretation": silhouette_result.interpretation,
                 "k_scores": silhouette_result.k_scores
             },
             "recommendation": {
@@ -242,6 +243,73 @@ def _print_ascii_chart(k_scores: dict[int, float], optimal_k: int, label: str) -
     k_labels = "".join(str(k)[-1] for k in k_values)
     print(f"  {k_labels}")
     print(f"  k values (2-{max(k_values)})")
+
+
+def _generate_cluster_viz(corpus, results) -> Path | None:
+    """
+    Generate cluster visualization PNG from analysis results.
+
+    Re-generates embeddings and runs KMeans to obtain the data needed for
+    scatter plot and silhouette bar chart. Returns the output path on success,
+    or None if matplotlib is not available.
+
+    Args:
+        corpus: Loaded email corpus
+        results: AnalysisResults from run_full_analysis
+
+    Returns:
+        Path to generated PNG, or None if visualization could not be created
+    """
+    from src.analyzers.semantic_analyzer import SemanticAnalyzer, generate_cluster_visualization
+
+    # Check matplotlib availability early
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        logger.warning(
+            "matplotlib required for visualization. "
+            "Install with: pip install matplotlib"
+        )
+        return None
+
+    from sklearn.cluster import KMeans
+
+    logger.info("Generating cluster visualization...")
+
+    # Re-generate embeddings (fast if model is already cached in memory)
+    analyzer = SemanticAnalyzer()
+    analyzer._ensure_model_loaded()
+
+    texts = [email.combined_text_with_limit() for email in corpus.emails]
+    embeddings = analyzer.model.encode(
+        texts,
+        show_progress_bar=False,
+        convert_to_numpy=True
+    )
+
+    # Run KMeans with the same cluster count used in analysis
+    n_clusters = len(results.content_clusters)
+    if n_clusters < 1:
+        logger.warning("No clusters in analysis results, skipping visualization")
+        return None
+
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    labels = kmeans.fit_predict(embeddings)
+
+    # Build per-cluster silhouette scores from analysis results
+    cluster_silhouette_scores = {}
+    for cluster in results.content_clusters:
+        if cluster.silhouette_score is not None:
+            cluster_silhouette_scores[cluster.cluster_id] = cluster.silhouette_score
+
+    output_path = PathConfig.get_output_dir() / "cluster_visualization.png"
+
+    return generate_cluster_visualization(
+        embeddings=embeddings,
+        labels=labels,
+        output_path=output_path,
+        cluster_silhouette_scores=cluster_silhouette_scores if cluster_silhouette_scores else None,
+    )
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -473,6 +541,12 @@ Note: --auto-clusters and --num-clusters are mutually exclusive.
         action="store_true",
         default=False,
         help="Use embedding cache for incremental analysis (Task 4B.4)"
+    )
+    analyze_parser.add_argument(
+        "--cluster-viz",
+        action="store_true",
+        default=False,
+        help="Generate cluster visualization PNG (requires matplotlib)"
     )
 
     # ===== SUGGEST COMMAND =====
@@ -1071,10 +1145,15 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         # Save results
         save_json(results.model_dump(), analysis_path)
 
+        # Generate cluster visualization if requested (Task 4.3)
+        viz_path = None
+        if getattr(args, 'cluster_viz', False):
+            viz_path = _generate_cluster_viz(corpus, results)
+
         duration = time.time() - start_time
 
         if getattr(args, 'json', False):
-            output_json({
+            json_output = {
                 "command": "analyze",
                 "status": "success",
                 "duration_seconds": round(duration, 2),
@@ -1084,11 +1163,16 @@ def cmd_analyze(args: argparse.Namespace) -> int:
                     "clusters_generated": len(results.content_clusters),
                     "unique_senders": results.sender_analysis.unique_senders
                 }
-            })
+            }
+            if viz_path:
+                json_output["visualization_path"] = str(viz_path)
+            output_json(json_output)
         else:
             logger.info("Analysis complete")
             logger.info(f"  - {results.sender_analysis.unique_senders} unique senders")
             logger.info(f"  - {len(results.content_clusters)} semantic clusters")
+            if viz_path:
+                logger.info(f"  - Cluster visualization: {viz_path}")
 
         return 0
 

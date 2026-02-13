@@ -1807,3 +1807,218 @@ class TestClusterQualityMetrics:
             cluster_dict = cluster.model_dump()
             assert "silhouette_score" in cluster_dict
             assert "cohesion_score" in cluster_dict
+
+
+# ============================================================================
+# Test Cluster Visualization (Task 4.3)
+# ============================================================================
+
+
+class TestClusterVisualization:
+    """Test cases for generate_cluster_visualization function."""
+
+    def test_generates_png_with_silhouette_scores(self, tmp_path):
+        """Test that visualization creates a PNG file with scatter + bar chart."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(30, 10)
+        labels = np.array([0] * 10 + [1] * 10 + [2] * 10)
+        silhouette_scores = {0: 0.5, 1: 0.3, 2: 0.7}
+
+        output_path = tmp_path / "test_viz.png"
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+            cluster_silhouette_scores=silhouette_scores,
+        )
+
+        assert result is not None
+        assert result.exists()
+        assert result.suffix == ".png"
+        # File should be non-trivial in size (at least a few KB)
+        assert result.stat().st_size > 1000
+
+    def test_generates_png_without_silhouette_scores(self, tmp_path):
+        """Test that visualization works without silhouette scores (scatter only)."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(20, 10)
+        labels = np.array([0] * 10 + [1] * 10)
+
+        output_path = tmp_path / "test_viz_no_sil.png"
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+            cluster_silhouette_scores=None,
+        )
+
+        assert result is not None
+        assert result.exists()
+
+    def test_returns_none_when_matplotlib_unavailable(self, tmp_path):
+        """Test graceful handling when matplotlib is not installed."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 5)
+        labels = np.array([0] * 5 + [1] * 5)
+
+        output_path = tmp_path / "should_not_exist.png"
+
+        with patch.dict("sys.modules", {"matplotlib": None}):
+            result = generate_cluster_visualization(
+                embeddings=embeddings,
+                labels=labels,
+                output_path=output_path,
+            )
+
+        assert result is None
+        assert not output_path.exists()
+
+    def test_single_cluster_visualization(self, tmp_path):
+        """Test visualization with a single cluster."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 5)
+        labels = np.zeros(10, dtype=int)
+
+        output_path = tmp_path / "single_cluster.png"
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+        )
+
+        assert result is not None
+        assert result.exists()
+
+    def test_output_path_as_string(self, tmp_path):
+        """Test that output_path accepts string as well as Path."""
+        from src.analyzers.semantic_analyzer import generate_cluster_visualization
+
+        np.random.seed(42)
+        embeddings = np.random.rand(10, 5)
+        labels = np.array([0] * 5 + [1] * 5)
+
+        output_path = str(tmp_path / "string_path.png")
+
+        result = generate_cluster_visualization(
+            embeddings=embeddings,
+            labels=labels,
+            output_path=output_path,
+        )
+
+        assert result is not None
+        assert result.exists()
+
+
+class TestClusterVizCLIFlag:
+    """Test that --cluster-viz CLI flag is properly configured."""
+
+    def test_analyze_command_has_cluster_viz_flag(self):
+        """Test that analyze command has --cluster-viz flag."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+
+        # Without flag - default should be False
+        args = parser.parse_args(["analyze"])
+        assert args.cluster_viz is False
+
+        # With flag - should be True
+        args = parser.parse_args(["analyze", "--cluster-viz"])
+        assert args.cluster_viz is True
+
+
+class TestHTMLExporterVisualization:
+    """Test that HTML exporter includes cluster visualization when available."""
+
+    def test_html_includes_visualization_when_png_exists(self, tmp_path):
+        """Test that HTML report includes img tag when visualization exists."""
+        from src.exporters.html_exporter import export_categories_to_html
+        from src.models.category import Category, CategorySource
+
+        # Create a dummy visualization PNG
+        viz_path = tmp_path / "cluster_visualization.png"
+        viz_path.write_bytes(b"fake png data")
+
+        # Create a minimal category
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Test Category",
+                description="A test category",
+                confidence=0.8,
+                source=CategorySource.TEMPLATE,
+                email_count=10,
+            )
+        ]
+
+        output_path = tmp_path / "report.html"
+        export_categories_to_html(categories, output_path)
+
+        html_content = output_path.read_text(encoding="utf-8")
+        assert "cluster_visualization.png" in html_content
+        assert "Cluster Visualization" in html_content
+
+    def test_html_excludes_visualization_when_no_png(self, tmp_path):
+        """Test that HTML report omits visualization section when no PNG."""
+        from src.exporters.html_exporter import export_categories_to_html
+        from src.models.category import Category, CategorySource
+
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Test Category",
+                description="A test category",
+                confidence=0.8,
+                source=CategorySource.TEMPLATE,
+                email_count=10,
+            )
+        ]
+
+        output_path = tmp_path / "report.html"
+        export_categories_to_html(categories, output_path)
+
+        html_content = output_path.read_text(encoding="utf-8")
+        assert "Cluster Visualization" not in html_content
+
+    def test_html_accepts_explicit_visualization_path(self, tmp_path):
+        """Test that explicit cluster_visualization_path param works."""
+        from src.exporters.html_exporter import export_categories_to_html
+        from src.models.category import Category, CategorySource
+
+        # Put viz in a subdirectory
+        viz_dir = tmp_path / "viz"
+        viz_dir.mkdir()
+        viz_path = viz_dir / "my_clusters.png"
+        viz_path.write_bytes(b"fake png data")
+
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Test Category",
+                description="A test category",
+                confidence=0.8,
+                source=CategorySource.TEMPLATE,
+                email_count=10,
+            )
+        ]
+
+        output_path = tmp_path / "report.html"
+        export_categories_to_html(
+            categories,
+            output_path,
+            cluster_visualization_path=viz_path,
+        )
+
+        html_content = output_path.read_text(encoding="utf-8")
+        assert "Cluster Visualization" in html_content
