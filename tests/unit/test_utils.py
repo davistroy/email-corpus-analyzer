@@ -1467,3 +1467,98 @@ class TestSharedTextWordLists:
         from src.utils.text import STOP_WORDS
 
         assert SubjectAnalyzer.STOP_WORDS is STOP_WORDS
+
+
+class TestStripDomainSuffix:
+    """Tests for strip_domain_suffix() domain name extraction."""
+
+    def test_simple_com_domain(self):
+        """Standard .com domain returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("amazon.com") == "amazon"
+
+    def test_simple_org_domain(self):
+        """Standard .org domain returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("wikipedia.org") == "wikipedia"
+
+    def test_simple_net_domain(self):
+        """Standard .net domain returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("speedtest.net") == "speedtest"
+
+    def test_co_uk_domain(self):
+        """Country-code second-level domain .co.uk returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("amazon.co.uk") == "amazon"
+
+    def test_bbc_co_uk(self):
+        """BBC .co.uk returns correct registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("bbc.co.uk") == "bbc"
+
+    def test_com_au_domain(self):
+        """Country-code second-level domain .com.au returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("ebay.com.au") == "ebay"
+
+    def test_org_br_domain(self):
+        """Country-code second-level domain .org.br returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("example.org.br") == "example"
+
+    def test_subdomain_preserved(self):
+        """Subdomain is preserved — only the TLD portion is stripped."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("mail.google.com") == "mail.google"
+
+    def test_subdomain_with_ccSLD(self):
+        """Subdomain with country-code second-level TLD preserved correctly."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("shop.amazon.co.uk") == "shop.amazon"
+
+    def test_subdomain_with_com_au(self):
+        """Subdomain with .com.au preserved correctly."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("shop.amazon.com.au") == "shop.amazon"
+
+    def test_single_label_domain(self):
+        """Single label (no dots) returns the domain unchanged."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("localhost") == "localhost"
+
+    def test_case_insensitive(self):
+        """Domain is lowercased during processing."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("Amazon.COM") == "amazon"
+
+    def test_gov_uk_domain(self):
+        """Government .gov.uk domain handled correctly."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("hmrc.gov.uk") == "hmrc"
+
+    def test_ac_uk_domain(self):
+        """Academic .ac.uk domain handled correctly."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("oxford.ac.uk") == "oxford"
+
+    def test_edu_au_domain(self):
+        """Educational .edu.au domain handled correctly."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("unsw.edu.au") == "unsw"
+
+    def test_simple_de_domain(self):
+        """Simple country-code TLD (.de) returns registrable name."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("example.de") == "example"
+
+    def test_empty_string(self):
+        """Empty string returns empty string."""
+        from src.utils.text import strip_domain_suffix
+        assert strip_domain_suffix("") == ""
+
+    def test_category_generator_imports_strip_domain_suffix(self):
+        """Verify category_generator imports strip_domain_suffix from shared utils."""
+        import src.generators.category_generator as cg
+        from src.utils.text import strip_domain_suffix
+        assert cg.strip_domain_suffix is strip_domain_suffix

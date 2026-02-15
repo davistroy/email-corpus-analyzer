@@ -71,3 +71,36 @@ KNOWN_PROPER_NOUNS: frozenset[str] = frozenset([
     "twilio", "twitter", "uber", "venmo", "visa", "walmart", "wells",
     "zoom",
 ])
+
+# ──────────────────────────────────────────────────────────────────────
+# SECOND_LEVEL_TLDS — country-code second-level domain parts that sit
+# between the registrable name and the country TLD, e.g. .co.uk,
+# .com.au, .org.br.
+# ──────────────────────────────────────────────────────────────────────
+_SECOND_LEVEL_TLDS: frozenset[str] = frozenset([
+    "co", "com", "org", "net", "ac", "gov", "edu",
+])
+
+
+def strip_domain_suffix(domain: str) -> str:
+    """Extract the registrable name from a domain for display purposes.
+
+    Handles common TLD patterns including country-code second-level
+    domains (e.g. ``co.uk``, ``com.au``).
+
+    Examples::
+
+        strip_domain_suffix("amazon.com")       -> "amazon"
+        strip_domain_suffix("amazon.co.uk")      -> "amazon"
+        strip_domain_suffix("bbc.co.uk")         -> "bbc"
+        strip_domain_suffix("mail.google.com")   -> "mail.google"
+        strip_domain_suffix("example.org")       -> "example"
+        strip_domain_suffix("shop.amazon.com.au") -> "shop.amazon"
+        strip_domain_suffix("localhost")         -> "localhost"
+    """
+    parts = domain.lower().split(".")
+    if len(parts) >= 3 and parts[-2] in _SECOND_LEVEL_TLDS:
+        return ".".join(parts[:-2])
+    elif len(parts) >= 2:
+        return ".".join(parts[:-1])
+    return domain

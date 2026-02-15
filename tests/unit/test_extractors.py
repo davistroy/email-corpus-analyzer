@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.exceptions import RateLimitError
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.extractors.m365_extractor import EmailExtractor, ExtractionError, ExtractionResult
 from src.models.corpus import Corpus, CorpusMetadata
@@ -532,17 +533,31 @@ class TestEmailExtractor:
     def test_extract_all_handles_rate_limit(
         self, mock_fetch_batch, mock_get_count, extractor, mock_email_data
     ):
-        """Test extraction handles rate limiting."""
+        """Test extraction handles rate limiting via RateLimitError."""
         mock_get_count.return_value = 10
-        # First call fails with rate limit, second succeeds but empty
+        # First call fails with RateLimitError, second succeeds but empty
         mock_fetch_batch.side_effect = [
-            Exception("Rate limit exceeded"),
+            RateLimitError(retry_after=5),
             []  # Empty batch to stop iteration
         ]
 
         with patch.object(extractor, "_handle_rate_limit") as mock_rate_limit:
             result = extractor.extract_all(max_batch_size=10)
-            mock_rate_limit.assert_called_once()
+            mock_rate_limit.assert_called_once_with(0, retry_after=5)
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_extract_all_non_rate_limit_error_stops(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Test that non-rate-limit exceptions stop extraction (not caught as rate limit)."""
+        mock_get_count.return_value = 100
+        mock_fetch_batch.side_effect = Exception("Some other error")
+
+        result = extractor.extract_all()
+
+        assert result.failure_count > 0
+        assert result.failed_emails[0].error_type == "timeout"
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
@@ -612,6 +627,21 @@ class TestEmailExtractor:
 
             extractor._handle_rate_limit(10)
             mock_sleep.assert_called_with(8)  # Max 8 seconds
+
+    def test_handle_rate_limit_uses_retry_after(self, extractor):
+        """Test rate limit handling uses retry_after when provided."""
+        with patch("time.sleep") as mock_sleep:
+            extractor._handle_rate_limit(0, retry_after=30)
+            mock_sleep.assert_called_with(8)  # Capped at MAX_BACKOFF_SECONDS (8)
+
+            extractor._handle_rate_limit(0, retry_after=5)
+            mock_sleep.assert_called_with(5)  # Uses retry_after when < max
+
+    def test_handle_rate_limit_ignores_zero_retry_after(self, extractor):
+        """Test rate limit handling falls back to exponential when retry_after is 0."""
+        with patch("time.sleep") as mock_sleep:
+            extractor._handle_rate_limit(2, retry_after=0)
+            mock_sleep.assert_called_with(4)  # 2^2 = 4 (exponential fallback)
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
@@ -1498,3 +1528,136 @@ class TestIntegrationScenarios:
 
             # Checkpoint should be cleared
             assert not checkpoint_file.exists()
+
+
+class TestSharedBatchLoopCheckpoint:
+    """Test that checkpoint behavior in _execute_batch_loop affects both extraction modes."""
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create EmailExtractor with temp directory."""
+        return EmailExtractor(
+            user_email="shared@example.com",
+            checkpoint_dir=str(tmp_path)
+        )
+
+    @pytest.fixture
+    def valid_email_data(self):
+        """Create valid M365 email data."""
+        return {
+            "id": "shared_msg",
+            "subject": "Shared Test",
+            "from": {
+                "emailAddress": {
+                    "address": "sender@example.com",
+                    "name": "Sender"
+                }
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": "recipient@example.com", "name": "Recipient"}}
+            ],
+            "body": {"content": "<p>Shared body</p>"},
+            "receivedDateTime": "2024-01-01T00:00:00Z",
+            "hasAttachments": False
+        }
+
+    @pytest.fixture
+    def existing_corpus(self):
+        """Create existing corpus for incremental tests."""
+        return Corpus(
+            extraction_metadata=CorpusMetadata(
+                extraction_date=datetime(2024, 1, 1, 10, 0),
+                total_emails=0,
+                source="Hotmail/M365",
+                user_email="shared@example.com",
+                last_extraction_date=datetime(2024, 1, 1, 10, 0),
+            ),
+            emails=[],
+        )
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_checkpoint_saves_in_extract_all(
+        self, mock_fetch_batch, mock_get_count, extractor, valid_email_data
+    ):
+        """Test that checkpoint saving works in extract_all via shared batch loop."""
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
+        mock_fetch_batch.side_effect = [
+            [valid_email_data] * 100,
+            []
+        ]
+
+        with patch.object(extractor.checkpoint_manager, "save_checkpoint") as mock_save:
+            extractor.extract_all(max_batch_size=100, checkpoint_interval=100)
+            assert mock_save.called, "Checkpoint should be saved during extract_all"
+
+    def test_checkpoint_saves_in_extract_incremental(
+        self, extractor, valid_email_data, existing_corpus
+    ):
+        """Test that checkpoint saving works in extract_incremental via shared batch loop."""
+        # Create 100 unique emails for the incremental batch
+        emails = []
+        for i in range(100):
+            email = valid_email_data.copy()
+            email["id"] = f"new_msg_{i}"
+            emails.append(email)
+
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [emails, []]
+
+            with patch.object(extractor.checkpoint_manager, "save_checkpoint") as mock_save:
+                extractor.extract_incremental(
+                    existing_corpus, max_batch_size=100, checkpoint_interval=100
+                )
+                assert mock_save.called, (
+                    "Checkpoint should be saved during extract_incremental "
+                    "(shared batch loop now handles checkpoints for both modes)"
+                )
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_same_checkpoint_interval_used_by_both_modes(
+        self, mock_fetch_batch, mock_get_count, extractor, valid_email_data, existing_corpus
+    ):
+        """Test that modifying checkpoint manager interval affects both extraction modes identically."""
+        # Set the checkpoint manager interval to 25 so we get checkpoints at 25 and 50
+        extractor.checkpoint_manager.checkpoint_interval = 25
+
+        # Generate unique emails for each mode
+        full_emails = []
+        for i in range(50):
+            email = valid_email_data.copy()
+            email["id"] = f"full_{i}"
+            full_emails.append(email)
+
+        incr_emails = []
+        for i in range(50):
+            email = valid_email_data.copy()
+            email["id"] = f"incr_{i}"
+            incr_emails.append(email)
+
+        # Test extract_all
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
+        mock_fetch_batch.side_effect = [full_emails, []]
+
+        with patch.object(extractor.checkpoint_manager, "save_checkpoint") as mock_save_full:
+            extractor.extract_all(max_batch_size=50)
+            full_save_count = mock_save_full.call_count
+
+        # Test extract_incremental
+        with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
+            mock_fetch.side_effect = [incr_emails, []]
+
+            with patch.object(extractor.checkpoint_manager, "save_checkpoint") as mock_save_incr:
+                extractor.extract_incremental(existing_corpus, max_batch_size=50)
+                incr_save_count = mock_save_incr.call_count
+
+        # Both modes should save checkpoints the same number of times
+        # because they share _execute_batch_loop
+        assert full_save_count == incr_save_count, (
+            f"Checkpoint saves should be equal: extract_all={full_save_count}, "
+            f"extract_incremental={incr_save_count}"
+        )
+        assert full_save_count == 2, (
+            f"Expected 2 checkpoint saves (at 25 and 50), got {full_save_count}"
+        )

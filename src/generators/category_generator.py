@@ -22,7 +22,7 @@ from src.models.category import Category, CategorySource
 from src.models.category_template import PREDEFINED_TEMPLATES
 from src.utils.constants import NAME_QUALITY_REVIEW_THRESHOLD
 from src.utils.logger import get_logger
-from src.utils.text import STOP_WORDS
+from src.utils.text import STOP_WORDS, strip_domain_suffix
 
 if TYPE_CHECKING:
     from src.config.models import GeneratorThresholds
@@ -206,7 +206,7 @@ class CategoryGenerator:
     def _category_from_sender(self, sender, total_emails: int) -> Category:
         """Create category from high-volume sender."""
         # Use sender domain or name for category
-        name = sender.domain.replace('.com', '').replace('.', ' ').title()
+        name = strip_domain_suffix(sender.domain).replace('.', ' ').title()
         if not name:
             name = sender.email.split('@')[0].replace('.', ' ').title()
 
@@ -253,7 +253,7 @@ class CategoryGenerator:
         """Generate descriptive name for cluster."""
         # Try to use common domain
         if domains:
-            domain_name = domains[0][0].replace('.com', '').replace('.', ' ').title()
+            domain_name = strip_domain_suffix(domains[0][0]).replace('.', ' ').title()
             return f"{domain_name} Related"
 
         # Fallback to common words in subjects
@@ -490,7 +490,7 @@ class CategoryGenerator:
         if cluster.common_domains:
             domain = cluster.common_domains[0][0]
             # Extract company name from domain
-            name = domain.replace('.com', '').replace('.org', '').replace('.net', '')
+            name = strip_domain_suffix(domain)
             name = name.split('.')[-1]  # Get last part
             return name.title() + " Related"
 
@@ -508,7 +508,7 @@ class CategoryGenerator:
         # Try to use domain with more specificity
         if cluster.common_domains:
             domain = cluster.common_domains[0][0]
-            domain_name = domain.replace('.com', '').replace('.org', '').replace('.net', '')
+            domain_name = strip_domain_suffix(domain)
             domain_name = domain_name.split('.')[-1].title()
 
             # Try to add more context from samples

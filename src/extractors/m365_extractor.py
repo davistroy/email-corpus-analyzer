@@ -9,6 +9,7 @@ Refactored in Work Item 1.3: Now inherits from BaseExtractor.
 """
 from datetime import datetime
 
+from src.exceptions import RateLimitError
 from src.extractors.base_extractor import (
     BaseExtractor,
     ExtractionError,
@@ -99,7 +100,7 @@ class EmailExtractor(BaseExtractor):
 
             return emails
 
-        except ConnectionError:
+        except (ConnectionError, RateLimitError):
             raise
         except Exception as e:
             self.logger.error(f"Failed to fetch batch {start}-{end}: {e}")
@@ -219,7 +220,7 @@ class EmailExtractor(BaseExtractor):
             # This ensures we don't prematurely stop fetching
             return EMAIL_COUNT_SENTINEL
 
-        except ConnectionError:
+        except (ConnectionError, RateLimitError):
             raise
         except Exception as e:
             self.logger.error(f"Failed to get email count: {e}")

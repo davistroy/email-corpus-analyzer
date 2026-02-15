@@ -3238,3 +3238,229 @@ class TestCLIHelpExamples:
 
         export_parser = subparsers["export"]
         assert export_parser.epilog is not None
+
+
+class TestConfigMappingsAndPrecedence:
+    """Tests for data-driven _apply_config_defaults and _CONFIG_MAPPINGS."""
+
+    def test_config_mappings_covers_all_mapped_attrs(self):
+        """Test _CONFIG_MAPPINGS dict contains expected attributes."""
+        from src.cli import _CONFIG_MAPPINGS
+
+        expected = {
+            "output_dir", "verbose", "user_email",
+            "batch_size", "checkpoint_interval", "num_clusters",
+            "min_cluster_percentage", "min_sender_count", "no_cleanup",
+        }
+        assert set(_CONFIG_MAPPINGS.keys()) == expected
+
+    def test_apply_config_defaults_uses_config_when_cli_is_default(self):
+        """Config values override CLI defaults when user didn't supply the flag."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, ExtractConfig
+
+        parser = create_parser()
+        # Parse with default batch_size (500) -- user didn't supply --batch-size
+        args = parser.parse_args(["extract", "--user-email", "test@test.com"])
+        assert args.batch_size == 500  # parser default
+
+        config = AppConfig(extract=ExtractConfig(batch_size=1000))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.batch_size == 1000
+
+    def test_apply_config_defaults_cli_overrides_config(self):
+        """Explicit CLI args take precedence over config file values."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, ExtractConfig
+
+        parser = create_parser()
+        # User explicitly sets --batch-size 750
+        args = parser.parse_args([
+            "extract", "--user-email", "test@test.com", "--batch-size", "750"
+        ])
+        assert args.batch_size == 750
+
+        config = AppConfig(extract=ExtractConfig(batch_size=1000))
+        _apply_config_defaults(args, config, parser)
+
+        # CLI value should win
+        assert args.batch_size == 750
+
+    def test_apply_config_defaults_analyze_num_clusters(self):
+        """Config overrides default num_clusters for analyze command."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, AnalyzeConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["analyze"])
+        assert args.num_clusters == 10  # parser default
+
+        config = AppConfig(analyze=AnalyzeConfig(num_clusters=25))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.num_clusters == 25
+
+    def test_apply_config_defaults_analyze_cli_wins(self):
+        """Explicit --num-clusters on CLI overrides config."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, AnalyzeConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["analyze", "--num-clusters", "30"])
+
+        config = AppConfig(analyze=AnalyzeConfig(num_clusters=25))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.num_clusters == 30
+
+    def test_apply_config_defaults_suggest_min_cluster_pct(self):
+        """Config overrides default min_cluster_percentage for suggest."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, SuggestConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["suggest"])
+        assert args.min_cluster_percentage == 5.0
+
+        config = AppConfig(suggest=SuggestConfig(min_cluster_percentage=10.0))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.min_cluster_percentage == 10.0
+
+    def test_apply_config_defaults_suggest_min_sender_count(self):
+        """Config overrides default min_sender_count for suggest."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, SuggestConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["suggest"])
+        assert args.min_sender_count == 20
+
+        config = AppConfig(suggest=SuggestConfig(min_sender_count=50))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.min_sender_count == 50
+
+    def test_apply_config_defaults_review_no_cleanup(self):
+        """Config overrides default no_cleanup for review."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, ReviewConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["review"])
+        assert args.no_cleanup is False
+
+        config = AppConfig(review=ReviewConfig(no_cleanup=True))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.no_cleanup is True
+
+    def test_apply_config_defaults_checkpoint_interval(self):
+        """Config overrides default checkpoint_interval for extract."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, ExtractConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["extract", "--user-email", "test@test.com"])
+        assert args.checkpoint_interval == 100
+
+        config = AppConfig(extract=ExtractConfig(checkpoint_interval=200))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.checkpoint_interval == 200
+
+    def test_apply_config_defaults_user_email_from_config(self):
+        """Config provides user_email when CLI doesn't."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig
+
+        parser = create_parser()
+        # Pipeline command has optional user_email (handled differently)
+        # Use analyze which doesn't require --user-email
+        args = parser.parse_args(["analyze"])
+        # analyze doesn't have user_email attr typically, but let's test
+        # with a namespace that does
+        args.user_email = None
+
+        config = AppConfig(user_email="config@example.com")
+        _apply_config_defaults(args, config, parser)
+
+        assert args.user_email == "config@example.com"
+
+    def test_apply_config_defaults_output_dir_from_config(self):
+        """Config provides output_dir when CLI doesn't set it."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["analyze"])
+        assert args.output_dir is None  # parser default
+
+        config = AppConfig(output_dir=Path("/custom/output"))
+        _apply_config_defaults(args, config, parser)
+
+        assert args.output_dir == Path("/custom/output")
+
+    def test_apply_config_defaults_verbose_from_config(self):
+        """Config provides verbose when CLI doesn't set it."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["analyze"])
+        assert args.verbose is False
+
+        config = AppConfig(verbose=True)
+        _apply_config_defaults(args, config, parser)
+
+        assert args.verbose is True
+
+    def test_apply_config_defaults_skips_missing_attrs(self):
+        """Attributes not in the namespace are silently skipped."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, ExtractConfig
+
+        parser = create_parser()
+        # analyze doesn't have batch_size
+        args = parser.parse_args(["analyze"])
+        assert not hasattr(args, "batch_size")
+
+        config = AppConfig(extract=ExtractConfig(batch_size=1000))
+        # Should not raise
+        _apply_config_defaults(args, config, parser)
+
+    def test_apply_config_defaults_none_config_value_skipped(self):
+        """Config value of None does not override CLI default."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["analyze"])
+        assert args.output_dir is None
+
+        # Default AppConfig has output_dir=None
+        config = AppConfig()
+        _apply_config_defaults(args, config, parser)
+
+        # Should remain None (not overridden)
+        assert args.output_dir is None
+
+    def test_apply_config_defaults_multiple_overrides(self):
+        """Multiple config values can override defaults in one call."""
+        from src.cli import _apply_config_defaults, create_parser
+        from src.config.models import AppConfig, SuggestConfig
+
+        parser = create_parser()
+        args = parser.parse_args(["suggest"])
+
+        config = AppConfig(
+            suggest=SuggestConfig(
+                min_cluster_percentage=15.0,
+                min_sender_count=100,
+            )
+        )
+        _apply_config_defaults(args, config, parser)
+
+        assert args.min_cluster_percentage == 15.0
+        assert args.min_sender_count == 100

@@ -1934,6 +1934,120 @@ class TestCategoryGeneratorLearning:
             # doesn't match in this case
             assert len(sender_cats) >= 0  # Just verify no errors
 
+    def test_category_from_sender_non_com_domain_co_uk(self):
+        """Test sender category name for .co.uk domain is human-readable."""
+        sender = create_sample_sender(
+            email="orders@amazon.co.uk",
+            domain="amazon.co.uk",
+            frequency_count=50,
+        )
+
+        generator = CategoryGenerator()
+        category = generator._category_from_sender(sender, 1000)
+
+        # Should produce "Amazon Emails", NOT "Amazon Co Emails" or "Amazon.Co Emails"
+        assert "Amazon" in category.category_name
+        assert "Co" not in category.category_name
+        assert ".co" not in category.category_name.lower()
+
+    def test_category_from_sender_non_com_domain_com_au(self):
+        """Test sender category name for .com.au domain is human-readable."""
+        sender = create_sample_sender(
+            email="info@ebay.com.au",
+            domain="ebay.com.au",
+            frequency_count=40,
+        )
+
+        generator = CategoryGenerator()
+        category = generator._category_from_sender(sender, 1000)
+
+        assert "Ebay" in category.category_name
+        assert "Com" not in category.category_name
+        assert ".com" not in category.category_name.lower()
+
+    def test_category_from_sender_simple_org_domain(self):
+        """Test sender category name for .org domain is human-readable."""
+        sender = create_sample_sender(
+            email="news@wikipedia.org",
+            domain="wikipedia.org",
+            frequency_count=30,
+        )
+
+        generator = CategoryGenerator()
+        category = generator._category_from_sender(sender, 1000)
+
+        assert "Wikipedia" in category.category_name
+
+    def test_generate_cluster_name_non_com_domain(self):
+        """Test cluster name generation with .co.uk domain."""
+        generator = CategoryGenerator()
+
+        name = generator._generate_cluster_name(
+            subjects=["Test subject"],
+            domains=[("bbc.co.uk", 100)],
+        )
+
+        assert "Bbc" in name
+        assert "Co" not in name
+
+    def test_broad_category_name_non_com_domain(self):
+        """Test broad category name for .co.uk domain in hierarchical generator."""
+        from src.analyzers.hierarchical_analyzer import HierarchicalCluster
+        from src.models.content_cluster import RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Test",
+            sender="test@bbc.co.uk",
+            body_preview="Test body"
+        )
+
+        cluster = HierarchicalCluster(
+            cluster_id="cluster_0",
+            level=0,
+            parent_cluster_id=None,
+            size=50,
+            percentage=25.0,
+            representative_samples=[sample],
+            common_domains=[("bbc.co.uk", 40)],
+            email_ids=[f"e_{i}" for i in range(50)],
+            subclusters=[],
+        )
+
+        generator = CategoryGenerator()
+        name = generator._generate_broad_category_name(cluster)
+
+        assert "Bbc" in name
+        assert "Co" not in name
+
+    def test_specific_category_name_non_com_domain(self):
+        """Test specific category name for .co.uk domain in hierarchical generator."""
+        from src.analyzers.hierarchical_analyzer import HierarchicalCluster
+        from src.models.content_cluster import RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Your order has shipped",
+            sender="orders@amazon.co.uk",
+            body_preview="Order shipped"
+        )
+
+        cluster = HierarchicalCluster(
+            cluster_id="cluster_0_0",
+            level=1,
+            parent_cluster_id="cluster_0",
+            size=30,
+            percentage=15.0,
+            representative_samples=[sample],
+            common_domains=[("amazon.co.uk", 25)],
+            email_ids=[f"e_{i}" for i in range(30)],
+            subclusters=[],
+        )
+
+        generator = CategoryGenerator()
+        name = generator._generate_specific_category_name(cluster)
+
+        assert "Amazon" in name
+        assert "Co" not in name
+
     def test_no_patterns_applied_without_logger(self):
         """Test that no patterns are applied when no decision logger."""
         analysis = create_sample_analysis_results()

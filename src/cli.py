@@ -21,8 +21,10 @@ import logging
 import re
 import sys
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from src import __version__
 from src.config.loader import (
@@ -2331,7 +2333,7 @@ def main() -> int:
         try:
             config = load_config(config_path=args.config)
             # Apply config defaults to args where CLI didn't specify
-            _apply_config_defaults(args, config)
+            _apply_config_defaults(args, config, parser)
         except ConfigLoadError as e:
             logger.error(f"Failed to load configuration: {e}")
             return 1
@@ -2367,57 +2369,79 @@ def main() -> int:
         return 1
 
 
-def _apply_config_defaults(args: argparse.Namespace, config) -> None:
+# Mapping from CLI argument name to config accessor lambda.
+# Adding a new CLI option that can be overridden by config requires only
+# adding one entry here.  _apply_config_defaults() iterates this mapping
+# and compares the current arg value against the parser default to decide
+# whether the user explicitly supplied the flag on the command line.
+_CONFIG_MAPPINGS: dict[str, Callable[..., Any]] = {
+    "output_dir": lambda c: c.output_dir,
+    "verbose": lambda c: c.verbose,
+    "user_email": lambda c: c.user_email,
+    "batch_size": lambda c: c.extract.batch_size,
+    "checkpoint_interval": lambda c: c.extract.checkpoint_interval,
+    "num_clusters": lambda c: c.analyze.num_clusters,
+    "min_cluster_percentage": lambda c: c.suggest.min_cluster_percentage,
+    "min_sender_count": lambda c: c.suggest.min_sender_count,
+    "no_cleanup": lambda c: c.review.no_cleanup,
+}
+
+
+def _apply_config_defaults(
+    args: argparse.Namespace,
+    config,
+    parser: argparse.ArgumentParser,
+) -> None:
     """
     Apply configuration file defaults to CLI arguments.
 
     CLI arguments always take precedence over config file values.
-    Only applies config values where CLI didn't provide a value.
+    Only applies config values where CLI didn't provide a value
+    (i.e. the arg still holds the parser default).
+
+    Uses _CONFIG_MAPPINGS so that adding a new config-backed CLI option
+    requires only one new mapping entry — no hardcoded default comparisons.
 
     Args:
         args: Parsed command-line arguments (modified in place)
         config: Loaded AppConfig instance
+        parser: The ArgumentParser used to parse args (for default lookup)
     """
-    # Global settings
-    if args.output_dir is None and config.output_dir is not None:
-        args.output_dir = config.output_dir
+    # Build a lookup that checks the main parser first, then the active
+    # subparser, so we can resolve defaults for both global and
+    # command-specific arguments.
+    subparser = None
+    if hasattr(args, "command") and args.command:
+        subparser_actions = parser._subparsers._group_actions
+        if subparser_actions:
+            choices = subparser_actions[0].choices
+            subparser = choices.get(args.command)
 
-    if not args.verbose and config.verbose:
-        args.verbose = config.verbose
+    def _get_parser_default(attr: str):
+        """Return the argparse default for *attr*, checking subparser first."""
+        if subparser is not None:
+            val = subparser.get_default(attr)
+            if val is not None:
+                return val
+        return parser.get_default(attr)
 
-    # User email (if not provided on CLI, try config)
-    if hasattr(args, "user_email") and args.user_email is None and config.user_email:
-        args.user_email = config.user_email
+    for attr, config_accessor in _CONFIG_MAPPINGS.items():
+        # Skip attributes that don't exist on this command's namespace
+        if not hasattr(args, attr):
+            continue
 
-    # Extract command options
-    if hasattr(args, "batch_size"):
-        # CLI default is 500, config default is 500
-        # Only override if config has non-default value
-        if args.batch_size == 500 and config.extract.batch_size != 500:
-            args.batch_size = config.extract.batch_size
+        current_value = getattr(args, attr)
+        config_value = config_accessor(config)
+        parser_default = _get_parser_default(attr)
 
-    if hasattr(args, "checkpoint_interval"):
-        if args.checkpoint_interval == 100 and config.extract.checkpoint_interval != 100:
-            args.checkpoint_interval = config.extract.checkpoint_interval
+        # If the config doesn't provide a meaningful override, skip
+        if config_value is None:
+            continue
 
-    # Analyze command options
-    if hasattr(args, "num_clusters"):
-        if args.num_clusters == 10 and config.analyze.num_clusters != 10:
-            args.num_clusters = config.analyze.num_clusters
-
-    # Suggest command options
-    if hasattr(args, "min_cluster_percentage"):
-        if args.min_cluster_percentage == 5.0 and config.suggest.min_cluster_percentage != 5.0:
-            args.min_cluster_percentage = config.suggest.min_cluster_percentage
-
-    if hasattr(args, "min_sender_count"):
-        if args.min_sender_count == 20 and config.suggest.min_sender_count != 20:
-            args.min_sender_count = config.suggest.min_sender_count
-
-    # Review command options
-    if hasattr(args, "no_cleanup"):
-        if not args.no_cleanup and config.review.no_cleanup:
-            args.no_cleanup = config.review.no_cleanup
+        # Only override when the CLI value matches the parser default
+        # (meaning the user didn't explicitly set it on the command line)
+        if current_value == parser_default:
+            setattr(args, attr, config_value)
 
 
 if __name__ == "__main__":

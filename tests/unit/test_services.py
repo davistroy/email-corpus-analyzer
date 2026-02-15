@@ -778,6 +778,126 @@ class TestExtractionServiceBoth:
 
 
 # =============================================================================
+# Test ExtractionService Source Registry Dispatch
+# =============================================================================
+
+
+class TestExtractionServiceSourceRegistry:
+    """Test unified source registry dispatch in ExtractionService.run()."""
+
+    def test_unknown_source_raises_clear_error(self):
+        """Test that an unknown source raises ValueError with descriptive message."""
+        from src.services.extraction_service import ExtractionService
+
+        # Bypass ExtractConfig validation by setting source after construction
+        config = ExtractConfig()
+        service = ExtractionService(config, user_email="test@example.com")
+        # Force an invalid source past config validation
+        service.config = MagicMock()
+        service.config.source = "yahoo"
+        service.config.batch_size = 100
+        service.config.checkpoint_interval = 50
+
+        with pytest.raises(ValueError, match="Unknown source.*yahoo"):
+            service.run()
+
+    def test_all_three_modes_dispatch_correctly(self):
+        """Test that hotmail, gmail, and both modes all dispatch via the registry."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService, _SOURCE_REGISTRY
+
+        # Verify registry has all three modes
+        assert "hotmail" in _SOURCE_REGISTRY
+        assert "gmail" in _SOURCE_REGISTRY
+        assert "both" in _SOURCE_REGISTRY
+
+        # hotmail mode uses m365 extractor
+        assert len(_SOURCE_REGISTRY["hotmail"]) == 1
+        assert _SOURCE_REGISTRY["hotmail"][0].factory_attr == "_get_m365_extractor"
+
+        # gmail mode uses gmail extractor
+        assert len(_SOURCE_REGISTRY["gmail"]) == 1
+        assert _SOURCE_REGISTRY["gmail"][0].factory_attr == "_get_gmail_extractor"
+
+        # both mode uses both extractors
+        assert len(_SOURCE_REGISTRY["both"]) == 2
+        factory_attrs = {sc.factory_attr for sc in _SOURCE_REGISTRY["both"]}
+        assert factory_attrs == {"_get_m365_extractor", "_get_gmail_extractor"}
+
+    def test_adding_source_only_requires_registry_entry(self):
+        """Test that _SOURCE_REGISTRY is the single source of truth for dispatch."""
+        from src.services.extraction_service import _SOURCE_REGISTRY, _SourceConfig
+
+        # Verify the registry is a dict of str -> list[_SourceConfig]
+        for key, configs in _SOURCE_REGISTRY.items():
+            assert isinstance(key, str)
+            assert isinstance(configs, list)
+            for sc in configs:
+                assert isinstance(sc, _SourceConfig)
+                assert hasattr(sc, "label")
+                assert hasattr(sc, "factory_attr")
+
+    def test_single_source_returns_corpus_directly(self):
+        """Test that single-source modes return corpus without merging."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig()
+        service = ExtractionService(config, user_email="test@example.com")
+
+        mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=len(mock_corpus.emails),
+            failure_count=0,
+            total_attempted=len(mock_corpus.emails),
+        )
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = mock_result
+
+        result = service.run()
+
+        # Should be the exact same corpus object, not a merged copy
+        assert result is mock_corpus
+
+    def test_multi_source_returns_merged_corpus(self):
+        """Test that multi-source mode merges and returns a new corpus."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(source="both", gmail_email="user@gmail.com")
+        service = ExtractionService(config, user_email="user@hotmail.com")
+
+        m365_emails = [create_test_email(id="m365_1")]
+        gmail_emails = [create_test_email(id="gmail_1")]
+
+        m365_corpus = create_test_corpus(emails=m365_emails)
+        gmail_corpus = create_test_corpus(emails=gmail_emails)
+
+        m365_result = ExtractionResult(
+            corpus=m365_corpus, failed_emails=[],
+            success_count=1, failure_count=0, total_attempted=1,
+        )
+        gmail_result = ExtractionResult(
+            corpus=gmail_corpus, failed_emails=[],
+            success_count=1, failure_count=0, total_attempted=1,
+        )
+
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = m365_result
+        service._gmail_extractor = MagicMock()
+        service._gmail_extractor.extract_all.return_value = gmail_result
+
+        result = service.run()
+
+        # Should be a new merged corpus, not one of the originals
+        assert result is not m365_corpus
+        assert result is not gmail_corpus
+        assert len(result.emails) == 2
+
+
+# =============================================================================
 # Test ExtractionService._merge_corpora
 # =============================================================================
 

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.exceptions import RateLimitError
 from src.extractors.graph_api_client import GraphAPIClient, DEFAULT_CLIENT_ID
 
 
@@ -201,14 +202,43 @@ class TestGraphAPIClientFetchEmails:
         assert params["$top"] == 999
 
     @patch("src.extractors.graph_api_client.requests.get")
-    def test_rate_limit_raises_connection_error(self, mock_get, client):
+    def test_rate_limit_raises_rate_limit_error(self, mock_get, client):
         client._access_token = "test_token"
         mock_response = MagicMock()
         mock_response.status_code = 429
+        mock_response.headers = {}
         mock_get.return_value = mock_response
 
-        with pytest.raises(ConnectionError, match="Rate limited"):
+        with pytest.raises(RateLimitError):
             client.fetch_emails()
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_rate_limit_includes_retry_after(self, mock_get, client):
+        """Test that RateLimitError includes retry_after from Retry-After header."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.headers = {"Retry-After": "30"}
+        mock_get.return_value = mock_response
+
+        with pytest.raises(RateLimitError) as exc_info:
+            client.fetch_emails()
+
+        assert exc_info.value.retry_after == 30
+
+    @patch("src.extractors.graph_api_client.requests.get")
+    def test_rate_limit_no_retry_after_header(self, mock_get, client):
+        """Test that RateLimitError has retry_after=None when no header present."""
+        client._access_token = "test_token"
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.headers = {}
+        mock_get.return_value = mock_response
+
+        with pytest.raises(RateLimitError) as exc_info:
+            client.fetch_emails()
+
+        assert exc_info.value.retry_after is None
 
     @patch("src.extractors.graph_api_client.requests.get")
     def test_token_refresh_on_401(self, mock_get, client):
