@@ -16,16 +16,16 @@ pip install -r requirements.txt
 
 ```bash
 # Hotmail (default)
-python -m src.cli extract --user-email troy.davis@hotmail.com
+python -m src.cli extract --user-email user@hotmail.com
 
 # Gmail
 python -m src.cli extract --user-email your.email@gmail.com --source gmail
 
 # Both accounts merged
-python -m src.cli extract --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
+python -m src.cli extract --user-email user@hotmail.com --source both --gmail-email your.email@gmail.com
 
 # Incremental (new emails only)
-python -m src.cli extract --user-email troy.davis@hotmail.com --since-last
+python -m src.cli extract --user-email user@hotmail.com --since-last
 ```
 
 ## Analyze / Suggest / Review / Export
@@ -44,13 +44,13 @@ python -m src.cli export --format csv            # CSV export
 
 ```bash
 # Hotmail
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --auto-clusters
+python -m src.cli pipeline --user-email user@hotmail.com --auto-clusters
 
 # Gmail
 python -m src.cli pipeline --user-email your.email@gmail.com --source gmail --auto-clusters
 
 # Both
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com --auto-clusters
+python -m src.cli pipeline --user-email user@hotmail.com --source both --gmail-email your.email@gmail.com --auto-clusters
 ```
 
 ## Other Commands
@@ -107,6 +107,7 @@ python -m src.cli config validate   # Validate config
 - `--auto-clusters` — Auto-detect optimal k
 - `--cluster-method {elbow,silhouette}` — Optimization method
 - `--incremental` — Only process new emails
+- `--cluster-viz` — Generate cluster visualization PNG
 
 ### Pipeline
 - `--user-email EMAIL` — (required) Email address

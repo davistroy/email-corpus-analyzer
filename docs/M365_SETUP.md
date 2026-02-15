@@ -159,9 +159,6 @@ All auth files are in your home directory and never committed to git.
 ### "Authentication failed: Timeout"
 The device code expires after 15 minutes. Run the command again to get a new code.
 
-### "M365MCPClient.fetch_emails() called in stub mode"
-You're running an old code path. The current extractor uses `GraphAPIClient` directly. Make sure you have the latest code.
-
 ### "Gmail credentials not found"
 Download OAuth client JSON from Google Cloud Console and save to `~/.email-analyzer/gmail_credentials.json`.
 

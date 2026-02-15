@@ -36,6 +36,7 @@ python -m src.cli pipeline --user-email your.email@hotmail.com --source both --g
 # Or run individual steps:
 python -m src.cli extract --user-email your.email@hotmail.com  # Extract emails
 python -m src.cli analyze --auto-clusters                       # Analyze patterns
+python -m src.cli analyze --auto-clusters --cluster-viz          # With cluster visualization
 python -m src.cli suggest                                       # Generate categories
 python -m src.cli review                                        # Review interactively (TUI)
 python -m src.cli export --format outlook-rules                 # Export Outlook rules
@@ -55,6 +56,8 @@ python -m src.cli <command> --help  # For specific command help
 | `category_suggestions.json` | AI-generated category suggestions |
 | `category_suggestions_report.md` | Human-readable report |
 | `approved_categories.json` | Final approved categories |
+| `embeddings_cache.npz` | Cached embeddings for incremental analysis |
+| `cluster_visualization.png` | Cluster scatter plot (with `--cluster-viz`) |
 
 **For complete usage documentation, see [docs/USAGE.md](docs/USAGE.md) and [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md)**
 
@@ -90,7 +93,7 @@ email-corpus-analyzer/
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests (1403 tests, 83% coverage)
+│   └── unit/                # Unit tests (1663 tests, 86% coverage)
 ├── docs/                    # Documentation
 ├── scripts/                 # Standalone scripts
 ├── specs/                   # Design specifications
@@ -149,7 +152,7 @@ ruff check src/
 - [Quick Reference](docs/QUICK_REFERENCE.md)
 - [Email Source Setup](docs/M365_SETUP.md)
 - [Output Configuration](docs/OUTPUT_CONFIGURATION.md)
-- [Integration Guide](docs/INTEGRATION.md)
+- [Extraction Architecture](docs/INTEGRATION.md)
 
 ## License
 
