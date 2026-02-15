@@ -295,59 +295,126 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         """
         Calculate confidence score for the detected elbow point.
 
-        Confidence is based on:
-        1. How pronounced the elbow is (curvature at the elbow point)
-        2. How much inertia reduction happens at the elbow
+        This method combines two signals to assess how "clear" the elbow is:
+
+        1. **Slope Ratio** (curvature sharpness):
+           Measures how sharply the inertia curve bends at the elbow.
+           Calculated as: |slope_before| / |slope_after|
+           - High ratio (e.g., 10:1) → steep drop before elbow, gentle decline after → clear elbow
+           - Low ratio (e.g., 2:1) → similar slopes before/after → weak elbow
+           Normalized to [0, 1] by dividing by 10 and clamping.
+
+        2. **Inertia Reduction** (elbow positioning):
+           Measures what percentage of total inertia reduction occurs before the elbow.
+           Calculated as: (inertia[0] - inertia[elbow]) / (inertia[0] - inertia[end])
+           - High ratio (e.g., 0.8) → 80% of improvement happens by the elbow → good stopping point
+           - Low ratio (e.g., 0.3) → most improvement is after elbow → poor stopping point
+
+        The final confidence is the average of these two signals, clamped to [0, 1].
+
+        **Numerical Examples:**
+
+        Example 1 - Clear elbow (k=5):
+          k_values:  [2, 3, 4, 5, 6, 7, 8]
+          inertias:  [1000, 600, 400, 300, 270, 260, 255]
+          slope_before = (300 - 400) / 1.0 = -100
+          slope_after  = (270 - 300) / 1.0 = -30
+          slope_ratio  = 100 / 30 = 3.33
+          confidence1  = min(1.0, 3.33 / 10) = 0.33
+
+          total_reduction = (1000 - 255) / 1000 = 0.745
+          reduction_at_elbow = (1000 - 300) / 1000 = 0.700
+          elbow_quality = 0.700 / 0.745 = 0.94
+
+          final = (0.33 + 0.94) / 2 = 0.635
+
+        Example 2 - Weak elbow (k=5):
+          k_values:  [2, 3, 4, 5, 6, 7, 8]
+          inertias:  [1000, 850, 720, 610, 510, 420, 340]
+          slope_before = (610 - 720) / 1.0 = -110
+          slope_after  = (510 - 610) / 1.0 = -100
+          slope_ratio  = 110 / 100 = 1.10
+          confidence1  = min(1.0, 1.10 / 10) = 0.11
+
+          total_reduction = (1000 - 340) / 1000 = 0.660
+          reduction_at_elbow = (1000 - 610) / 1000 = 0.390
+          elbow_quality = 0.390 / 0.660 = 0.59
+
+          final = (0.11 + 0.59) / 2 = 0.35
 
         Args:
-            k_values: List of k values tested
-            inertias: Corresponding inertia values
-            elbow_k: The detected elbow point
+            k_values: List of k values tested (e.g., [2, 3, 4, 5, 6, 7, 8])
+            inertias: Corresponding inertia values (decreasing)
+            elbow_k: The detected elbow point (from _detect_elbow)
 
         Returns:
-            Confidence score between 0 and 1
+            Confidence score between 0 and 1, where:
+            - > 0.7: Clear elbow, high confidence in the recommendation
+            - 0.4-0.7: Moderate elbow, reasonable recommendation
+            - < 0.4: Weak elbow, low confidence
         """
+        # Edge case: not enough data points to calculate slopes
         if len(k_values) <= 2:
             return 0.5
 
-        # Find elbow index
+        # Find the index of the elbow point in our k_values list
         try:
             elbow_idx = k_values.index(elbow_k)
         except ValueError:
             return 0.5
 
-        # Calculate the "sharpness" of the elbow
-        # This is based on the change in slope before and after the elbow
-
+        # Edge case: elbow is at the boundary (can't calculate before/after slopes)
+        # Return low confidence since we can't assess curvature
         if elbow_idx == 0 or elbow_idx >= len(k_values) - 1:
             return 0.3
 
-        # Slope before elbow
+        # --- SIGNAL 1: Slope Ratio (measures curvature sharpness) ---
+
+        # Calculate slope of inertia curve before the elbow
+        # Negative value indicates decreasing inertia (expected)
         slope_before = (inertias[elbow_idx] - inertias[elbow_idx - 1]) / 1.0
 
-        # Slope after elbow
+        # Calculate slope of inertia curve after the elbow
+        # Should also be negative, but less steep if it's a true elbow
         slope_after = (inertias[elbow_idx + 1] - inertias[elbow_idx]) / 1.0
 
-        # Both slopes should be negative for decreasing inertia
+        # Both slopes should be negative (inertia decreases with more clusters)
         # A clear elbow has a much steeper slope before than after
         if slope_before < 0 and slope_after < 0:
-            # Calculate ratio of slope change
+            # Ratio of absolute slopes: higher ratio = sharper bend
+            # e.g., |slope_before| = 100, |slope_after| = 10 → ratio = 10 (sharp elbow)
+            #       |slope_before| = 100, |slope_after| = 80 → ratio = 1.25 (gentle bend)
             slope_ratio = abs(slope_before) / (abs(slope_after) + 1e-10)
-            # Normalize to [0, 1]
+
+            # Normalize to [0, 1] by dividing by 10 (assumes ratio of 10 is "perfect")
+            # Ratios > 10 are clamped to 1.0
             confidence = min(1.0, slope_ratio / 10.0)
         else:
+            # Slopes have wrong sign (shouldn't happen with valid inertia curve)
+            # Return low confidence
             confidence = 0.3
 
-        # Also consider the overall reduction in inertia
+        # --- SIGNAL 2: Inertia Reduction (measures elbow positioning) ---
+
+        # Calculate total inertia reduction from k=2 to k=max
+        # This is the total improvement available
         total_reduction = (inertias[0] - inertias[-1]) / (inertias[0] + 1e-10)
+
+        # Calculate inertia reduction from k=2 to the elbow point
+        # This is how much improvement we've captured by the elbow
         reduction_at_elbow = (inertias[0] - inertias[elbow_idx]) / (inertias[0] + 1e-10)
 
-        # If most reduction happens before elbow, it's a good elbow
+        # If most reduction happens before the elbow, it's a good stopping point
+        # e.g., reduction_at_elbow=0.7, total_reduction=0.8 → quality=0.875 (good!)
+        #       reduction_at_elbow=0.3, total_reduction=0.8 → quality=0.375 (poor)
         elbow_quality = reduction_at_elbow / (total_reduction + 1e-10) if total_reduction > 0 else 0.5
 
-        # Combine factors
+        # --- COMBINE SIGNALS ---
+
+        # Average the two signals: curvature sharpness + positioning quality
         final_confidence = (confidence + elbow_quality) / 2.0
 
+        # Clamp to [0, 1] range (should already be in range, but defensive)
         return max(0.0, min(1.0, final_confidence))
 
 
