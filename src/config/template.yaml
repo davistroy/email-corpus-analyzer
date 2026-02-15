@@ -45,6 +45,33 @@ analyze:
   # Custom path for analysis results (optional)
   # analysis_file: /path/to/analysis.json
 
+  # Sender Classification Keywords
+  # Customize keywords for automatic sender type classification.
+  # Service keywords match against sender email address and domain.
+  # Marketing keywords match against subject lines (requires min email count).
+  # Work keywords match against subject lines.
+  # thresholds:
+  #   service_keywords:
+  #     - "noreply"
+  #     - "no-reply"
+  #     - "donotreply"
+  #     - "notification"
+  #     - "notify"
+  #     - "alert"
+  #   marketing_keywords:
+  #     - "unsubscribe"
+  #     - "promotional"
+  #     - "offer"
+  #     - "discount"
+  #     - "sale"
+  #     - "promotion"
+  #   work_keywords:
+  #     - "meeting"
+  #     - "project"
+  #     - "team"
+  #     - "re:"
+  #     - "fwd:"
+
 # Suggest Command Settings
 # ------------------------
 suggest:

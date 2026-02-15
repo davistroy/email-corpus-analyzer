@@ -5,12 +5,17 @@ Tests that the template library has been expanded from 6 to 15+ templates
 with comprehensive keyword and domain coverage.
 """
 
+import json
+
+import pytest
+from pydantic import ValidationError
+
 from src.generators.template_matcher import (
     _domain_matches,
     _get_keyword_pattern,
     match_templates,
 )
-from src.models.category_template import PREDEFINED_TEMPLATES, CategoryTemplate
+from src.models.category_template import PREDEFINED_TEMPLATES, CategoryTemplate, load_templates
 
 
 # Helper to create minimal analysis results for testing
@@ -859,3 +864,84 @@ class TestAll18TemplatesMatchIntendedEmails:
         )
         cats = match_templates(analysis, [PREDEFINED_TEMPLATES[17]])
         assert len(cats) == 1, "Jobs template should match application emails"
+
+
+# -----------------------------------------------------------------------------
+# load_templates() Tests (Phase 3.2: Externalized JSON templates)
+# -----------------------------------------------------------------------------
+
+class TestLoadTemplates:
+    """Test the load_templates() function for JSON-based template loading."""
+
+    def test_load_templates_returns_18_templates(self):
+        """load_templates() with default path should return exactly 18 templates."""
+        templates = load_templates()
+        assert len(templates) == 18, f"Expected 18 templates, got {len(templates)}"
+
+    def test_load_templates_returns_category_template_objects(self):
+        """load_templates() should return a list of CategoryTemplate instances."""
+        templates = load_templates()
+        for t in templates:
+            assert isinstance(t, CategoryTemplate), (
+                f"Expected CategoryTemplate, got {type(t)}"
+            )
+
+    def test_load_templates_matches_predefined_templates(self):
+        """load_templates() output should match PREDEFINED_TEMPLATES (backward compat)."""
+        templates = load_templates()
+        assert len(templates) == len(PREDEFINED_TEMPLATES)
+        for loaded, predefined in zip(templates, PREDEFINED_TEMPLATES, strict=True):
+            assert loaded.name == predefined.name
+            assert loaded.keywords == predefined.keywords
+            assert loaded.domains == predefined.domains
+            assert loaded.description == predefined.description
+
+    def test_load_templates_custom_path(self, tmp_path):
+        """load_templates(custom_path) should load from a custom JSON file."""
+        custom_templates = [
+            {
+                "name": "Custom Category",
+                "keywords": ["custom", "test", "category", "special", "unique"],
+                "domains": ["custom.com"],
+                "description": "A custom test category"
+            }
+        ]
+        custom_file = tmp_path / "custom_templates.json"
+        custom_file.write_text(json.dumps(custom_templates))
+
+        templates = load_templates(custom_file)
+        assert len(templates) == 1
+        assert templates[0].name == "Custom Category"
+        assert templates[0].keywords == ["custom", "test", "category", "special", "unique"]
+        assert templates[0].domains == ["custom.com"]
+        assert templates[0].description == "A custom test category"
+
+    def test_load_templates_invalid_json_raises_value_error(self, tmp_path):
+        """load_templates() should raise ValueError for invalid JSON."""
+        bad_file = tmp_path / "bad.json"
+        bad_file.write_text("{not valid json!!!")
+
+        with pytest.raises(ValueError, match="Invalid template JSON"):
+            load_templates(bad_file)
+
+    def test_load_templates_missing_file_raises_file_not_found(self, tmp_path):
+        """load_templates() should raise FileNotFoundError for missing file."""
+        missing = tmp_path / "nonexistent.json"
+        with pytest.raises(FileNotFoundError):
+            load_templates(missing)
+
+    def test_predefined_templates_backward_compatibility(self):
+        """PREDEFINED_TEMPLATES module-level constant should still work."""
+        assert len(PREDEFINED_TEMPLATES) == 18
+        assert PREDEFINED_TEMPLATES[0].name == "Financial & Banking"
+        assert PREDEFINED_TEMPLATES[-1].name == "Jobs & Career"
+
+    def test_load_templates_validates_pydantic_fields(self, tmp_path):
+        """load_templates() should raise ValidationError for missing required fields."""
+        # Missing 'name' field
+        bad_templates = [{"keywords": ["test"], "description": "missing name"}]
+        bad_file = tmp_path / "bad_schema.json"
+        bad_file.write_text(json.dumps(bad_templates))
+
+        with pytest.raises(ValidationError):
+            load_templates(bad_file)

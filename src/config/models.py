@@ -118,6 +118,26 @@ class AnalyzerThresholds(BaseModel):
         description="Random state seed for KMeans clustering reproducibility"
     )
 
+    # SenderAnalyzer classification keywords
+    service_keywords: list[str] = Field(
+        default=[
+            "noreply", "no-reply", "donotreply", "notification", "notify", "alert",
+        ],
+        description="Keywords in sender email/domain that indicate a service/automated sender"
+    )
+    marketing_keywords: list[str] = Field(
+        default=[
+            "unsubscribe", "promotional", "offer", "discount", "sale", "promotion",
+        ],
+        description="Keywords in subject lines that indicate marketing emails"
+    )
+    work_keywords: list[str] = Field(
+        default=[
+            "meeting", "project", "team", "re:", "fwd:",
+        ],
+        description="Keywords in subject lines that indicate work-related emails"
+    )
+
     # TemporalAnalyzer thresholds
     frequency_daily_threshold_days: float = Field(
         default=2.0,
@@ -302,6 +322,10 @@ class SuggestConfig(BaseModel):
     suggestions_file: Path | None = Field(
         default=None,
         description="Custom path for suggestions JSON"
+    )
+    templates_path: Path | None = Field(
+        default=None,
+        description="Path to custom category templates JSON file"
     )
     thresholds: GeneratorThresholds = Field(
         default_factory=GeneratorThresholds,
