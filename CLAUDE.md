@@ -9,9 +9,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 pip install -e ".[dev]"  # Install with dev dependencies
 
-# Run tests (1663 tests, 86% coverage)
+# Run tests (1835 tests, 86% coverage)
 pytest                                  # All tests with coverage
 pytest tests/unit/                      # Unit tests only
+pytest tests/contract/                  # Contract tests only
 pytest tests/unit/test_html_parser.py   # Single test file
 pytest -k "test_name"                   # Run specific test by name
 pytest --cov=src --cov-report=html      # Generate HTML coverage report
@@ -119,7 +120,14 @@ All models in `src/models/` use Pydantic v2. Key models:
 
 ### Entry Points
 
-- `src/cli.py` - Primary CLI entry point (`python -m src.cli`)
+- `src/cli/` - CLI package (`python -m src.cli`)
+  - `__init__.py` - Main entry, parser creation, command dispatch
+  - `parsers.py` - Shared argument groups, data-driven config mapping
+  - `formatters.py` - Output helpers, cluster visualization
+  - `commands/` - One module per command (extract, analyze, suggest, review, pipeline, config, info, export)
+
+- **`src/data/`** - Data files:
+  - `templates.json` - 18 category templates (editable without code changes)
 
 ### CLI Commands
 
