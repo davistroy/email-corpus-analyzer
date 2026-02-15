@@ -1,697 +1,938 @@
-# Implementation Plan
+# Implementation Plan: Architectural Refinement
 
-**Generated:** 2026-02-13
+**Generated:** 2026-02-15
 **Source Documents:**
-- `specs/001-use-the-document/spec.md` (51 functional requirements)
-- `specs/001-use-the-document/data-model.md` (7 entity schemas)
-- `specs/001-use-the-document/contracts/` (3 interface contracts)
-- `docs/RECOMMENDATIONS.md` (23 improvement recommendations)
-- Deep codebase analysis (4 parallel agent sweeps, Feb 2026)
+- Architectural audit (4 parallel agent sweeps, Feb 15 2026)
+- Findings walkthrough with recommended solutions, alternatives, and clarifications
+- Previous plan (Feb 13, 19 work items) — fully completed, superseded
 
 **Total Phases:** 4
-**Estimated Total Effort:** ~190,000 tokens
+**Total Work Items:** 16
+**Estimated Total Effort:** ~240,000 tokens
 
 ---
 
 ## Executive Summary
 
-The email-corpus-analyzer is a well-architected 11K-line Python application with 1,403 tests at 83% coverage. It extracts emails from Hotmail/Gmail, runs ML-powered analysis (semantic clustering, sender frequency, temporal patterns), generates category suggestions, and exports actionable Outlook rules / Gmail filters.
+The email-corpus-analyzer is an 18,334-line Python application with 1,663 tests at 86% coverage. A comprehensive architectural audit identified 23 issues — 16 actionable, 3 requiring no change, and 4 long-term considerations. No critical security vulnerabilities or data integrity risks were found. The architecture is sound (grade: B+).
 
-This plan addresses findings from a comprehensive codebase audit. The most critical issue is a broken extraction wiring — `ExtractionService` references an MCP stub that doesn't function standalone, while a fully working `GraphAPIClient`-based extractor sits orphaned. Beyond that, the plan targets analysis quality improvements (more text for embeddings, configurable thresholds, better template matching), robustness hardening (cache versioning, atomic writes, MIME recursion), and intelligence calibration (confidence scoring, temporal decay in learning, cluster visualization).
+The most impactful problem is `src/cli.py` — a 2,424-line monolith where parser creation alone is 1,100 lines. Beyond that, the plan targets code duplication (BaseExtractor batch loop, stop word lists, confidence scores), hardcoded values (magic numbers, sender keywords, category templates), and missing infrastructure (CI pipeline, contract tests, rate limit typing).
 
-Many items from the original `docs/RECOMMENDATIONS.md` (Jan 2025) have already been implemented: BaseAnalyzer ABC, service layer, exception hierarchy, thread analyzer, rule exporters, TUI bulk operations, config validation. This plan focuses exclusively on **new work** identified by the Feb 2026 analysis.
+All items from the previous implementation plan (Feb 13, 2026) have been completed. This plan addresses exclusively new findings from the Feb 15 architectural audit.
 
 ---
 
 ## Plan Overview
 
-The implementation follows a risk-first strategy: fix the critical extraction break first (Phase 1), then improve the quality of analysis results (Phase 2), harden reliability and edge cases (Phase 3), and finally calibrate the intelligence layer (Phase 4). Each phase leaves the codebase in a working, tested state.
+The implementation follows a **risk-ascending strategy**: quick, safe consolidation wins first (Phase 1), then targeted refactors with moderate complexity (Phase 2), then the highest-impact structural change — the CLI split (Phase 3), and finally infrastructure and polish (Phase 4). Each phase leaves the codebase in a working, tested state.
+
+**Key decision inputs from user:**
+- `src/main.py` is legacy (confirmed by code review — only M365, no service layer, hardcoded Linux path)
+- Category templates will evolve → externalize to JSON
+- Target corpus: 10K–50K emails → O(n²) algorithms are borderline; document but don't rewrite yet
 
 ### Phase Summary Table
 
-| Phase | Focus Area | Key Deliverables | Est. Tokens | Dependencies |
-|-------|------------|------------------|-------------|--------------|
-| 1 | Extraction Fix | Rewire services, unify paths, delete stub | ~40K | None |
-| 2 | Analysis Quality | More embedding text, config externalization, better matching | ~60K | Phase 1 |
-| 3 | Robustness | Cache versioning, MIME recursion, atomic writes | ~50K | Phase 1 |
-| 4 | Intelligence | Confidence calibration, learning decay, visualization | ~40K | Phase 2, 3 |
+| Phase | Focus Area | Key Deliverables | Work Items | Est. Tokens | Dependencies |
+|-------|------------|------------------|------------|-------------|--------------|
+| 1 | Quick Wins | Consolidate shared code, delete dead code, remove legacy | 5 | ~40K | None |
+| 2 | Targeted Refactors | Batch loop dedup, service cleanup, config fix, rate limit types | 5 | ~80K | None |
+| 3 | Structural Changes | CLI package split, externalize templates & keywords | 3 | ~80K | Phase 1 (M2 constants) |
+| 4 | Infrastructure & Polish | CI pipeline, contract tests, documentation | 3 | ~40K | Phase 1–3 complete |
 
 ---
 
-## Phase 1: Critical Extraction Fix
+## Phase 1: Quick Wins
 
 **Estimated Effort:** ~40,000 tokens (including testing/fixes)
 **Dependencies:** None
-**Parallelizable:** Work items 1.1–1.3 are sequential; 1.4 can run in parallel
+**Parallelizable:** All 5 items are fully independent
+**Risk:** Very low — no behavioral changes, only consolidation and deletion
 
 ### Goals
 
-- Make `PipelineService` → `ExtractionService` work end-to-end standalone
-- Unify CLI and service layer extraction paths so both use the same code
-- Remove dead/orphaned extraction code
+- Eliminate dead code and legacy files
+- Consolidate duplicated constants and word lists into shared modules
+- Establish the `src/utils/constants.py` and `src/utils/text.py` foundations that later phases depend on
 
 ### Work Items
 
-#### 1.1 Rewire ExtractionService to Real Extractors
+#### 1.1 Fix AnalysisService Dead Code
 
-**Requirement Refs:** FR-001, FR-002, FR-003
+**Audit Ref:** H3
 **Files Affected:**
-- `src/services/extraction_service.py` (modify)
-- `src/extractors/m365_mcp_extractor.py` (delete)
-- `src/extractors/m365_mcp_client.py` (delete)
+- `src/services/analysis_service.py` (modify — lines 45–127)
 - `tests/unit/test_services.py` (modify)
-- `tests/unit/test_extractors.py` (modify)
 
 **Description:**
-`ExtractionService._get_extractor()` currently imports `M365MCPExtractor` from `m365_mcp_extractor.py` — a stub that relies on Claude Code's MCP context to replace comment blocks with API calls. It literally falls through to `batch_messages = []` when run standalone. Meanwhile, `EmailExtractor` in `m365_extractor.py` uses `GraphAPIClient` with real MSAL device code auth and actually works.
+`AnalysisService` has a `_build_analyzers()` method (lines 45–54) that builds a list of analyzer instances but is never called. Instead, `run()` (lines 56–127) creates each analyzer inline with explicit constructor calls. This is confusing — someone extending analysis would naturally modify `_build_analyzers()` and wonder why nothing changes.
 
 **Tasks:**
-1. [ ] Replace `M365MCPExtractor` import with `EmailExtractor` from `m365_extractor.py`
-2. [ ] Update `_get_extractor()` to instantiate `EmailExtractor` with correct params (user_email, checkpoint_dir, client_id)
-3. [ ] Map `ExtractionService.run()` to call `EmailExtractor.extract_all()` or `extract_incremental()` based on `since_last` flag
-4. [ ] Convert `EmailExtractor.ExtractionResult` → `Corpus` return type expected by service
-5. [ ] Delete `src/extractors/m365_mcp_extractor.py` and `src/extractors/m365_mcp_client.py`
-6. [ ] Update all imports and `__init__.py` exports
-7. [ ] Update tests — remove M365MCPExtractor test fixtures, add ExtractionService integration tests
+1. [ ] Refactor `run()` to call `self._build_analyzers()` and iterate over the returned list
+2. [ ] Handle `SemanticAnalyzer` specially within the loop (it needs incremental support) — use a type check or flag
+3. [ ] Remove the inline analyzer construction from `run()`
+4. [ ] Verify progress callback messages still report analyzer names correctly
+5. [ ] Update tests to verify analyzer list construction
 
 **Acceptance Criteria:**
-- [ ] `PipelineService.run()` successfully extracts emails when M365 auth is configured
-- [ ] `ExtractionService` no longer references any MCP stub code
-- [ ] All existing tests pass (with updated mocks)
-- [ ] `m365_mcp_extractor.py` and `m365_mcp_client.py` are removed from repo
+- [ ] `_build_analyzers()` is the single source of truth for which analyzers run
+- [ ] Adding a new analyzer requires only modifying `_build_analyzers()`
+- [ ] All existing 1,663 tests pass
+- [ ] `SemanticAnalyzer` incremental mode still works
 
 **Notes:**
-The `ExtractionResult` dataclass from `m365_extractor.py` contains `corpus`, `failed_emails`, `success_count`, etc. The service currently expects a bare `Corpus` return. Either adapt the service to use `ExtractionResult` (preferred — preserves error info) or unwrap it.
+If the `SemanticAnalyzer` special-casing makes the loop ugly, an acceptable alternative is to delete `_build_analyzers()` entirely and add a comment explaining why inline construction is intentional. The goal is removing confusion, not forcing a pattern.
 
 ---
 
-#### 1.2 Add Gmail Support to ExtractionService
+#### 1.2 Create Shared Text Utilities
 
-**Requirement Refs:** CLI `--source` flag
+**Audit Ref:** M1
 **Files Affected:**
-- `src/services/extraction_service.py` (modify)
-- `src/config/models.py` (modify — add `source` field to `ExtractConfig`)
-- `tests/unit/test_services.py` (modify)
+- `src/utils/text.py` (create)
+- `src/generators/name_generator.py` (modify — lines 17–32)
+- `src/analyzers/subject_analyzer.py` (modify)
+- `src/generators/category_generator.py` (modify — lines 542–553)
+- `tests/unit/test_utils.py` (modify)
 
 **Description:**
-`ExtractionService` currently only wires to M365. The CLI's `--source hotmail|gmail|both` flag likely bypasses the service layer entirely, creating two extraction code paths. Both should go through the service.
+Stop word lists are duplicated across 3 modules — `name_generator.py` (54-word `STOP_WORDS` frozenset), `subject_analyzer.py` (inline stop word filtering), and `category_generator.py` (`_extract_common_words()` with its own list). The lists are slightly different because each was written independently. Additionally, `GENERIC_WORDS` (36 words) and `ACTION_WORDS` (28 words) in `name_generator.py` and `KNOWN_PROPER_NOUNS` (57 brands) are useful across modules.
 
 **Tasks:**
-1. [ ] Add `source: str = "hotmail"` field to `ExtractConfig` (values: hotmail, gmail, both)
-2. [ ] Add `gmail_email: str | None = None` to `ExtractConfig` for separate Gmail address
-3. [ ] Update `ExtractionService._get_extractor()` to return appropriate extractor based on `config.source`
-4. [ ] For `source="both"`, run both extractors and merge corpora (deduplicate by email ID)
-5. [ ] Update CLI to delegate extraction to `ExtractionService` instead of directly instantiating extractors
-6. [ ] Write tests for all three source modes
+1. [ ] Create `src/utils/text.py` with shared frozensets:
+   - `STOP_WORDS` — union of all three current lists (~60 words)
+   - `GENERIC_WORDS` — words like "email", "misc", "category" (from name_generator.py)
+   - `ACTION_WORDS` — words like "update", "invoice", "order" (from name_generator.py)
+   - `KNOWN_PROPER_NOUNS` — brand names (from name_generator.py)
+2. [ ] Update `name_generator.py` to import from `utils.text` instead of defining its own
+3. [ ] Update `subject_analyzer.py` to import `STOP_WORDS` from `utils.text`
+4. [ ] Update `category_generator.py._extract_common_words()` to import from `utils.text`
+5. [ ] Allow module-specific extensions: `module_stops = STOP_WORDS | {"module_specific_word"}`
+6. [ ] Write tests verifying the shared sets contain all previously-used words
 
 **Acceptance Criteria:**
-- [ ] `python -m src.cli pipeline --source gmail --user-email user@gmail.com` works through the service layer
-- [ ] `python -m src.cli pipeline --source both --user-email user@hotmail.com --gmail-email user@gmail.com` works
-- [ ] CLI and `PipelineService` use identical extraction code paths
+- [ ] No module defines its own stop word list
+- [ ] All three modules produce identical results to their previous behavior
+- [ ] `src/utils/text.py` is the single source of truth for text processing word lists
+- [ ] All existing tests pass
 
 ---
 
-#### 1.3 Consolidate Extractor Base Class
+#### 1.3 Create Constants Module
 
-**Requirement Refs:** DRY principle; RECOMMENDATIONS.md A1
+**Audit Ref:** M2
 **Files Affected:**
-- `src/extractors/base_extractor.py` (create)
-- `src/extractors/m365_extractor.py` (modify)
-- `src/extractors/gmail_extractor.py` (modify)
-- `tests/unit/test_extractors.py` (modify)
+- `src/utils/constants.py` (create)
+- `src/extractors/base_extractor.py` (modify — sentinel at line ~223, backoff at ~485)
+- `src/analyzers/cluster_optimizer.py` (modify — sigmoid at line 81)
+- `src/generators/category_generator.py` (modify — quality threshold at line 31)
+- `src/generators/confidence_scorer.py` (modify — log base at lines 88, 166)
+- Tests updated as needed
 
 **Description:**
-`EmailExtractor` (M365) and `GmailExtractor` share ~70% identical code: checkpoint handling, batch loop, error collection, progress callbacks, `_process_email()`. Extract shared logic into a base class.
+Numeric literals are used directly in code without named constants. `999999` as a sentinel for unknown email count, `5.0` for sigmoid steepness, `0.4` for name quality threshold, `101` as a log base, `8` for max backoff seconds. These values are well-chosen but undiscoverable — you can't grep for "what controls the sigmoid curve" without reading the code.
 
 **Tasks:**
-1. [ ] Create `BaseExtractor` ABC in `src/extractors/base_extractor.py`
-2. [ ] Move shared methods: `_process_email()`, checkpoint save/load/resume, batch loop logic, error collection
-3. [ ] Define abstract methods: `_fetch_batch()`, `_get_api_client()`, `_build_incremental_query()`
-4. [ ] Refactor `EmailExtractor` and `GmailExtractor` to inherit from `BaseExtractor`
-5. [ ] Move `ExtractionResult` and `IncrementalExtractionResult` dataclasses to base module
-6. [ ] Update tests — verify both extractors still pass, add base class contract tests
+1. [ ] Create `src/utils/constants.py` with documented constants:
+   ```python
+   # Extraction
+   EMAIL_COUNT_SENTINEL = 999_999  # Used when provider doesn't report total count
+   MAX_BACKOFF_SECONDS = 8         # Ceiling for exponential backoff on rate limit
+   DEFAULT_BATCH_SIZE = 500
+   DEFAULT_CHECKPOINT_INTERVAL = 100
+
+   # Scoring
+   SIGMOID_STEEPNESS = 5.0         # Controls sigmoid curve sharpness in cluster scoring
+   VOLUME_LOG_BASE = 101           # log10(101) ≈ 2.004; makes 100 emails → score 1.0
+   NAME_QUALITY_REVIEW_THRESHOLD = 0.4  # Below this, category name flagged for review
+
+   # Sampling limits
+   MAX_REPRESENTATIVE_SAMPLES = 5
+   MAX_COMMON_DOMAINS = 10
+   MAX_TOP_KEYWORDS = 50
+   ```
+2. [ ] Replace all hardcoded values with imports from `constants.py`
+3. [ ] Update affected tests to use constants where they reference these values
+4. [ ] Verify no behavioral changes
 
 **Acceptance Criteria:**
-- [ ] `EmailExtractor` and `GmailExtractor` each contain only API-specific code
-- [ ] All 1,403+ existing tests pass
-- [ ] No code duplication between the two extractors
+- [ ] All magic numbers listed above are replaced with named constants
+- [ ] Each constant has a comment explaining its purpose
+- [ ] No behavioral changes — defaults are identical to previous hardcoded values
+- [ ] All existing tests pass
 
 ---
 
-#### 1.4 Improve Checkpoint Efficiency
+#### 1.4 Consolidate Source Confidence Scores
 
-**Requirement Refs:** FR-010
+**Audit Ref:** M8
 **Files Affected:**
-- `src/extractors/checkpoint_manager.py` (modify)
-- `tests/unit/test_extractors.py` (modify)
+- `src/generators/confidence_scorer.py` (modify — lines 92–97 and 170–175)
+- `tests/unit/test_confidence_scorer.py` (verify)
 
 **Description:**
-The checkpoint manager currently stores **full email objects** in the checkpoint file. For 1,000+ emails, this creates 10–50MB checkpoint files. Store only resume metadata instead.
+`confidence_scorer.py` defines the same source-type-to-reliability mapping in two places: `calculate_confidence()` (line 92) and `calculate_confidence_enhanced()` (line 170). Both are `{"TEMPLATE": 0.9, "CONTENT_CLUSTER": 0.8, "SENDER": 0.7, "CUSTOM": 0.5}`. If someone updates one and not the other, the simple and enhanced scoring paths diverge silently.
 
 **Tasks:**
-1. [ ] Change checkpoint format to store only: `emails_processed`, `last_processed_id`, `timestamp`, `checkpoint_interval` (remove `extracted_emails` array)
-2. [ ] On resume, re-fetch from API starting at saved offset rather than replaying from checkpoint
-3. [ ] Add integrity check: verify `emails_processed` is consistent on load
-4. [ ] Add checkpoint format version field for future migration
-5. [ ] Update tests for new checkpoint format
+1. [ ] Define module-level constant:
+   ```python
+   SOURCE_RELIABILITY_SCORES: dict[str, float] = {
+       CategorySource.TEMPLATE.value: 0.9,
+       CategorySource.CONTENT_CLUSTER.value: 0.8,
+       CategorySource.SENDER.value: 0.7,
+       CategorySource.CUSTOM.value: 0.5,
+   }
+   ```
+2. [ ] Update both functions to reference `SOURCE_RELIABILITY_SCORES`
+3. [ ] Verify existing tests pass with no changes
 
 **Acceptance Criteria:**
-- [ ] Checkpoint files are < 1KB regardless of corpus size
-- [ ] Resume-from-checkpoint still works correctly (verified by test)
-- [ ] Old-format checkpoints are handled gracefully (warn and restart fresh)
+- [ ] Single definition of source reliability scores
+- [ ] Both scoring functions use the same constant
+- [ ] All existing tests pass
+
+---
+
+#### 1.5 Delete Legacy `src/main.py`
+
+**Audit Ref:** L1
+**Files Affected:**
+- `src/main.py` (delete — 565 lines)
+- Any imports or references to `src.main` (update)
+- `CLAUDE.md` (update entry points section if referenced)
+
+**Description:**
+`src/main.py` is the original entry point from before `src/cli.py` was built. It only supports M365 extraction (no Gmail), has no service layer, no config system, no TUI, no export, and hardcodes a Linux-style path (`/mnt/user-data/outputs`). Everything it does, `cli.py` does better. User confirmed they're unsure why both exist; code review confirms it's legacy.
+
+**Tasks:**
+1. [ ] Search for any imports of `src.main` or `EmailProcessorCLI` across the codebase
+2. [ ] Remove any references found
+3. [ ] Delete `src/main.py`
+4. [ ] Verify `python -m src.cli --help` still works
+5. [ ] Update CLAUDE.md entry points section if `main.py` is mentioned
+
+**Acceptance Criteria:**
+- [ ] `src/main.py` is removed from the repository
+- [ ] No remaining references to `EmailProcessorCLI` or `src.main`
+- [ ] `src/cli.py` confirmed as the sole entry point
+- [ ] All existing tests pass
 
 ---
 
 ### Phase 1 Testing Requirements
 
-- [ ] `ExtractionService` unit tests with mocked `EmailExtractor` and `GmailExtractor`
-- [ ] Integration test: `PipelineService.run()` with mock API responses
-- [ ] Checkpoint resume test with new compact format
-- [ ] All existing 1,403+ tests pass with no regressions
+- [ ] AnalysisService tests verify `_build_analyzers()` is used in `run()`
+- [ ] Utils text module tests verify word list completeness
+- [ ] Constants module has no behavioral tests needed (just import verification)
+- [ ] Confidence scorer tests unchanged (behavior preserved)
+- [ ] No test references `src.main` or `EmailProcessorCLI`
+- [ ] All 1,663 existing tests pass with no regressions
 
 ### Phase 1 Completion Checklist
 
-- [ ] All work items complete
-- [ ] MCP stub files deleted
+- [ ] All 5 work items complete
 - [ ] All tests passing
-- [ ] CLAUDE.md updated with any changed commands
+- [ ] `src/main.py` deleted
+- [ ] `src/utils/text.py` and `src/utils/constants.py` created
 - [ ] No regressions introduced
 
 ---
 
-## Phase 2: Analysis Quality Improvements
+## Phase 2: Targeted Refactors
 
-**Estimated Effort:** ~60,000 tokens (including testing/fixes)
-**Dependencies:** Phase 1 (extraction must work for end-to-end validation)
-**Parallelizable:** Items 2.1–2.4 are independent; 2.5 depends on 2.3
+**Estimated Effort:** ~80,000 tokens (including testing/fixes)
+**Dependencies:** None (can run in parallel with Phase 1, but benefits from 1.3 constants)
+**Parallelizable:** Items 2.1–2.5 are all independent
+**Risk:** Medium — changes control flow in extractors and CLI config, requires careful testing
 
 ### Goals
 
-- Give the semantic analyzer more text to work with (better clustering)
-- Make all hardcoded thresholds configurable via YAML
-- Fix brittle template matching that produces false positives
-- Scale auto-cluster count intelligently with corpus size
+- Eliminate the largest DRY violation in the codebase (BaseExtractor batch loop)
+- Unify ExtractionService source branching for extensibility
+- Fix fragile config application and domain name stripping
+- Replace string-based rate limit detection with typed exceptions
 
 ### Work Items
 
-#### 2.1 Increase combined_text Length for Embeddings
+#### 2.1 Extract Shared Batch Loop in BaseExtractor
 
-**Requirement Refs:** FR-015, FR-016, FR-017
+**Audit Ref:** H2
 **Files Affected:**
-- `src/models/email.py` (modify)
-- `src/config/models.py` (modify)
-- `tests/unit/test_models.py` (modify)
+- `src/extractors/base_extractor.py` (modify — lines 187–461)
+- `tests/unit/test_extractors.py` (modify)
+- `tests/unit/test_base_analyzer.py` (modify if needed)
 
 **Description:**
-`Email.combined_text` truncates body at 500 chars. The embedding model (mxbai-embed-large-v1) supports 512 tokens (~2000 chars). Truncating at 500 means clustering is based on subject + first ~3 sentences, missing action items, signatures, and key content deeper in email bodies. This directly degrades clustering quality for threaded/corporate emails.
+`extract_all()` (lines 187–330, 143 lines) and `extract_incremental()` (lines 332–461, 129 lines) implement nearly identical batch processing loops — pagination, per-email try/catch, checkpoint saving, rate limit handling, error collection. The only real differences are: (1) incremental has a deduplication check against existing IDs, and (2) incremental uses `_fetch_incremental_batch()` instead of `_fetch_batch()`. A bug fix in checkpoint logic must be applied in both places today.
 
 **Tasks:**
-1. [ ] Change `combined_text` property to use 1500 chars: `f"{self.subject} {self.body_text[:1500]}"`
-2. [ ] Add `max_embedding_text_length` to `AnalyzeConfig` (default: 1500, range: 200–5000)
-3. [ ] Thread the config value through `SemanticAnalyzer` so it's not hardcoded in the model
-4. [ ] Update tests — verify combined_text respects new length
-5. [ ] Run embedding cache invalidation note in docs (old cache incompatible after change)
+1. [ ] Create private method `_execute_batch_loop()` with signature:
+   ```python
+   def _execute_batch_loop(
+       self,
+       fetch_fn: Callable[..., list[dict]],
+       existing_ids: set[str] | None,  # None for full, set for incremental
+       max_batch_size: int,
+       checkpoint_interval: int,
+       progress_callback: Callable[[int, int], None] | None,
+       fetch_kwargs: dict[str, Any] | None = None,
+   ) -> tuple[list[Email], list[ExtractionError]]:
+   ```
+2. [ ] Move the common batch loop logic into `_execute_batch_loop()`:
+   - Checkpoint resume check
+   - Batch fetch loop with pagination
+   - Per-email `_process_email()` with try/catch
+   - Error collection (ExtractionError with type classification)
+   - Checkpoint saving at intervals
+   - Rate limit detection and backoff
+   - Progress callback invocation
+3. [ ] Add dedup logic: if `existing_ids` is not None, skip emails whose ID is already in the set
+4. [ ] Refactor `extract_all()` to call `_execute_batch_loop(fetch_fn=self._fetch_batch, existing_ids=None, ...)`
+5. [ ] Refactor `extract_incremental()` to call `_execute_batch_loop(fetch_fn=self._fetch_incremental_batch, existing_ids=existing_ids, ...)`
+6. [ ] Both public methods become thin wrappers: setup params → call shared loop → build result dataclass
+7. [ ] Update tests — verify both extraction modes still pass all existing tests
+8. [ ] Add a test that modifies checkpoint behavior and verifies it affects both modes
 
 **Acceptance Criteria:**
-- [ ] `combined_text` returns subject + up to 1500 chars of body by default
-- [ ] Length is configurable via YAML config
-- [ ] Existing tests updated and passing
-
-**Notes:**
-This change invalidates any existing embedding cache. Document this in CLAUDE.md and consider auto-invalidation via cache versioning (Phase 3, item 3.1).
+- [ ] Batch loop logic exists in exactly one place
+- [ ] `extract_all()` and `extract_incremental()` are each < 30 lines
+- [ ] Checkpoint, error collection, and rate limit handling tested via the shared method
+- [ ] All existing extractor tests pass
+- [ ] Both M365 and Gmail extractors work correctly through both modes
 
 ---
 
-#### 2.2 Externalize Magic Numbers to Config
+#### 2.2 Unify ExtractionService Source Branching
 
-**Requirement Refs:** All analysis FRs
+**Audit Ref:** M4
 **Files Affected:**
-- `src/config/models.py` (modify — add new config fields)
-- `src/analyzers/sender_analyzer.py` (modify)
-- `src/analyzers/subject_analyzer.py` (modify)
-- `src/analyzers/semantic_analyzer.py` (modify)
-- `src/analyzers/temporal_analyzer.py` (modify)
-- `src/analyzers/cluster_optimizer.py` (modify)
-- `src/generators/category_generator.py` (modify)
-- `src/generators/template_matcher.py` (modify)
-- `src/generators/confidence_scorer.py` (modify)
-- `tests/unit/test_config_models.py` (modify)
+- `src/services/extraction_service.py` (modify — lines 228–271)
+- `tests/unit/test_services.py` (modify)
 
 **Description:**
-16 hardcoded thresholds are scattered across analyzers and generators. These should be exposed in the existing YAML config system so users can tune them without modifying code.
+`ExtractionService.run()` has three branches — hotmail, gmail, both — where the hotmail and gmail branches are structurally identical copies with only the extractor factory method changed. Adding a third email source (Yahoo, IMAP) would require copy-pasting a fourth branch.
 
 **Tasks:**
-1. [ ] Add `AnalyzerThresholds` model to `config/models.py`:
-   - `top_senders: int = 50` (SenderAnalyzer)
-   - `top_domains: int = 30` (SenderAnalyzer)
-   - `marketing_min_emails: int = 10` (SenderAnalyzer)
-   - `top_keywords: int = 50` (SubjectAnalyzer)
-   - `max_auto_clusters: int = 15` (SemanticAnalyzer)
-   - `representative_samples: int = 5` (SemanticAnalyzer)
-   - `random_state: int = 42` (SemanticAnalyzer)
-   - `frequency_daily_threshold_days: float = 2.0` (TemporalAnalyzer)
-   - `frequency_weekly_threshold_days: float = 8.0` (TemporalAnalyzer)
-   - `frequency_monthly_threshold_days: float = 35.0` (TemporalAnalyzer)
-   - `min_emails_for_frequency: int = 10` (TemporalAnalyzer)
-2. [ ] Add `GeneratorThresholds` model:
-   - `min_cluster_percentage: float = 5.0` (CategoryGenerator — already in SuggestConfig, wire it)
-   - `max_senders_for_categories: int = 20` (CategoryGenerator)
-   - `merge_name_similarity: float = 0.8` (CategoryGenerator)
-   - `merge_email_overlap: float = 0.7` (CategoryGenerator)
-   - `confidence_source_weights` dict (ConfidenceScorer)
-3. [ ] Nest under `AnalyzeConfig.thresholds` and `SuggestConfig.thresholds`
-4. [ ] Thread config through each analyzer/generator constructor
-5. [ ] Replace all hardcoded values with config lookups
-6. [ ] Add validation bounds for each field
-7. [ ] Update `config init` template to include new fields (commented out as advanced options)
-8. [ ] Write tests for custom threshold values
+1. [ ] Define a source configuration mapping:
+   ```python
+   _SOURCE_CONFIGS: dict[str, tuple[str, Callable]] = {
+       "hotmail": ("M365/Hotmail", self._get_m365_extractor),
+       "gmail": ("Gmail", self._get_gmail_extractor),
+   }
+   ```
+2. [ ] Replace the if/elif/else chain with a loop:
+   ```python
+   sources = list(_SOURCE_CONFIGS.keys()) if self.source == "both" else [self.source]
+   corpora = []
+   for source_key in sources:
+       label, factory = _SOURCE_CONFIGS[source_key]
+       extractor = factory()
+       corpus = self._run_single_extractor(extractor, label, ...)
+       corpora.append((corpus, label))
+   ```
+3. [ ] Single-source returns `corpora[0][0]`; multi-source calls `_merge_corpora()`
+4. [ ] Update tests to verify loop-based dispatch works for all three modes
+5. [ ] Add a test that validates an unknown source raises a clear error
 
 **Acceptance Criteria:**
-- [ ] All 16 previously-hardcoded values are now configurable via YAML
-- [ ] Default values match current behavior (no behavior change without config)
-- [ ] `python -m src.cli config show` displays all threshold values
-- [ ] Config validation rejects out-of-range values
+- [ ] No duplicated extraction branches in `run()`
+- [ ] Adding a new source requires only adding an entry to `_SOURCE_CONFIGS` + a factory method
+- [ ] All three source modes (hotmail, gmail, both) work correctly
+- [ ] Invalid source values produce clear `ConfigurationError`
+- [ ] All existing service tests pass
 
 ---
 
-#### 2.3 Fix Template Matching Brittleness
+#### 2.3 Data-Driven Config Application in CLI
 
-**Requirement Refs:** FR-024
+**Audit Ref:** M5
 **Files Affected:**
-- `src/generators/template_matcher.py` (modify)
-- `tests/unit/test_template_matcher.py` (modify)
+- `src/cli.py` (modify — lines 2370–2421)
+- `tests/unit/test_cli.py` (modify)
 
 **Description:**
-`TemplateMatcher` uses substring matching (`keyword in text_lower`), causing false positives: "visa" matches "provisioning", "amazon" matches "amazonas", "mail" in domain matches "email.example.com". Switch to word-boundary regex for keywords and suffix-based matching for domains.
+`_apply_config_defaults()` manually checks each CLI argument against hardcoded defaults: `if hasattr(args, "batch_size") and args.batch_size == 500`. The "500" default is hardcoded in both the parser definition and this function. Add a new CLI option and you must update this function too, with a matching default comparison value.
 
 **Tasks:**
-1. [ ] Replace `keyword in text_lower` with `re.search(r'\b' + re.escape(keyword) + r'\b', text_lower)` for all keyword matching
-2. [ ] Replace `domain in sender_domain_lower` with proper domain suffix matching: `sender_domain_lower.endswith(domain) or sender_domain_lower == domain`
-3. [ ] Pre-compile regex patterns at template initialization time (avoid recompiling per email)
-4. [ ] Add test cases for false-positive scenarios: "visa" in "provisioning", "amazon" in "amazonas"
-5. [ ] Verify existing template matching still works with updated logic
+1. [ ] Create a config-to-CLI mapping dictionary:
+   ```python
+   _CONFIG_MAPPINGS: dict[str, Callable[[AppConfig], Any]] = {
+       "user_email": lambda c: c.user_email,
+       "output_dir": lambda c: c.output_dir,
+       "batch_size": lambda c: c.extract.batch_size,
+       "checkpoint_interval": lambda c: c.extract.checkpoint_interval,
+       "num_clusters": lambda c: c.analyze.num_clusters,
+       "min_cluster_pct": lambda c: c.suggest.min_cluster_percentage,
+       "min_sender_count": lambda c: c.suggest.min_sender_count,
+   }
+   ```
+2. [ ] Rewrite `_apply_config_defaults()` to iterate the mapping:
+   ```python
+   def _apply_config_defaults(args, config, parser):
+       for attr, getter in _CONFIG_MAPPINGS.items():
+           if hasattr(args, attr):
+               parser_default = parser.get_default(attr)
+               current_value = getattr(args, attr)
+               if current_value == parser_default or current_value is None:
+                   setattr(args, attr, getter(config))
+   ```
+3. [ ] Pass the parser object into `_apply_config_defaults()` (it already exists in scope)
+4. [ ] Remove all hardcoded default comparisons (500, 100, 10, 5.0, 20)
+5. [ ] Write tests: set config values, verify they propagate when CLI args are at defaults
+6. [ ] Write tests: set CLI args explicitly, verify they override config values
 
 **Acceptance Criteria:**
-- [ ] "visa" does NOT match "provisioning" or "advisory"
-- [ ] "amazon.com" matches "amazon.com" but NOT "notamazon.com"
-- [ ] "mail" in domain list does NOT match "email.example.com"
-- [ ] All 18 templates still match their intended emails correctly
-- [ ] No performance regression (pre-compiled patterns)
+- [ ] No hardcoded default values in `_apply_config_defaults()`
+- [ ] Adding a new CLI option requires only adding one entry to `_CONFIG_MAPPINGS`
+- [ ] Config precedence preserved: CLI args > config file > defaults
+- [ ] All existing CLI tests pass
 
 ---
 
-#### 2.4 Smart Auto-Cluster Count Scaling
+#### 2.4 Fix Domain Name Stripping
 
-**Requirement Refs:** FR-016
+**Audit Ref:** M6
 **Files Affected:**
-- `src/analyzers/semantic_analyzer.py` (modify)
-- `src/analyzers/cluster_optimizer.py` (modify)
-- `tests/unit/test_analyzers.py` (modify)
-- `tests/unit/test_cluster_optimizer.py` (modify)
+- `src/generators/category_generator.py` (modify — lines 207, 254, 491, 509)
+- `src/utils/text.py` (modify — add helper function)
+- `tests/unit/test_generators.py` (modify)
 
 **Description:**
-Current `max_k = min(15, total_emails - 1)` is too many for small corpora (50 emails → 15 clusters = 30% singletons) and too few for large ones (10K emails → 15 clusters = very broad). Use a corpus-size-aware heuristic.
+`category_generator.py` has four occurrences of `.replace('.com', '')` for generating category names from domain names. This means `amazon.com` → `amazon` works, but `amazon.co.uk` → `amazon.co.uk` (unchanged), `example.org` → `example.org` (unchanged), `bank.co.za` → `bank.co.za` (unchanged).
 
 **Tasks:**
-1. [ ] Replace fixed `max_k=15` with: `max_k = min(int(math.sqrt(n_emails / 5)), 25)` clamped to range [3, configurable_max]
-   - 100 emails → max_k ≈ 4
-   - 1,000 emails → max_k ≈ 14
-   - 10,000 emails → max_k ≈ 25 (capped)
-2. [ ] Make the formula configurable: `auto_cluster_max` in `AnalyzerThresholds` (default: 25)
-3. [ ] Add `auto_cluster_min` (default: 3) for small corpora
-4. [ ] Update cluster optimizer to respect new bounds
-5. [ ] Write tests covering small (50), medium (1K), and large (10K) corpus sizes
+1. [ ] Add `strip_domain_suffix()` to `src/utils/text.py`:
+   ```python
+   def strip_domain_suffix(domain: str) -> str:
+       """Extract registrable name from a domain for display purposes."""
+       parts = domain.lower().split('.')
+       # Two-part country TLDs: co.uk, com.au, co.za, com.br, etc.
+       if len(parts) >= 3 and parts[-2] in ('co', 'com', 'org', 'net', 'ac', 'gov'):
+           return '.'.join(parts[:-2])
+       elif len(parts) >= 2:
+           return '.'.join(parts[:-1])
+       return domain
+   ```
+2. [ ] Replace all 4 occurrences of `.replace('.com', '')` chains with `strip_domain_suffix()`
+3. [ ] Write tests:
+   - `amazon.com` → `amazon`
+   - `amazon.co.uk` → `amazon`
+   - `bank.co.za` → `bank`
+   - `example.org` → `example`
+   - `mail.google.com` → `mail.google` (subdomain preserved)
+   - `localhost` → `localhost` (no suffix)
+4. [ ] Verify category names are now correct for non-.com domains
 
 **Acceptance Criteria:**
-- [ ] 50-email corpus doesn't produce more than ~4-5 clusters in auto mode
-- [ ] 10K-email corpus can produce up to 25 clusters
-- [ ] Bounds are configurable via YAML
-- [ ] Existing auto-clustering tests updated and passing
+- [ ] All common TLD patterns handled: .com, .org, .net, .co.uk, .com.au, etc.
+- [ ] No `.replace('.com', '')` remains in the codebase
+- [ ] Category names for non-.com senders are human-readable
+- [ ] All existing generator tests pass
 
 ---
 
-#### 2.5 DRY Up Dual Analysis Functions
+#### 2.5 Add RateLimitError Exception Type
 
-**Requirement Refs:** Code quality
+**Audit Ref:** M9
 **Files Affected:**
-- `src/analyzers/__init__.py` (modify)
-- `src/services/analysis_service.py` (modify)
-- `tests/unit/test_analyzers.py` (modify)
+- `src/exceptions.py` (modify — add RateLimitError)
+- `src/extractors/graph_api_client.py` (modify — line ~188)
+- `src/extractors/gmail_client.py` (modify — error handling)
+- `src/extractors/base_extractor.py` (modify — line ~285)
+- `tests/unit/test_extractors.py` (modify)
+- `tests/unit/test_graph_api_client.py` (modify)
 
 **Description:**
-`run_full_analysis()` and `run_full_analysis_incremental()` are 90% identical — the only difference is `SemanticAnalyzer.analyze()` vs `SemanticAnalyzer.analyze_incremental()` call. Merge into a single function with optional `embedding_cache` parameter.
+`base_extractor.py` line 285 detects rate limiting with `"rate" in str(e).lower()` — string matching on error messages. This is fragile: "Request throttled" wouldn't trigger it, and "cannot operate" would false-positive. Both API clients already know when they're being rate-limited (HTTP 429), but that information is lost by the time it reaches the base extractor.
 
 **Tasks:**
-1. [ ] Merge into single `run_full_analysis(corpus, embedding_cache=None, ...)` function
-2. [ ] If `embedding_cache` provided, use `analyze_incremental()`; otherwise use `analyze()`
-3. [ ] Return `(AnalysisResults, incremental_stats | None)` tuple
-4. [ ] Update `AnalysisService.run()` to use unified function
-5. [ ] Remove `run_full_analysis_incremental` from exports and update all callers
-6. [ ] Update tests
+1. [ ] Add `RateLimitError` to `src/exceptions.py`:
+   ```python
+   class RateLimitError(ExtractionError):
+       """Provider rate limit exceeded (HTTP 429)."""
+       def __init__(self, retry_after: int | None = None, **kwargs):
+           super().__init__(
+               message="Rate limit exceeded",
+               recovery_hint="Wait and retry. The provider is throttling requests.",
+               **kwargs,
+           )
+           self.retry_after = retry_after
+   ```
+2. [ ] In `GraphAPIClient._make_request()`: detect HTTP 429, parse `Retry-After` header, raise `RateLimitError(retry_after=seconds)`
+3. [ ] In `GmailClient`: detect `HttpError` with status 429, raise `RateLimitError`
+4. [ ] In `BaseExtractor._execute_batch_loop()` (or current batch loops): replace string matching with `except RateLimitError as e:` and use `e.retry_after` for smarter backoff
+5. [ ] Keep a general `except Exception` fallback for other errors (no change to existing behavior)
+6. [ ] Write tests: mock 429 response → verify `RateLimitError` raised with correct `retry_after`
+7. [ ] Write tests: verify backoff uses `retry_after` when available
 
 **Acceptance Criteria:**
-- [ ] Single `run_full_analysis()` function handles both modes
-- [ ] `__all__` export list updated
-- [ ] All tests pass
+- [ ] No string matching for rate limit detection remains
+- [ ] HTTP 429 from either API raises `RateLimitError` with `retry_after`
+- [ ] BaseExtractor catches `RateLimitError` by type
+- [ ] `retry_after` header value is used when available (smarter than fixed exponential)
+- [ ] Non-429 errors still handled by general exception path
+- [ ] All existing tests pass
 
 ---
 
 ### Phase 2 Testing Requirements
 
-- [ ] Embedding length tests with configurable values
-- [ ] Config threshold validation tests (bounds, defaults)
-- [ ] Template matcher false-positive regression tests
-- [ ] Auto-cluster scaling tests across corpus sizes
-- [ ] All 1,403+ existing tests pass
+- [ ] BaseExtractor: shared batch loop tested for both full and incremental modes
+- [ ] ExtractionService: all three source modes tested via loop dispatch
+- [ ] CLI config: verify precedence (CLI > config > default) with data-driven mapping
+- [ ] Domain stripping: comprehensive TLD coverage tests
+- [ ] Rate limit: 429 detection and retry_after propagation tests
+- [ ] All 1,663 existing tests pass with no regressions
 
 ### Phase 2 Completion Checklist
 
-- [ ] All work items complete
+- [ ] All 5 work items complete
 - [ ] All tests passing
-- [ ] CLAUDE.md updated (new config fields documented)
-- [ ] `config init` template includes new threshold options
+- [ ] BaseExtractor batch loop exists in exactly one place
+- [ ] No string-based rate limit detection
+- [ ] No hardcoded `.replace('.com', '')`
 - [ ] No regressions introduced
 
 ---
 
-## Phase 3: Robustness & Reliability
+## Phase 3: Structural Changes
 
-**Estimated Effort:** ~50,000 tokens (including testing/fixes)
-**Dependencies:** Phase 1 (extraction fix)
-**Parallelizable:** All items 3.1–3.6 are independent
+**Estimated Effort:** ~80,000 tokens (including testing/fixes)
+**Dependencies:** Phase 1 (constants module provides shared defaults for CLI split)
+**Parallelizable:** Items 3.2 and 3.3 are independent; 3.1 is the largest single item
+**Risk:** Higher — CLI split touches the main entry point; template externalization changes loading behavior
 
 ### Goals
 
-- Prevent silent data corruption from model/cache mismatches
-- Handle deeply nested email MIME structures
-- Make file operations atomic and crash-safe
-- Improve thread detection for emails missing headers
+- Break the CLI god module into a maintainable package structure
+- Externalize category templates to enable runtime evolution without code changes
+- Make sender classification keywords configurable
 
 ### Work Items
 
-#### 3.1 Add Embedding Cache Versioning
+#### 3.1 Split CLI into Package
 
-**Requirement Refs:** Reliability
+**Audit Ref:** H1
 **Files Affected:**
-- `src/cache/embedding_cache.py` (modify)
-- `tests/unit/test_embedding_cache.py` (modify)
+- `src/cli.py` (delete — 2,425 lines)
+- `src/cli/__init__.py` (create — thin dispatcher)
+- `src/cli/parsers.py` (create — shared argument groups)
+- `src/cli/formatters.py` (create — output helpers, cluster viz, progress)
+- `src/cli/commands/extract.py` (create)
+- `src/cli/commands/analyze.py` (create)
+- `src/cli/commands/suggest.py` (create)
+- `src/cli/commands/review.py` (create)
+- `src/cli/commands/pipeline.py` (create)
+- `src/cli/commands/config.py` (create)
+- `src/cli/commands/export.py` (create)
+- `src/cli/commands/info.py` (create)
+- `tests/unit/test_cli.py` (modify — update imports)
+- `tests/unit/test_cli_tui_integration.py` (modify — update imports)
+- `pyproject.toml` (verify entry point)
 
 **Description:**
-If the embedding model changes (upgrade sentence-transformers, switch to different model), the cached `.npz` file becomes silently incompatible — embeddings computed with model A get mixed with model B. Store model metadata in cache and auto-invalidate on mismatch.
+`src/cli.py` is 2,425 lines — the largest file in the codebase by 3x. `create_parser()` alone is 1,100 lines of argparse definitions (lines 315–877). Each command handler mixes setup, execution, and presentation. Every new feature touches this file. This is the single highest-impact refactor in the plan.
 
 **Tasks:**
-1. [ ] Add metadata fields to cache: `model_name`, `model_version`, `embedding_dim`, `max_text_length`, `created_at`
-2. [ ] On cache load, compare stored metadata against current config
-3. [ ] If model name or embedding dimension mismatches, log warning and invalidate entire cache
-4. [ ] If `max_text_length` changed (Phase 2, item 2.1), invalidate cache (embeddings computed on different text lengths)
-5. [ ] Store metadata in separate `.json` sidecar file alongside `.npz`
-6. [ ] Write tests for version mismatch detection and auto-invalidation
+1. [ ] Create `src/cli/` package directory structure:
+   ```
+   src/cli/
+     __init__.py         # main(), create_parser() (thin dispatcher, ~100 lines)
+     parsers.py          # Shared argument groups, _apply_config_defaults() (~150 lines)
+     formatters.py       # output_json(), _show_cluster_analysis(), _print_ascii_chart(), progress helpers (~200 lines)
+     commands/
+       __init__.py
+       extract.py        # build_extract_parser(), cmd_extract() (~200 lines)
+       analyze.py        # build_analyze_parser(), cmd_analyze() (~250 lines)
+       suggest.py        # build_suggest_parser(), cmd_suggest() (~150 lines)
+       review.py         # build_review_parser(), cmd_review() (~200 lines)
+       pipeline.py       # build_pipeline_parser(), cmd_pipeline() (~200 lines)
+       config.py         # build_config_parser(), cmd_config_*() (~150 lines)
+       export.py         # build_export_parser(), cmd_export() (~150 lines)
+       info.py           # build_info_parser(), cmd_info() (~150 lines)
+   ```
+2. [ ] Extract shared argument groups to `parsers.py`:
+   - `add_output_args(parser)` — `--output-dir`, `--dry-run`
+   - `add_verbosity_args(parser)` — `--verbose`, `--quiet`, `--json` (mutually exclusive)
+   - `add_config_args(parser)` — `--config`
+   - `_apply_config_defaults()` (data-driven, from Phase 2 item 2.3)
+3. [ ] Extract output formatting to `formatters.py`:
+   - `output_json(data, file=None)` — JSON output helper
+   - `show_cluster_analysis(results)` — cluster summary display
+   - `print_ascii_chart(data, label)` — text histogram
+   - `generate_cluster_viz(results, output_path)` — matplotlib wrapper
+   - Progress display helpers
+4. [ ] For each command, create a module in `commands/` containing:
+   - `build_<command>_parser(subparsers)` — adds the subparser with all arguments
+   - `cmd_<command>(args, config)` — the command handler
+5. [ ] Rewrite `src/cli/__init__.py`:
+   ```python
+   from .commands import extract, analyze, suggest, review, pipeline, config, export, info
+   from .parsers import add_output_args, add_verbosity_args, add_config_args
+
+   COMMANDS = {
+       "extract": (extract.build_parser, extract.cmd_extract),
+       "analyze": (analyze.build_parser, analyze.cmd_analyze),
+       ...
+   }
+
+   def create_parser():
+       parser = argparse.ArgumentParser(...)
+       subparsers = parser.add_subparsers(...)
+       for name, (builder, _) in COMMANDS.items():
+           builder(subparsers)
+       return parser
+
+   def main():
+       parser = create_parser()
+       args = parser.parse_args()
+       ...
+       handler = COMMANDS[args.command][1]
+       return handler(args, config)
+   ```
+6. [ ] Update `pyproject.toml` entry point if it references `src.cli:main`
+7. [ ] Update all test imports from `src.cli` to `src.cli.commands.*` or `src.cli`
+8. [ ] Verify `python -m src.cli --help` still works
+9. [ ] Verify all subcommands work end-to-end
+10. [ ] Delete `src/cli.py` (the monolith)
 
 **Acceptance Criteria:**
-- [ ] Changing embedding model name auto-invalidates cache with warning
-- [ ] Changing `max_embedding_text_length` auto-invalidates cache
-- [ ] Cache created with current config loads without issue
-- [ ] Old caches without metadata are treated as invalid (fresh start)
+- [ ] `src/cli.py` no longer exists — replaced by `src/cli/` package
+- [ ] No single file exceeds ~300 lines
+- [ ] All CLI commands work identically to before
+- [ ] Shared argument groups defined once and reused
+- [ ] Adding a new command requires: one new file in `commands/`, one entry in `COMMANDS` dict
+- [ ] All 3,935 lines of CLI tests pass (test_cli.py is the largest test file)
+- [ ] `python -m src.cli --help` displays all commands correctly
+
+**Notes:**
+This is the largest single work item. Approach it as a mechanical refactor — move code, don't rewrite it. The goal is decomposition, not redesign. Keep function signatures identical; only change where they live.
 
 ---
 
-#### 3.2 Thread Analysis Subject-Based Fallback
+#### 3.2 Externalize Category Templates to JSON
 
-**Requirement Refs:** Phase 8A.1 (thread analysis)
+**Audit Ref:** M7
 **Files Affected:**
-- `src/analyzers/thread_analyzer.py` (modify)
-- `tests/unit/test_thread_analyzer.py` (modify)
+- `src/data/templates.json` (create)
+- `src/models/category_template.py` (modify — lines 21–293)
+- `src/generators/template_matcher.py` (modify)
+- `src/config/models.py` (modify — add `templates_path` option)
+- `tests/unit/test_template_matcher.py` (modify)
+- `tests/unit/test_models.py` (modify)
 
 **Description:**
-`ThreadAnalyzer` relies on `In-Reply-To` and `References` headers, which are often stripped or missing (web-based senders, forwarded emails, some corporate systems). Add a heuristic fallback: emails with matching normalized subjects from the same sender domain within a time window are likely the same thread.
+`category_template.py` defines 18 category templates as Python objects in source code — 273 lines of keyword lists and domain patterns. Since the templates will evolve based on usage, every change requires a code commit. Externalizing to JSON enables runtime modification and user overrides.
 
 **Tasks:**
-1. [ ] Add subject-normalization function: strip RE:/FWD:/FW: prefixes, normalize whitespace, lowercase
-2. [ ] After header-based grouping, run second pass: ungrouped emails with matching normalized subjects + same sender domain + within 7-day window → merge into thread
-3. [ ] Make time window configurable (default: 7 days)
-4. [ ] Add `thread_method` field to each thread: "header" or "subject_heuristic" for transparency
-5. [ ] Write tests with emails that have no In-Reply-To but matching subjects
+1. [ ] Create `src/data/` directory
+2. [ ] Create `src/data/templates.json` containing the 18 templates:
+   ```json
+   [
+     {
+       "name": "Financial & Banking",
+       "keywords": ["bank", "statement", "payment", ...],
+       "domains": ["chase.com", "bankofamerica.com", ...],
+       "description": "Banking, financial accounts, payments"
+     },
+     ...
+   ]
+   ```
+3. [ ] Add `load_templates(path: Path | None = None) -> list[CategoryTemplate]` function to `category_template.py`:
+   - Default path: `Path(__file__).parent.parent / "data" / "templates.json"`
+   - Validates each entry against `CategoryTemplate` Pydantic model
+   - Returns list of validated templates
+4. [ ] Keep `PREDEFINED_TEMPLATES = load_templates()` for backward compatibility
+5. [ ] Add `templates_path: Path | None = None` to `SuggestConfig`
+6. [ ] If `templates_path` is set, load user templates and merge with (or replace) predefined set
+7. [ ] Update `template_matcher.py` to accept templates as parameter (not just import global)
+8. [ ] Include `src/data/templates.json` in package distribution (`pyproject.toml` package-data)
+9. [ ] Write tests:
+   - Default loading produces 18 templates
+   - Custom path loading works
+   - Invalid template JSON raises clear error
+   - Merge behavior (user templates + predefined)
 
 **Acceptance Criteria:**
-- [ ] Emails with stripped headers but matching subjects are grouped correctly
-- [ ] Heuristic doesn't over-group (different topics with similar subjects stay separate)
-- [ ] Thread method is tracked for each group
-- [ ] Time window is configurable
+- [ ] Templates live in `src/data/templates.json`, not Python source
+- [ ] `PREDEFINED_TEMPLATES` still works for backward compatibility
+- [ ] Users can specify custom templates via `suggest.templates_path` in config
+- [ ] Adding a new template requires only editing the JSON file
+- [ ] All existing template matcher tests pass
+- [ ] Template JSON is included in package distribution
 
 ---
 
-#### 3.3 Gmail Recursive MIME Extraction
+#### 3.3 Externalize Sender Classification Keywords to Config
 
-**Requirement Refs:** FR-004
+**Audit Ref:** M3
 **Files Affected:**
-- `src/extractors/gmail_client.py` (modify)
-- `tests/unit/test_gmail_extractor.py` (modify)
+- `src/config/models.py` (modify — add fields to `AnalyzerThresholds`)
+- `src/analyzers/sender_analyzer.py` (modify — lines 158, 169, 179)
+- `src/config/template.yaml` (modify — add commented examples)
+- `tests/unit/test_analyzers.py` (modify)
+- `tests/unit/test_config_models.py` (modify)
 
 **Description:**
-`GmailClient._extract_body()` handles only 2 levels of MIME nesting (parts → nested_parts). Real emails can have 3+ levels: `multipart/mixed → multipart/alternative → text/html`. Make this recursive.
+`SenderAnalyzer._classify_sender_type()` uses hardcoded string lists to classify senders: service keywords (`noreply`, `notify`, `support`...), marketing keywords (`sale`, `deal`, `offer`...), and work keywords (`meeting`, `project`, `sprint`...). These are English-centric and can't be adjusted without modifying source code.
 
 **Tasks:**
-1. [ ] Refactor `_extract_body()` to use recursive helper: `_extract_body_recursive(payload, depth=0, max_depth=10)`
-2. [ ] Recurse into any part with `parts` array
-3. [ ] Collect all `text/html` and `text/plain` parts, prefer HTML
-4. [ ] Add `max_depth` guard to prevent infinite recursion on malformed messages
-5. [ ] Write tests with 3-level and 4-level nested MIME structures
+1. [ ] Add three new fields to `AnalyzerThresholds`:
+   ```python
+   service_keywords: list[str] = [
+       "noreply", "no-reply", "notify", "notification", "alert",
+       "support", "help", "info", "admin", "system", "mailer",
+       "daemon", "bounce", "postmaster", "donotreply",
+   ]
+   marketing_keywords: list[str] = [
+       "sale", "deal", "offer", "discount", "promo", "promotion",
+       "coupon", "save", "free", "limited", "exclusive", "unsubscribe",
+       "newsletter", "weekly", "digest",
+   ]
+   work_keywords: list[str] = [
+       "meeting", "project", "sprint", "standup", "review",
+       "deadline", "action", "agenda", "minutes", "re:", "fwd:",
+       "assigned", "task", "jira", "confluence",
+   ]
+   ```
+2. [ ] Update `SenderAnalyzer.__init__()` to read keywords from `self.thresholds`
+3. [ ] Replace hardcoded lists in `_classify_sender_type()` with `self.thresholds.service_keywords`, etc.
+4. [ ] Add commented examples to `config/template.yaml` showing keyword customization
+5. [ ] Write tests: custom keywords override defaults, classification changes accordingly
 
 **Acceptance Criteria:**
-- [ ] 3+ level nested MIME emails have their body extracted correctly
-- [ ] Recursion depth is bounded (no stack overflow on malformed email)
-- [ ] HTML content is still preferred over plain text
-- [ ] Existing 2-level tests still pass
-
----
-
-#### 3.4 Atomic Writes for Approval Saving
-
-**Requirement Refs:** FR-036, data integrity
-**Files Affected:**
-- `src/ui/category_review.py` (modify)
-- `src/services/pipeline_service.py` (modify)
-- `src/utils/file_manager.py` (modify)
-
-**Description:**
-If `save_approved_categories()` or any JSON write fails mid-write (crash, disk full, permission error), the output file is corrupted. Use temp-file-then-rename pattern for all critical writes.
-
-**Tasks:**
-1. [ ] Create `atomic_write(path, content)` utility in `file_manager.py`
-   - Write to `path.tmp` in same directory
-   - `os.replace(path.tmp, path)` on success (atomic on all platforms)
-   - Clean up `.tmp` on failure
-2. [ ] Use `atomic_write()` for: `approved_categories.json`, `email_corpus.json`, `corpus_analysis_results.json`, `category_suggestions.json`
-3. [ ] Update `PipelineService` file saves to use atomic writes
-4. [ ] Write tests: verify file is either fully written or not modified
-
-**Acceptance Criteria:**
-- [ ] Interrupted writes don't corrupt existing files
-- [ ] `.tmp` files are cleaned up on failure
-- [ ] All critical JSON outputs use atomic writes
-
----
-
-#### 3.5 HTML Exporter Template Validation
-
-**Requirement Refs:** Export reliability
-**Files Affected:**
-- `src/exporters/html_exporter.py` (modify)
-- `tests/unit/test_exporters.py` (modify)
-
-**Description:**
-`env.get_template("report.html.j2")` throws an opaque Jinja2 error if the template file is missing from the distribution. Add a clear error with recovery hint.
-
-**Tasks:**
-1. [ ] Wrap template loading in try/except with `ExportError` that includes template path and recovery instructions
-2. [ ] Validate template directory exists at module load time
-3. [ ] Add test for missing template scenario
-
-**Acceptance Criteria:**
-- [ ] Missing template produces clear error: "Template not found at {path}. Reinstall package or check installation."
-- [ ] Existing export tests pass
-
----
-
-#### 3.6 M365 Incremental Extraction with Server-Side Filtering
-
-**Requirement Refs:** FR-002, performance
-**Files Affected:**
-- `src/extractors/graph_api_client.py` (modify)
-- `src/extractors/m365_extractor.py` (modify)
-- `tests/unit/test_extractors.py` (modify)
-
-**Description:**
-M365 incremental extraction currently fetches ALL emails and deduplicates client-side. Gmail correctly uses `after:YYYY/MM/DD` server-side. The Graph API supports `$filter=receivedDateTime gt {date}` which would make M365 incremental extraction equally efficient.
-
-**Tasks:**
-1. [ ] Add `filter_after` parameter to `GraphAPIClient.fetch_emails()`
-2. [ ] Construct OData filter: `$filter=receivedDateTime gt {iso_date}`
-3. [ ] Update `EmailExtractor.extract_incremental()` to pass `last_extraction_date` as filter
-4. [ ] Keep client-side dedup as safety net (filter + dedup)
-5. [ ] Write test verifying filter parameter is sent in API request
-
-**Acceptance Criteria:**
-- [ ] Incremental extraction sends date filter to Graph API
-- [ ] Only new emails are fetched (verified by mock)
-- [ ] Client-side dedup still works as safety net
-- [ ] Full extraction (no filter) still works
+- [ ] No hardcoded classification keywords in `sender_analyzer.py`
+- [ ] Default keywords match current behavior exactly
+- [ ] Users can add/remove keywords via YAML config
+- [ ] `config init` template shows keyword customization examples
+- [ ] All existing sender analyzer tests pass
 
 ---
 
 ### Phase 3 Testing Requirements
 
-- [ ] Cache versioning: mismatch detection, auto-invalidation
-- [ ] Thread heuristic: subject matching with and without headers
-- [ ] MIME recursion: 3-level, 4-level, malformed structures
-- [ ] Atomic writes: interruption simulation
-- [ ] All 1,403+ existing tests pass
+- [ ] CLI package: all 3,935 lines of test_cli.py pass with updated imports
+- [ ] CLI package: all subcommands verified end-to-end (`--help`, basic execution)
+- [ ] Templates: JSON loading, validation, user override, merge behavior
+- [ ] Sender keywords: custom classification with user-provided keywords
+- [ ] All 1,663 existing tests pass with no regressions
 
 ### Phase 3 Completion Checklist
 
-- [ ] All work items complete
+- [ ] All 3 work items complete
+- [ ] `src/cli.py` deleted, replaced by `src/cli/` package
+- [ ] `src/data/templates.json` created with 18 templates
+- [ ] Sender keywords configurable via YAML
 - [ ] All tests passing
+- [ ] CLAUDE.md updated with new package structure
 - [ ] No regressions introduced
 
 ---
 
-## Phase 4: Intelligence & Calibration
+## Phase 4: Infrastructure & Polish
 
 **Estimated Effort:** ~40,000 tokens (including testing/fixes)
-**Dependencies:** Phase 2 (config externalization), Phase 3 (cache versioning)
-**Parallelizable:** All items 4.1–4.4 are independent
+**Dependencies:** Phases 1–3 complete (CI should validate the final codebase state)
+**Parallelizable:** All 3 items are independent
+**Risk:** Low — no behavioral changes to application code
 
 ### Goals
 
-- Make confidence scores more meaningful and calibratable
-- Add temporal awareness to the learning system
-- Provide visual feedback on cluster quality
-- Improve silhouette score interpretation
+- Automate quality gates with CI
+- Begin formal contract testing
+- Document the ad-hoc heuristic in cluster optimizer for future maintainers
 
 ### Work Items
 
-#### 4.1 Confidence Scoring Improvements
+#### 4.1 Add GitHub Actions CI Pipeline
 
-**Requirement Refs:** FR-025
+**Audit Ref:** L3
 **Files Affected:**
-- `src/generators/confidence_scorer.py` (modify)
-- `src/generators/category_generator.py` (modify)
-- `tests/unit/test_confidence_scorer.py` (modify)
+- `.github/workflows/ci.yml` (create)
+- `pyproject.toml` (verify test/lint configuration)
 
 **Description:**
-Current confidence averaging is unjustified (why 1/3 weight each?). The enhanced scorer has configurable weights but distinctiveness uses `max_overlap` instead of `mean_overlap`, and percentage score breaks for small corpora (5% = 0.05 confidence). Improve the scoring to be more meaningful.
+Quality gates are entirely manual — you have to remember to run `ruff check` and `pytest` before committing. There's no CI to catch regressions on push or PR.
 
 **Tasks:**
-1. [ ] Change distinctiveness from `1.0 - max_overlap` to `1.0 - mean_overlap` (average across all other categories)
-2. [ ] Fix percentage score: use `min(1.0, percentage / 10.0)` instead of `percentage / 100.0` so a 10% category gets 1.0 (not 0.1)
-3. [ ] Add logarithmic volume scaling: `min(1.0, log10(email_count + 1) / log10(101))` so 100 emails = 1.0, 10 emails ≈ 0.5
-4. [ ] Make all weights configurable via `GeneratorThresholds` from Phase 2
-5. [ ] Add confidence breakdown to export outputs (HTML and CSV)
-6. [ ] Write tests verifying improved scoring across small/medium/large corpora
+1. [ ] Create `.github/workflows/ci.yml`:
+   ```yaml
+   name: CI
+   on:
+     push:
+       branches: [main, '001-use-the-document']
+     pull_request:
+       branches: [main, '001-use-the-document']
+
+   jobs:
+     lint:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-python@v5
+           with:
+             python-version: '3.10'
+         - run: pip install ruff
+         - run: ruff check src/
+
+     test:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/setup-python@v5
+           with:
+             python-version: '3.10'
+             cache: 'pip'
+         - run: pip install -e ".[dev]"
+         - run: pytest --cov=src --cov-report=term-missing --cov-fail-under=85
+   ```
+2. [ ] Split lint and test into separate jobs for faster feedback
+3. [ ] Add Python version matrix if supporting 3.10+ (optional: 3.10, 3.11, 3.12)
+4. [ ] Add `cov-fail-under=85` to prevent coverage regression (current: 86%)
+5. [ ] Verify the workflow runs successfully on a test push
 
 **Acceptance Criteria:**
-- [ ] 10-email category in 200-email corpus gets reasonable confidence (not 0.05)
-- [ ] Distinctiveness reflects average separation, not worst case
-- [ ] Weights are configurable via YAML
-- [ ] Confidence breakdown visible in exports
+- [ ] Push to main or `001-use-the-document` triggers CI
+- [ ] PRs show lint and test status checks
+- [ ] Ruff violations fail the lint job
+- [ ] Test failures fail the test job
+- [ ] Coverage below 85% fails the test job
+
+**Notes:**
+The sentence-transformers model download during tests may be slow on CI. Consider caching the model directory or using a lighter model for test fixtures. If CI time exceeds 10 minutes, split heavy tests (semantic analyzer) into a separate job.
 
 ---
 
-#### 4.2 Pattern Detector Temporal Decay
+#### 4.2 Add Analyzer Contract Tests
 
-**Requirement Refs:** Learning system quality
+**Audit Ref:** L2
 **Files Affected:**
-- `src/learning/pattern_detector.py` (modify)
-- `tests/unit/test_pattern_detector.py` (modify)
+- `tests/contract/test_analyzer_contracts.py` (create)
+- `tests/contract/test_extractor_contracts.py` (create)
 
 **Description:**
-Pattern confidence is calculated purely from occurrence count. A rename pattern from 6 months ago is weighted identically to one from yesterday. Add time-based decay so recent decisions have more influence.
+`tests/contract/` exists with only an `__init__.py`. The specs directory has formal contracts for extractors, analyzers, and generators, but these aren't enforced in code. Contract tests verify that all implementations of an interface meet the documented contract.
 
 **Tasks:**
-1. [ ] Add decay factor to confidence calculation: `weight = exp(-days_old / half_life_days)`
-2. [ ] Default `half_life_days = 90` (configurable) — patterns lose half their weight every 90 days
-3. [ ] Weight each occurrence by its recency before computing pattern confidence
-4. [ ] Add `learning.pattern_half_life_days` to config
-5. [ ] Write tests with old vs recent decisions, verify recency bias
+1. [ ] Create `tests/contract/test_analyzer_contracts.py`:
+   ```python
+   import pytest
+   from src.analyzers import (
+       SenderAnalyzer, SubjectAnalyzer, SemanticAnalyzer,
+       TemporalAnalyzer, VolumeAnalyzer,
+   )
+   from src.analyzers.base import BaseAnalyzer
+
+   ALL_ANALYZERS = [
+       SenderAnalyzer, SubjectAnalyzer, TemporalAnalyzer, VolumeAnalyzer,
+   ]
+   # SemanticAnalyzer tested separately (requires model)
+
+   @pytest.mark.parametrize("analyzer_cls", ALL_ANALYZERS)
+   class TestAnalyzerContract:
+       def test_inherits_base(self, analyzer_cls):
+           assert issubclass(analyzer_cls, BaseAnalyzer)
+
+       def test_has_name(self, analyzer_cls):
+           analyzer = analyzer_cls()
+           assert isinstance(analyzer.name, str)
+           assert len(analyzer.name) > 0
+
+       def test_analyze_returns_result(self, analyzer_cls, sample_emails):
+           analyzer = analyzer_cls()
+           result = analyzer.analyze(sample_emails)
+           assert result is not None
+
+       def test_empty_input_handled(self, analyzer_cls):
+           analyzer = analyzer_cls()
+           result = analyzer.analyze([])
+           assert result is not None  # Should not raise
+
+       def test_single_email_handled(self, analyzer_cls, single_email):
+           analyzer = analyzer_cls()
+           result = analyzer.analyze([single_email])
+           assert result is not None
+   ```
+2. [ ] Create `tests/contract/test_extractor_contracts.py` for BaseExtractor:
+   - Verify `_get_source_name()` returns non-empty string
+   - Verify `_get_checkpoint_source()` returns non-empty string
+   - Verify abstract methods raise `NotImplementedError` if not implemented
+3. [ ] Add `sample_emails` and `single_email` fixtures to `tests/conftest.py` if not present
+4. [ ] Run contract tests as part of the normal test suite
 
 **Acceptance Criteria:**
-- [ ] Pattern from 180 days ago contributes ~25% of a recent pattern's weight
-- [ ] Half-life is configurable
-- [ ] Very old patterns (>365 days) have negligible influence
-- [ ] Recent-only patterns reach high confidence faster
+- [ ] All 5 analyzer classes pass the contract test suite
+- [ ] Empty input and single-email edge cases verified for all analyzers
+- [ ] Contract tests run as part of `pytest` (no special flags needed)
+- [ ] Future analyzers that don't meet the contract will fail these tests
 
 ---
 
-#### 4.3 Cluster Quality Visualization
+#### 4.3 Document Elbow Optimizer Heuristic
 
-**Requirement Refs:** FR-015 (analysis quality transparency)
+**Audit Ref:** L7
 **Files Affected:**
-- `src/analyzers/semantic_analyzer.py` (modify)
-- `src/exporters/html_exporter.py` (modify)
-- `src/cli.py` (modify — add `--cluster-viz` flag)
-- `tests/unit/test_analyzers.py` (modify)
+- `src/analyzers/cluster_optimizer.py` (modify — lines 287–349)
 
 **Description:**
-After analysis, there's no visual way to assess whether clustering worked well. Add a PCA scatter plot of embeddings colored by cluster, saved as part of analysis output. Also add per-cluster silhouette bars.
+The elbow confidence calculation combines slope ratios and inertia reduction percentages with averaging — it works but is hard to reason about or tune. Rather than rewriting a working heuristic, document it thoroughly so future maintainers understand the intent.
 
 **Tasks:**
-1. [ ] Add `generate_cluster_visualization(embeddings, labels, output_path)` to semantic analyzer
-2. [ ] Use PCA to reduce to 2D, matplotlib scatter plot colored by cluster
-3. [ ] Add silhouette bar chart (per-cluster scores)
-4. [ ] Save as `cluster_visualization.png` in output directory
-5. [ ] Add `--cluster-viz` flag to `analyze` command (off by default to avoid matplotlib dependency)
-6. [ ] Make matplotlib an optional dependency (`pip install email-corpus-analyzer[viz]`)
-7. [ ] Include visualization in HTML export report if available
+1. [ ] Add comprehensive docstring to `_calculate_elbow_confidence()`:
+   ```python
+   def _calculate_elbow_confidence(self, ...):
+       """
+       Confidence in the detected elbow point.
+
+       Combines two signals:
+       1. Slope ratio: how sharply the curve bends at the elbow.
+          A sharp bend (ratio > 3) indicates a clear elbow → high confidence.
+          A gentle bend (ratio < 1.5) indicates ambiguity → low confidence.
+
+       2. Inertia reduction: what percentage of total inertia reduction
+          occurs before the elbow point.
+          If 85% of reduction happens before the elbow, most structure is
+          captured → high confidence.
+          If only 55% happens before, the elbow is splitting meaningful
+          variance → low confidence.
+
+       The two signals are averaged for the final confidence score.
+
+       Examples:
+           10 candidates tested, elbow at k=4:
+           - Inertia drops 85% from k=2→4, only 15% after → ~0.82
+           - Inertia drops 55% before, 45% after → ~0.55
+
+           5 candidates tested, elbow at k=3:
+           - Sharp bend (ratio=4.2), 90% reduction before → ~0.90
+           - Gentle bend (ratio=1.3), 60% reduction before → ~0.45
+       """
+   ```
+2. [ ] Add inline comments at key calculation steps explaining the math
+3. [ ] No behavioral changes — documentation only
 
 **Acceptance Criteria:**
-- [ ] `analyze --cluster-viz` produces a scatter plot PNG
-- [ ] Clusters are visually distinguishable by color
-- [ ] Silhouette bar chart shows per-cluster quality
-- [ ] Works without matplotlib installed (graceful skip with warning)
-
----
-
-#### 4.4 Improved Silhouette Score Interpretation
-
-**Requirement Refs:** Clustering quality
-**Files Affected:**
-- `src/analyzers/cluster_optimizer.py` (modify)
-- `tests/unit/test_cluster_optimizer.py` (modify)
-
-**Description:**
-Silhouette score normalized linearly from [-1, 1] to [0, 1] via `(score + 1) / 2`. This means a score of 0 (ambiguous clustering) becomes 0.5 confidence, and -0.3 (bad clustering) becomes 0.35 — which users might interpret as "fair." Use a sigmoid mapping that punishes negative scores more aggressively.
-
-**Tasks:**
-1. [ ] Replace linear normalization with sigmoid: `1 / (1 + exp(-5 * score))` so:
-   - score = 0.5 → confidence ≈ 0.92 (good)
-   - score = 0.0 → confidence = 0.50 (neutral)
-   - score = -0.3 → confidence ≈ 0.18 (clearly bad)
-2. [ ] Add interpretation labels: >0.7 "strong", 0.4-0.7 "moderate", <0.4 "weak"
-3. [ ] Include interpretation in analysis output JSON
-4. [ ] Update tests
-
-**Acceptance Criteria:**
-- [ ] Negative silhouette scores map to clearly low confidence (<0.3)
-- [ ] Positive scores above 0.5 map to high confidence (>0.9)
-- [ ] Interpretation labels included in output
-- [ ] All optimizer tests updated and passing
+- [ ] Docstring explains both signals and how they combine
+- [ ] Numerical examples show the mapping from inputs to outputs
+- [ ] Future maintainer can understand the heuristic without reading the original audit
 
 ---
 
 ### Phase 4 Testing Requirements
 
-- [ ] Confidence scoring tests across corpus sizes (small/medium/large)
-- [ ] Temporal decay tests with synthetic decision histories
-- [ ] Visualization generation (if matplotlib available)
-- [ ] Silhouette interpretation boundary tests
-- [ ] All 1,403+ existing tests pass
+- [ ] CI pipeline: verify workflow runs on test push
+- [ ] Contract tests: all analyzer classes pass
+- [ ] No behavioral changes in Phase 4 — existing tests sufficient
+- [ ] All 1,663+ existing tests pass with no regressions
 
 ### Phase 4 Completion Checklist
 
-- [ ] All work items complete
+- [ ] All 3 work items complete
+- [ ] CI pipeline running on GitHub
+- [ ] Contract tests in `tests/contract/` populated and passing
+- [ ] Elbow optimizer documented
 - [ ] All tests passing
-- [ ] CLAUDE.md updated with new flags and config options
-- [ ] No regressions introduced
+- [ ] CLAUDE.md updated if needed
 
 ---
 
@@ -699,11 +940,14 @@ Silhouette score normalized linearly from [-1, 1] to [0, 1] via `(score + 1) / 2
 
 | Work Item | Can Run With | Notes |
 |-----------|--------------|-------|
-| 1.4 (Checkpoint efficiency) | 1.1–1.3 | Independent of extraction rewiring |
-| 2.1 (Embedding text length) | 2.2, 2.3, 2.4 | Only changes model property |
-| 2.3 (Template matching) | 2.1, 2.2, 2.4 | Generator layer, no analyzer deps |
-| 3.1–3.6 (All Phase 3 items) | Each other | All independently scoped |
-| 4.1–4.4 (All Phase 4 items) | Each other | All independently scoped |
+| Phase 1 items (1.1–1.5) | Each other | All fully independent |
+| Phase 2 items (2.1–2.5) | Each other | All fully independent |
+| Phase 2 items | Phase 1 items | Phase 2 benefits from 1.3 constants but doesn't strictly require it |
+| 3.2 (Templates JSON) | 3.3 (Keywords config) | Independent externalization targets |
+| 3.1 (CLI split) | Nothing | Touches too many files; serialize with everything else |
+| Phase 4 items (4.1–4.3) | Each other | All fully independent |
+
+**Critical path:** Phase 1 → Phase 3.1 (CLI split needs constants from 1.3) → Phase 4.1 (CI validates final state)
 
 ---
 
@@ -711,50 +955,62 @@ Silhouette score normalized linearly from [-1, 1] to [0, 1] via `(score + 1) / 2
 
 | Risk | Likelihood | Impact | Mitigation Strategy |
 |------|------------|--------|---------------------|
-| Extraction rewiring breaks auth flow | Medium | High | Test with real M365 account before merging; keep GraphAPIClient unchanged |
-| Embedding cache invalidation loses user's work | Low | Medium | Warn user before invalidating; keep old cache as backup (.npz.bak) |
-| Template matching regex too strict | Low | Medium | Run against existing test corpus; compare match counts before/after |
-| Config model changes break existing YAML files | Medium | Medium | Ensure all new fields have defaults matching current behavior |
-| matplotlib dependency bloats install | Low | Low | Make optional (`[viz]` extra); degrade gracefully |
+| CLI split breaks command behavior | Medium | High | Mechanical refactor only — move code, don't rewrite; run full test suite after each command module |
+| Template JSON loading fails in packaged distribution | Low | Medium | Include in `pyproject.toml` package-data; test with `pip install -e .` |
+| Batch loop extraction introduces subtle behavior change | Low | High | Run extractors against mock API before and after; diff extraction results |
+| CI sentence-transformers download makes tests slow | Medium | Low | Cache model in CI; or mock model in unit tests, use real model only in integration |
+| Config mapping misses an argument | Low | Medium | Add a test that verifies every CLI arg with a config counterpart is in the mapping |
 
 ---
 
 ## Success Metrics
 
-- [ ] All 4 phases completed
-- [ ] All acceptance criteria met across 19 work items
-- [ ] `PipelineService.run()` works end-to-end standalone (no Claude Code MCP dependency)
-- [ ] Test count maintained or increased (currently 1,403)
-- [ ] Coverage maintained or increased (currently 83%)
-- [ ] No hardcoded analysis thresholds remain in source code
-- [ ] False-positive template matches eliminated (visa/provisioning, etc.)
-- [ ] Embedding cache self-validates against model changes
+- [ ] All 4 phases completed (16 work items)
+- [ ] All acceptance criteria met
+- [ ] `src/cli.py` monolith eliminated — replaced by ~10 files averaging 150–250 lines
+- [ ] `src/main.py` legacy code removed (565 lines deleted)
+- [ ] Zero duplicated stop word lists, magic numbers, or confidence score mappings
+- [ ] Category templates editable without code changes
+- [ ] Sender classification keywords configurable via YAML
+- [ ] Rate limiting detected by exception type, not string matching
+- [ ] CI pipeline enforcing lint + test + coverage on every push
+- [ ] Test count maintained or increased (currently 1,663)
+- [ ] Coverage maintained or increased (currently 86%)
 
 ---
 
 ## Appendix: Requirement Traceability
 
-| Requirement | Source | Phase | Work Item |
-|-------------|--------|-------|-----------|
-| FR-001 (M365 connection) | spec.md | 1 | 1.1 |
-| FR-002 (Pagination) | spec.md | 1, 3 | 1.1, 3.6 |
-| FR-003 (Email details) | spec.md | 1 | 1.1 |
-| FR-004 (HTML to text) | spec.md | 3 | 3.3 |
-| FR-010 (Checkpoint) | spec.md | 1 | 1.4 |
-| FR-015 (Semantic analysis) | spec.md | 2, 4 | 2.1, 4.3 |
-| FR-016 (Cluster config) | spec.md | 2 | 2.4 |
-| FR-017 (Representative samples) | spec.md | 2 | 2.1 |
-| FR-024 (Templates) | spec.md | 2 | 2.3 |
-| FR-025 (Confidence scores) | spec.md | 4 | 4.1 |
-| FR-036 (Save approved) | spec.md | 3 | 3.4 |
-| DRY (code quality) | Analysis | 1, 2 | 1.3, 2.5 |
-| Magic numbers | Analysis | 2 | 2.2 |
-| Cache versioning | Analysis | 3 | 3.1 |
-| Thread robustness | Analysis | 3 | 3.2 |
-| Learning quality | Analysis | 4 | 4.2 |
-| Clustering transparency | Analysis | 4 | 4.3, 4.4 |
+| Audit Finding | Severity | Phase | Work Item |
+|---------------|----------|-------|-----------|
+| H1: CLI god module (2,424 lines) | High | 3 | 3.1 |
+| H2: Batch loop duplication in BaseExtractor | High | 2 | 2.1 |
+| H3: Dead code in AnalysisService | High | 1 | 1.1 |
+| M1: Stop word lists duplicated across 3 modules | Medium | 1 | 1.2 |
+| M2: Magic numbers scattered throughout | Medium | 1 | 1.3 |
+| M3: Hardcoded sender classification keywords | Medium | 3 | 3.3 |
+| M4: ExtractionService M365/Gmail branches identical | Medium | 2 | 2.2 |
+| M5: Config application uses manual hasattr checks | Medium | 2 | 2.3 |
+| M6: Domain stripping hardcodes .com only | Medium | 2 | 2.4 |
+| M7: CategoryTemplate is 294-line source constant | Medium | 3 | 3.2 |
+| M8: Source confidence scores duplicated | Medium | 1 | 1.4 |
+| M9: Rate limit detection via string matching | Medium | 2 | 2.5 |
+| L1: src/main.py is legacy, overlaps with cli.py | Low | 1 | 1.5 |
+| L2: Empty contract test directory | Low | 4 | 4.2 |
+| L3: No pre-commit hooks or CI pipeline | Low | 4 | 4.1 |
+| L7: Elbow optimizer confidence calculation ad-hoc | Low | 4 | 4.3 |
+
+**Items requiring no change (documented in audit, excluded from plan):**
+- L4: Union-Find lacks union-by-rank — path compression sufficient for 10K–50K corpus
+- L5: SuggestionService pass-through — kept for architectural consistency
+- L6: Template matcher regex cache not thread-safe — single-threaded usage
+
+**Long-term considerations (not in this plan):**
+- LT2: Register own Azure App — when headless/scheduled operation needed
+- LT3: Evaluate SQLite for corpus — when corpus exceeds 20K+ emails
+- LT4: Property-based contract tests with Hypothesis — when adding new implementations
 
 ---
 
-*Implementation plan generated by Claude on 2026-02-13*
-*Source: Deep codebase analysis (4 parallel agent sweeps) + spec.md + RECOMMENDATIONS.md*
+*Implementation plan generated by Claude on 2026-02-15*
+*Source: Architectural audit (4 parallel agent sweeps) + findings walkthrough + user clarifications*
