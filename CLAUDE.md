@@ -42,7 +42,7 @@ python -m src.cli config validate
 
 ## Architecture
 
-This system extracts emails from M365/Hotmail, analyzes patterns, and generates category suggestions through a four-stage pipeline:
+This system extracts emails from M365/Hotmail, analyzes patterns, and generates category suggestions through a five-stage pipeline:
 
 ```
 Extract → Analyze → Suggest → Review → Export

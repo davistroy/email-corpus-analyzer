@@ -18,13 +18,13 @@ This expands to `C:\Users\YourUsername\data\outputs` on Windows or `/home/yourus
 
 ```bash
 # Extract from Hotmail and run full pipeline
-python -m src.cli pipeline --user-email troy.davis@hotmail.com
+python -m src.cli pipeline --user-email user@hotmail.com
 
 # Extract from Gmail instead
 python -m src.cli pipeline --user-email your.email@gmail.com --source gmail
 
 # Extract from both accounts
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
+python -m src.cli pipeline --user-email user@hotmail.com --source both --gmail-email your.email@gmail.com
 ```
 
 On first run, you'll be prompted to authenticate in your browser. Tokens are cached for future runs.
@@ -79,16 +79,16 @@ Extract emails from Hotmail/Outlook.com or Gmail inbox.
 **Basic Usage:**
 ```bash
 # From Hotmail (default)
-python -m src.cli extract --user-email troy.davis@hotmail.com
+python -m src.cli extract --user-email user@hotmail.com
 
 # From Gmail
 python -m src.cli extract --user-email your.email@gmail.com --source gmail
 
 # From both
-python -m src.cli extract --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
+python -m src.cli extract --user-email user@hotmail.com --source both --gmail-email your.email@gmail.com
 
 # Incremental (only new emails since last extraction)
-python -m src.cli extract --user-email troy.davis@hotmail.com --since-last
+python -m src.cli extract --user-email user@hotmail.com --since-last
 ```
 
 **All Options:**
@@ -145,6 +145,7 @@ python -m src.cli [--output-dir DIR] analyze \
   [--auto-clusters] \
   [--cluster-method {elbow,silhouette}] \
   [--incremental] \
+  [--cluster-viz] \
   [--analysis-file PATH]
 ```
 
@@ -154,11 +155,13 @@ python -m src.cli [--output-dir DIR] analyze \
 - `--auto-clusters`: Automatically determine optimal cluster count
 - `--cluster-method`: Method for auto-clustering — `silhouette` (default) or `elbow`
 - `--incremental`: Only process new emails using cached embeddings
+- `--cluster-viz`: Generate cluster visualization PNG (requires matplotlib)
 - `--analysis-file`: Custom analysis results path
 
 **Output Files:**
 - `corpus_analysis_results.json` - Combined results from all analyzers
 - `embeddings_cache.npz` - Cached embeddings for incremental analysis
+- `cluster_visualization.png` - Cluster scatter plot (only with `--cluster-viz`)
 
 ---
 
@@ -268,16 +271,16 @@ Run complete end-to-end workflow: extract → analyze → suggest → review.
 **Basic Usage:**
 ```bash
 # Hotmail pipeline
-python -m src.cli pipeline --user-email troy.davis@hotmail.com
+python -m src.cli pipeline --user-email user@hotmail.com
 
 # Gmail pipeline
 python -m src.cli pipeline --user-email your.email@gmail.com --source gmail
 
 # Both accounts
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --source both --gmail-email your.email@gmail.com
+python -m src.cli pipeline --user-email user@hotmail.com --source both --gmail-email your.email@gmail.com
 
 # Skip interactive review
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --skip-review
+python -m src.cli pipeline --user-email user@hotmail.com --skip-review
 ```
 
 **All Options:**
@@ -344,7 +347,7 @@ python -m src.cli config validate   # Validate configuration
 
 ```bash
 # One command — authenticates, extracts, analyzes, generates categories, reviews
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --auto-clusters
+python -m src.cli pipeline --user-email user@hotmail.com --auto-clusters
 ```
 
 ### Workflow 2: First-Time Gmail Analysis
@@ -358,7 +361,7 @@ python -m src.cli pipeline --user-email your.email@gmail.com --source gmail --au
 
 ```bash
 python -m src.cli pipeline \
-  --user-email troy.davis@hotmail.com \
+  --user-email user@hotmail.com \
   --source both \
   --gmail-email your.email@gmail.com \
   --auto-clusters
@@ -368,7 +371,7 @@ python -m src.cli pipeline \
 
 ```bash
 # Step 1: Extract
-python -m src.cli extract --user-email troy.davis@hotmail.com
+python -m src.cli extract --user-email user@hotmail.com
 
 # Step 2: Analyze with auto-clustering
 python -m src.cli analyze --auto-clusters
@@ -388,7 +391,7 @@ python -m src.cli export --format outlook-rules
 
 ```bash
 # Fetch only new emails since last extraction
-python -m src.cli extract --user-email troy.davis@hotmail.com --since-last
+python -m src.cli extract --user-email user@hotmail.com --since-last
 
 # Re-analyze with new data (uses cached embeddings for old emails)
 python -m src.cli analyze --incremental --auto-clusters
@@ -402,15 +405,15 @@ python -m src.cli review
 
 ```bash
 # If extraction was interrupted, just run again — it resumes from checkpoint
-python -m src.cli extract --user-email troy.davis@hotmail.com
+python -m src.cli extract --user-email user@hotmail.com
 ```
 
 ### Workflow 7: Dry Run (Preview)
 
 ```bash
 # See what each command would do without executing
-python -m src.cli extract --user-email troy.davis@hotmail.com --dry-run
-python -m src.cli pipeline --user-email troy.davis@hotmail.com --dry-run
+python -m src.cli extract --user-email user@hotmail.com --dry-run
+python -m src.cli pipeline --user-email user@hotmail.com --dry-run
 ```
 
 ---
