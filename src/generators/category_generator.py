@@ -20,7 +20,9 @@ from src.learning.pattern_detector import PatternDetector, PatternType
 from src.models.analysis_results import AnalysisResults
 from src.models.category import Category, CategorySource
 from src.models.category_template import PREDEFINED_TEMPLATES
+from src.utils.constants import NAME_QUALITY_REVIEW_THRESHOLD
 from src.utils.logger import get_logger
+from src.utils.text import STOP_WORDS
 
 if TYPE_CHECKING:
     from src.config.models import GeneratorThresholds
@@ -28,7 +30,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 # Threshold below which names are flagged for review
-NAME_QUALITY_THRESHOLD = 0.4
+NAME_QUALITY_THRESHOLD = NAME_QUALITY_REVIEW_THRESHOLD
 
 
 class CategoryGenerator:
@@ -538,25 +540,11 @@ class CategoryGenerator:
         import re
         from collections import Counter
 
-        # Simple stop words
-        stop_words = {
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-            'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it',
-            'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how',
-            'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
-            'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-            'than', 'too', 'very', 'just', 'your', 'our', 'my', 'for', 'and',
-            'but', 'or', 'of', 'to', 'in', 'on', 'at', 'by', 'from', 'with',
-            're', 'fwd', 'fw',
-        }
-
-        word_counts = Counter()
+        word_counts: Counter[str] = Counter()
         for text in texts:
             words = re.findall(r'\b[a-z]+\b', text.lower())
             for word in words:
-                if len(word) > 3 and word not in stop_words:
+                if len(word) > 3 and word not in STOP_WORDS:
                     word_counts[word] += 1
 
         # Return most common words

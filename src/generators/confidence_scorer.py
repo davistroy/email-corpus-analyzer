@@ -12,9 +12,20 @@ import logging
 import math
 from dataclasses import dataclass
 
+from src.utils.constants import VOLUME_LOG_BASE
+
 from ..models.category import Category, CategorySource
 
 logger = logging.getLogger(__name__)
+
+# Single definition of source-type-to-reliability mapping.
+# Used by both calculate_confidence() and calculate_confidence_enhanced().
+SOURCE_RELIABILITY_SCORES: dict[CategorySource, float] = {
+    CategorySource.TEMPLATE: 0.9,
+    CategorySource.CONTENT_CLUSTER: 0.8,
+    CategorySource.SENDER: 0.7,
+    CategorySource.CUSTOM: 0.5,
+}
 
 
 @dataclass
@@ -85,17 +96,11 @@ def calculate_confidence(category: Category, total_emails: int) -> float:
 
     # Calculate volume score: logarithmic scaling so 100 emails = 1.0, 10 ≈ 0.5
     email_count = category.email_count or 0
-    volume_score = min(1.0, math.log10(email_count + 1) / math.log10(101))
+    volume_score = min(1.0, math.log10(email_count + 1) / math.log10(VOLUME_LOG_BASE))
     logger.debug("  volume_score: %.3f (email_count=%d)", volume_score, email_count)
 
     # Calculate source score based on CategorySource
-    source_scores = {
-        CategorySource.TEMPLATE: 0.9,
-        CategorySource.CONTENT_CLUSTER: 0.8,
-        CategorySource.SENDER: 0.7,
-        CategorySource.CUSTOM: 0.5,
-    }
-    source_score = source_scores.get(category.source, 0.5)
+    source_score = SOURCE_RELIABILITY_SCORES.get(category.source, 0.5)
     logger.debug("  source_score: %.3f (source=%s)", source_score, category.source)
 
     # Calculate percentage score: 10% of corpus = 1.0
@@ -163,17 +168,11 @@ def calculate_confidence_enhanced(
 
     # Calculate volume score: logarithmic scaling so 100 emails = 1.0, 10 ≈ 0.5
     email_count = category.email_count or 0
-    volume_score = min(1.0, math.log10(email_count + 1) / math.log10(101))
+    volume_score = min(1.0, math.log10(email_count + 1) / math.log10(VOLUME_LOG_BASE))
     logger.debug("  volume_score: %.3f (email_count=%d)", volume_score, email_count)
 
     # Calculate source score based on CategorySource
-    source_scores = {
-        CategorySource.TEMPLATE: 0.9,
-        CategorySource.CONTENT_CLUSTER: 0.8,
-        CategorySource.SENDER: 0.7,
-        CategorySource.CUSTOM: 0.5,
-    }
-    source_score = source_scores.get(category.source, 0.5)
+    source_score = SOURCE_RELIABILITY_SCORES.get(category.source, 0.5)
     logger.debug("  source_score: %.3f (source=%s)", source_score, category.source)
 
     # Calculate percentage score: 10% of corpus = 1.0

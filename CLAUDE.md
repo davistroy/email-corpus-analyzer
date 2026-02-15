@@ -120,7 +120,6 @@ All models in `src/models/` use Pydantic v2. Key models:
 ### Entry Points
 
 - `src/cli.py` - Primary CLI entry point (`python -m src.cli`)
-- `src/main.py` - Alternative entry point with `EmailProcessorCLI` class
 
 ### CLI Commands
 

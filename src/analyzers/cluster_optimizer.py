@@ -16,6 +16,8 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples, silhouette_score
 
+from src.utils.constants import SIGMOID_STEEPNESS
+
 from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -78,7 +80,7 @@ def silhouette_to_confidence(score: float) -> float:
     Returns:
         Confidence value in (0, 1).
     """
-    return 1.0 / (1.0 + math.exp(-5.0 * score))
+    return 1.0 / (1.0 + math.exp(-SIGMOID_STEEPNESS * score))
 
 
 def interpret_silhouette(score: float) -> str:

@@ -23,6 +23,12 @@ from pathlib import Path
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
+from src.utils.constants import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_CHECKPOINT_INTERVAL,
+    EMAIL_COUNT_SENTINEL,
+    MAX_BACKOFF_SECONDS,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -158,7 +164,7 @@ class BaseExtractor(ABC):
         Returns:
             Total email count or sentinel value
         """
-        return 999999
+        return EMAIL_COUNT_SENTINEL
 
     def _fetch_incremental_batch(
         self,
@@ -186,8 +192,8 @@ class BaseExtractor(ABC):
 
     def extract_all(
         self,
-        max_batch_size: int = 500,
-        checkpoint_interval: int = 100,
+        max_batch_size: int = DEFAULT_BATCH_SIZE,
+        checkpoint_interval: int = DEFAULT_CHECKPOINT_INTERVAL,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> ExtractionResult:
         """
@@ -332,8 +338,8 @@ class BaseExtractor(ABC):
     def extract_incremental(
         self,
         existing_corpus: Corpus,
-        max_batch_size: int = 500,
-        checkpoint_interval: int = 100,
+        max_batch_size: int = DEFAULT_BATCH_SIZE,
+        checkpoint_interval: int = DEFAULT_CHECKPOINT_INTERVAL,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> IncrementalExtractionResult:
         """
@@ -482,7 +488,7 @@ class BaseExtractor(ABC):
         Args:
             attempt: Current attempt number (used for backoff calculation)
         """
-        backoff_seconds = min(2 ** attempt, 8)  # Max 8 seconds
+        backoff_seconds = min(2 ** attempt, MAX_BACKOFF_SECONDS)
         self.logger.warning(f"Rate limited, backing off for {backoff_seconds} seconds")
         time.sleep(backoff_seconds)
 

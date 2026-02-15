@@ -23,6 +23,16 @@ from src.models.corpus import Corpus
 
 logger = logging.getLogger(__name__)
 
+# Maps each analyzer type to its corresponding AnalysisResults field name.
+# This is the single source of truth for analyzer-to-result-field mapping.
+_ANALYZER_RESULT_FIELDS: dict[type[BaseAnalyzer], str] = {
+    SenderAnalyzer: "sender_analysis",
+    SubjectAnalyzer: "subject_patterns",
+    TemporalAnalyzer: "temporal_patterns",
+    VolumeAnalyzer: "volume_stats",
+    SemanticAnalyzer: "content_clusters",
+}
+
 
 class AnalysisService:
     """
@@ -43,14 +53,23 @@ class AnalysisService:
         self._analyzers = self._build_analyzers()
 
     def _build_analyzers(self) -> list[BaseAnalyzer]:
-        """Build list of analyzer instances."""
+        """
+        Build list of analyzer instances.
+
+        This is the single source of truth for which analyzers run.
+        To add a new analyzer, add it here and add its result field
+        mapping to _ANALYZER_RESULT_FIELDS.
+        """
         thresholds = self.config.thresholds
         return [
             SenderAnalyzer(thresholds=thresholds),
             SubjectAnalyzer(thresholds=thresholds),
             TemporalAnalyzer(thresholds=thresholds),
             VolumeAnalyzer(),
-            # SemanticAnalyzer is handled separately due to special config
+            SemanticAnalyzer(
+                max_embedding_text_length=self.config.max_embedding_text_length,
+                thresholds=thresholds,
+            ),
         ]
 
     def run(
@@ -76,55 +95,29 @@ class AnalysisService:
         if not corpus.emails:
             raise ValueError("Cannot analyze empty corpus")
 
-        thresholds = self.config.thresholds
-
         if progress_callback:
             progress_callback("Starting analysis...")
 
-        # Run standard analyzers
-        if progress_callback:
-            progress_callback(f"Running {self._analyzers[0].name}...")
+        results = {}
 
-        sender_analysis = SenderAnalyzer(thresholds=thresholds).analyze(corpus)
+        for analyzer in self._analyzers:
+            if progress_callback:
+                progress_callback(f"Running {analyzer.name}...")
 
-        if progress_callback:
-            progress_callback("Running Subject Analyzer...")
+            # SemanticAnalyzer requires additional kwargs (num_clusters)
+            kwargs: dict = {}
+            if isinstance(analyzer, SemanticAnalyzer):
+                kwargs["num_clusters"] = self.config.num_clusters
 
-        subject_patterns = SubjectAnalyzer(thresholds=thresholds).analyze(corpus)
+            result = analyzer.analyze(corpus, **kwargs)
 
-        if progress_callback:
-            progress_callback("Running Temporal Analyzer...")
-
-        temporal_patterns = TemporalAnalyzer(thresholds=thresholds).analyze(corpus)
-
-        if progress_callback:
-            progress_callback("Running Volume Analyzer...")
-
-        volume_stats = VolumeAnalyzer().analyze(corpus)
-
-        # Run semantic analyzer
-        if progress_callback:
-            progress_callback("Running Semantic Analyzer...")
-
-        semantic_analyzer = SemanticAnalyzer(
-            max_embedding_text_length=self.config.max_embedding_text_length,
-            thresholds=thresholds,
-        )
-        content_clusters = semantic_analyzer.analyze(
-            corpus,
-            num_clusters=self.config.num_clusters,
-        )
+            field_name = _ANALYZER_RESULT_FIELDS[type(analyzer)]
+            results[field_name] = result
 
         if progress_callback:
             progress_callback("Analysis complete!")
 
-        return AnalysisResults(
-            sender_analysis=sender_analysis,
-            subject_patterns=subject_patterns,
-            content_clusters=content_clusters,
-            temporal_patterns=temporal_patterns,
-            volume_stats=volume_stats,
-        )
+        return AnalysisResults(**results)
 
 
 __all__ = ["AnalysisService"]

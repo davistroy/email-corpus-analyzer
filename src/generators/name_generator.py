@@ -9,52 +9,9 @@ from dataclasses import dataclass
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from src.utils.logger import get_logger
+from src.utils.text import ACTION_WORDS, GENERIC_WORDS, KNOWN_PROPER_NOUNS, STOP_WORDS
 
 logger = get_logger(__name__)
-
-
-# Stop words to filter from generated names
-STOP_WORDS = frozenset([
-    # Common English stop words
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-    "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
-    "used", "this", "that", "these", "those", "i", "you", "he", "she", "it",
-    "we", "they", "what", "which", "who", "whom", "whose", "when", "where",
-    "why", "how", "all", "each", "every", "both", "few", "more", "most",
-    "other", "some", "such", "no", "not", "only", "same", "so", "than",
-    "too", "very", "just", "also", "now", "here", "there", "then", "once",
-    # Email-specific common words
-    "email", "emails", "mail", "message", "messages", "subject", "re", "fwd",
-    "fw", "sent", "received", "please", "thanks", "thank", "regards", "hi",
-    "hello", "dear", "sincerely", "best", "am", "pm", "your", "our", "my",
-])
-
-# Generic words that indicate poor category names
-GENERIC_WORDS = frozenset([
-    "category", "related", "miscellaneous", "other", "various", "general",
-    "stuff", "things", "items", "emails", "messages", "mail", "type", "kind",
-])
-
-# Action words that indicate good category names
-ACTION_WORDS = frozenset([
-    "update", "updates", "notification", "notifications", "alert", "alerts",
-    "confirmation", "confirmations", "reminder", "reminders", "request",
-    "requests", "shipping", "shipped", "delivery", "delivered", "payment",
-    "paid", "invoice", "invoiced", "order", "ordered", "receipt", "report",
-    "reports", "summary", "weekly", "daily", "monthly", "newsletter",
-])
-
-# Known proper nouns (brands, companies) for bonus scoring
-KNOWN_PROPER_NOUNS = frozenset([
-    "amazon", "google", "microsoft", "apple", "facebook", "twitter", "linkedin",
-    "github", "slack", "zoom", "netflix", "spotify", "uber", "lyft", "paypal",
-    "venmo", "chase", "wells", "fargo", "citi", "capital", "american", "express",
-    "mastercard", "visa", "discover", "walmart", "target", "costco", "ebay",
-    "etsy", "shopify", "stripe", "square", "dropbox", "box", "salesforce",
-    "hubspot", "mailchimp", "constant", "contact", "sendgrid", "twilio",
-])
 
 
 @dataclass

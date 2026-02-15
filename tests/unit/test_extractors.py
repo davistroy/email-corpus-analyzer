@@ -15,6 +15,7 @@ from src.extractors.checkpoint_manager import CheckpointManager
 from src.extractors.m365_extractor import EmailExtractor, ExtractionError, ExtractionResult
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
+from src.utils.constants import EMAIL_COUNT_SENTINEL
 
 
 class TestCheckpointManager:
@@ -573,7 +574,7 @@ class TestEmailExtractor:
         self, mock_fetch_batch, mock_get_count, extractor
     ):
         """Test that empty batch result stops pagination."""
-        mock_get_count.return_value = 999999  # Large sentinel
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL  # Large sentinel
         mock_fetch_batch.return_value = []
 
         result = extractor.extract_all()
@@ -770,7 +771,7 @@ class TestEmailExtractorResume:
             checkpoint_dir=str(tmp_path)
         )
 
-        mock_get_count.return_value = 999999
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         mock_fetch_batch.return_value = []
 
         result = extractor.extract_all()
@@ -818,7 +819,7 @@ class TestEmailExtractorRetryLogic:
         self, mock_fetch_batch, mock_get_count, extractor, valid_email_data
     ):
         """Test that receiving fewer emails than requested stops pagination."""
-        mock_get_count.return_value = 999999
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         # Return fewer than requested batch size
         mock_fetch_batch.return_value = [valid_email_data] * 3  # Less than batch_size of 10
 
@@ -834,7 +835,7 @@ class TestEmailExtractorRetryLogic:
         self, mock_fetch_batch, mock_get_count, extractor, valid_email_data
     ):
         """Test that receiving exact batch size continues pagination."""
-        mock_get_count.return_value = 999999
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         # First batch: exact size, second batch: empty
         mock_fetch_batch.side_effect = [
             [valid_email_data] * 10,  # Exact batch size
@@ -852,7 +853,7 @@ class TestEmailExtractorRetryLogic:
         self, mock_fetch_batch, mock_get_count, extractor, valid_email_data
     ):
         """Test checkpoint is saved exactly at interval."""
-        mock_get_count.return_value = 999999
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         # Return 100 emails to hit checkpoint at exactly 100
         mock_fetch_batch.side_effect = [
             [valid_email_data] * 100,
@@ -1230,8 +1231,8 @@ class TestEmailExtractorEdgeCases:
 
             count = extractor._get_total_email_count()
 
-            # Returns 999999 sentinel since M365 doesn't provide count
-            assert count == 999999
+            # Returns EMAIL_COUNT_SENTINEL since M365 doesn't provide count
+            assert count == EMAIL_COUNT_SENTINEL
 
 
 class TestCorpusMetadataEnhancements:
@@ -1452,7 +1453,7 @@ class TestIntegrationScenarios:
         self, mock_fetch_batch, mock_get_count, extractor
     ):
         """Test extraction across multiple batches."""
-        mock_get_count.return_value = 999999
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
 
         # First batch: 50 emails, second batch: 30 emails, third batch: empty
         batch1 = [{

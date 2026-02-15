@@ -261,6 +261,41 @@ class TestAnalysisServiceAnalyzers:
         assert "Subject Analyzer" in analyzer_names
         assert "Temporal Analyzer" in analyzer_names
         assert "Volume Analyzer" in analyzer_names
+        assert "Semantic Analyzer" in analyzer_names
+
+    def test_build_analyzers_is_single_source_of_truth(self):
+        """Test that _build_analyzers includes all 5 analyzers used by run()."""
+        from src.services.analysis_service import AnalysisService
+
+        config = AnalyzeConfig(num_clusters=3)
+        service = AnalysisService(config)
+
+        # Exactly 5 analyzers should be built
+        assert len(service._analyzers) == 5
+
+    def test_build_analyzers_includes_semantic_analyzer(self):
+        """Test that SemanticAnalyzer is built with correct config."""
+        from src.analyzers import SemanticAnalyzer
+        from src.services.analysis_service import AnalysisService
+
+        config = AnalyzeConfig(max_embedding_text_length=2000)
+        service = AnalysisService(config)
+
+        semantic = [a for a in service._analyzers if isinstance(a, SemanticAnalyzer)]
+        assert len(semantic) == 1
+        assert semantic[0].max_embedding_text_length == 2000
+
+    def test_all_analyzers_have_result_field_mapping(self):
+        """Test that every analyzer in the list has a result field mapping."""
+        from src.services.analysis_service import AnalysisService, _ANALYZER_RESULT_FIELDS
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+
+        for analyzer in service._analyzers:
+            assert type(analyzer) in _ANALYZER_RESULT_FIELDS, (
+                f"{analyzer.name} has no entry in _ANALYZER_RESULT_FIELDS"
+            )
 
 
 # =============================================================================

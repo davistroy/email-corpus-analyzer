@@ -1307,3 +1307,163 @@ class TestLogExtractionError:
 
         default_log = tmp_path / "outputs" / "extraction_errors.log"
         assert default_log.exists()
+
+
+class TestSharedTextWordLists:
+    """Tests for src.utils.text shared word lists.
+
+    Verifies that the unified word lists contain every word that was
+    previously defined independently in name_generator.py,
+    subject_analyzer.py, and category_generator.py.
+    """
+
+    def test_stop_words_contains_all_name_generator_words(self):
+        """Shared STOP_WORDS must contain every word from the old name_generator list."""
+        from src.utils.text import STOP_WORDS
+
+        old_name_generator_stops = frozenset([
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
+            "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
+            "used", "this", "that", "these", "those", "i", "you", "he", "she", "it",
+            "we", "they", "what", "which", "who", "whom", "whose", "when", "where",
+            "why", "how", "all", "each", "every", "both", "few", "more", "most",
+            "other", "some", "such", "no", "not", "only", "same", "so", "than",
+            "too", "very", "just", "also", "now", "here", "there", "then", "once",
+            "email", "emails", "mail", "message", "messages", "subject", "re", "fwd",
+            "fw", "sent", "received", "please", "thanks", "thank", "regards", "hi",
+            "hello", "dear", "sincerely", "best", "am", "pm", "your", "our", "my",
+        ])
+
+        missing = old_name_generator_stops - STOP_WORDS
+        assert not missing, f"Words missing from shared STOP_WORDS: {missing}"
+
+    def test_stop_words_contains_all_subject_analyzer_words(self):
+        """Shared STOP_WORDS must contain every word from the old subject_analyzer list."""
+        from src.utils.text import STOP_WORDS
+
+        old_subject_analyzer_stops = {
+            'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
+            'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
+            'to', 'was', 'will', 'with', 'you', 'your', 'have', 'this', 'but',
+            'or', 'not', 'can', 'we', 'all', 'been', 'were', 'when', 'what',
+            'which', 'who', 'if', 'out', 'so', 'up', 'there', 'their', 'they',
+            'me', 'my', 'our', 'us', 'am', 'i', 'them',
+        }
+
+        missing = old_subject_analyzer_stops - STOP_WORDS
+        assert not missing, f"Words missing from shared STOP_WORDS: {missing}"
+
+    def test_stop_words_contains_all_category_generator_words(self):
+        """Shared STOP_WORDS must contain every word from the old category_generator list."""
+        from src.utils.text import STOP_WORDS
+
+        old_category_generator_stops = {
+            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+            'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
+            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it',
+            'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how',
+            'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
+            'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+            'than', 'too', 'very', 'just', 'your', 'our', 'my', 'for', 'and',
+            'but', 'or', 'of', 'to', 'in', 'on', 'at', 'by', 'from', 'with',
+            're', 'fwd', 'fw',
+        }
+
+        missing = old_category_generator_stops - STOP_WORDS
+        assert not missing, f"Words missing from shared STOP_WORDS: {missing}"
+
+    def test_stop_words_is_frozenset(self):
+        """STOP_WORDS must be a frozenset to prevent accidental mutation."""
+        from src.utils.text import STOP_WORDS
+        assert isinstance(STOP_WORDS, frozenset)
+
+    def test_generic_words_contains_all_original_words(self):
+        """Shared GENERIC_WORDS must contain all original name_generator words."""
+        from src.utils.text import GENERIC_WORDS
+
+        original = frozenset([
+            "category", "related", "miscellaneous", "other", "various", "general",
+            "stuff", "things", "items", "emails", "messages", "mail", "type", "kind",
+        ])
+        missing = original - GENERIC_WORDS
+        assert not missing, f"Words missing from shared GENERIC_WORDS: {missing}"
+
+    def test_generic_words_is_frozenset(self):
+        """GENERIC_WORDS must be a frozenset."""
+        from src.utils.text import GENERIC_WORDS
+        assert isinstance(GENERIC_WORDS, frozenset)
+
+    def test_action_words_contains_all_original_words(self):
+        """Shared ACTION_WORDS must contain all original name_generator words."""
+        from src.utils.text import ACTION_WORDS
+
+        original = frozenset([
+            "update", "updates", "notification", "notifications", "alert", "alerts",
+            "confirmation", "confirmations", "reminder", "reminders", "request",
+            "requests", "shipping", "shipped", "delivery", "delivered", "payment",
+            "paid", "invoice", "invoiced", "order", "ordered", "receipt", "report",
+            "reports", "summary", "weekly", "daily", "monthly", "newsletter",
+        ])
+        missing = original - ACTION_WORDS
+        assert not missing, f"Words missing from shared ACTION_WORDS: {missing}"
+
+    def test_action_words_is_frozenset(self):
+        """ACTION_WORDS must be a frozenset."""
+        from src.utils.text import ACTION_WORDS
+        assert isinstance(ACTION_WORDS, frozenset)
+
+    def test_known_proper_nouns_contains_all_original_words(self):
+        """Shared KNOWN_PROPER_NOUNS must contain all original name_generator brands."""
+        from src.utils.text import KNOWN_PROPER_NOUNS
+
+        original = frozenset([
+            "amazon", "google", "microsoft", "apple", "facebook", "twitter", "linkedin",
+            "github", "slack", "zoom", "netflix", "spotify", "uber", "lyft", "paypal",
+            "venmo", "chase", "wells", "fargo", "citi", "capital", "american", "express",
+            "mastercard", "visa", "discover", "walmart", "target", "costco", "ebay",
+            "etsy", "shopify", "stripe", "square", "dropbox", "box", "salesforce",
+            "hubspot", "mailchimp", "constant", "contact", "sendgrid", "twilio",
+        ])
+        missing = original - KNOWN_PROPER_NOUNS
+        assert not missing, f"Words missing from shared KNOWN_PROPER_NOUNS: {missing}"
+
+    def test_known_proper_nouns_is_frozenset(self):
+        """KNOWN_PROPER_NOUNS must be a frozenset."""
+        from src.utils.text import KNOWN_PROPER_NOUNS
+        assert isinstance(KNOWN_PROPER_NOUNS, frozenset)
+
+    def test_module_specific_extension_pattern(self):
+        """Verify modules can extend shared sets without mutating the original."""
+        from src.utils.text import STOP_WORDS
+
+        original_len = len(STOP_WORDS)
+        extended = STOP_WORDS | {"custom_module_word"}
+
+        assert "custom_module_word" in extended
+        assert "custom_module_word" not in STOP_WORDS
+        assert len(STOP_WORDS) == original_len
+
+    def test_name_generator_imports_from_shared(self):
+        """Verify name_generator uses the shared word lists, not local ones."""
+        import src.generators.name_generator as ng
+        from src.utils.text import (
+            ACTION_WORDS,
+            GENERIC_WORDS,
+            KNOWN_PROPER_NOUNS,
+            STOP_WORDS,
+        )
+
+        assert ng.STOP_WORDS is STOP_WORDS
+        assert ng.GENERIC_WORDS is GENERIC_WORDS
+        assert ng.ACTION_WORDS is ACTION_WORDS
+        assert ng.KNOWN_PROPER_NOUNS is KNOWN_PROPER_NOUNS
+
+    def test_subject_analyzer_uses_shared_stop_words(self):
+        """Verify SubjectAnalyzer.STOP_WORDS references the shared set."""
+        from src.analyzers.subject_analyzer import SubjectAnalyzer
+        from src.utils.text import STOP_WORDS
+
+        assert SubjectAnalyzer.STOP_WORDS is STOP_WORDS
