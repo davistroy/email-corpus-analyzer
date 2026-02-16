@@ -3,7 +3,10 @@ import argparse
 import time
 from pathlib import Path
 
-from src.cli.formatters import _generate_cluster_viz, _show_cluster_analysis, output_json
+from src.cache.embedding_cache import EmbeddingCache
+from src.cli.formatters import _show_cluster_analysis, output_json
+from src.config.models import AnalyzeConfig
+from src.services.analysis_service import AnalysisService
 from src.utils.file_manager import load_json, save_json
 from src.utils.logger import get_logger
 from src.utils.paths import PathConfig
@@ -102,9 +105,31 @@ Note: --auto-clusters and --num-clusters are mutually exclusive.
     return analyze_parser
 
 
+def _build_analyze_config(args: argparse.Namespace) -> AnalyzeConfig:
+    """
+    Build an AnalyzeConfig from parsed CLI arguments.
+
+    Maps CLI argument names to AnalyzeConfig fields. Only sets fields
+    that exist on the args namespace.
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        AnalyzeConfig with values from CLI args
+    """
+    return AnalyzeConfig(
+        num_clusters=args.num_clusters,
+    )
+
+
 def cmd_analyze(args: argparse.Namespace) -> int:
     """
     Execute corpus analysis command.
+
+    Routes all analysis through AnalysisService. The CLI layer handles
+    only: parsing args, building config, calling the service, and
+    formatting/saving output.
 
     Args:
         args: Parsed command-line arguments
@@ -136,7 +161,6 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
         return 0
 
-    from src.analyzers import run_full_analysis
     from src.models.corpus import Corpus
 
     start_time = time.time()
@@ -173,26 +197,35 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if getattr(args, 'cluster_analysis', False):
         return _show_cluster_analysis(corpus, args)
 
-    # Handle --incremental flag (Task 4B.4)
-    if getattr(args, 'incremental', False):
-        return _cmd_analyze_incremental(args, corpus, analysis_path, start_time)
+    # Build config and service
+    config = _build_analyze_config(args)
+    service = AnalysisService(config)
 
-    # Run analysis
+    # Prepare embedding cache for incremental mode
+    embedding_cache = None
+    incremental = getattr(args, 'incremental', False)
+    if incremental:
+        logger.info("=== INCREMENTAL ANALYSIS (--incremental) ===")
+        cache_path = PathConfig.get_output_dir() / "embeddings_cache.npz"
+        embedding_cache = EmbeddingCache(cache_path=cache_path)
+        logger.info(f"Embedding cache: {cache_path} ({embedding_cache.size} entries)")
+
+    # Run analysis through the service
     try:
-        results, _incremental_stats = run_full_analysis(
+        results, incremental_stats = service.run(
             corpus=corpus,
-            num_clusters=args.num_clusters,
             auto_clusters=getattr(args, 'auto_clusters', False),
-            cluster_method=getattr(args, 'cluster_method', 'silhouette')
+            cluster_method=getattr(args, 'cluster_method', 'silhouette'),
+            embedding_cache=embedding_cache,
+            cluster_viz=getattr(args, 'cluster_viz', False),
         )
+
+        # Save embedding cache if incremental
+        if incremental and embedding_cache is not None:
+            embedding_cache.save()
 
         # Save results
         save_json(results.model_dump(), analysis_path)
-
-        # Generate cluster visualization if requested (Task 4.3)
-        viz_path = None
-        if getattr(args, 'cluster_viz', False):
-            viz_path = _generate_cluster_viz(corpus, results)
 
         duration = time.time() - start_time
 
@@ -205,111 +238,38 @@ def cmd_analyze(args: argparse.Namespace) -> int:
                 "stats": {
                     "emails_analyzed": len(corpus.emails),
                     "clusters_generated": len(results.content_clusters),
-                    "unique_senders": results.sender_analysis.unique_senders
+                    "unique_senders": results.sender_analysis.unique_senders,
                 }
             }
-            if viz_path:
-                json_output["visualization_path"] = str(viz_path)
+            if incremental and incremental_stats:
+                json_output["incremental"] = True
+                json_output["stats"]["cached_embeddings"] = incremental_stats.get("cached_count", 0)
+                json_output["stats"]["generated_embeddings"] = incremental_stats.get("generated_count", 0)
             output_json(json_output)
         else:
-            logger.info("Analysis complete")
-            logger.info(f"  - {results.sender_analysis.unique_senders} unique senders")
-            logger.info(f"  - {len(results.content_clusters)} semantic clusters")
-            if viz_path:
-                logger.info(f"  - Cluster visualization: {viz_path}")
-
-        return 0
-
-    except Exception as e:
-        logger.error(f"Analysis failed: {e}", exc_info=True)
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "analyze",
-                "status": "error",
-                "error": str(e)
-            })
-        return 1
-
-
-def _cmd_analyze_incremental(
-    args: argparse.Namespace,
-    corpus,
-    analysis_path: Path,
-    start_time: float
-) -> int:
-    """
-    Execute incremental corpus analysis (Task 4B.4).
-
-    Args:
-        args: Parsed command-line arguments
-        corpus: Loaded corpus
-        analysis_path: Path for analysis output
-        start_time: Start time for duration calculation
-
-    Returns:
-        Exit code (0 = success, non-zero = error)
-    """
-    from src.analyzers import run_full_analysis
-    from src.cache.embedding_cache import EmbeddingCache
-
-    logger.info("=== INCREMENTAL ANALYSIS (--incremental) ===")
-
-    # Initialize embedding cache
-    cache_path = PathConfig.get_output_dir() / "embeddings_cache.npz"
-    embedding_cache = EmbeddingCache(cache_path=cache_path)
-
-    logger.info(f"Embedding cache: {cache_path} ({embedding_cache.size} entries)")
-
-    try:
-        results, incremental_stats = run_full_analysis(
-            corpus=corpus,
-            embedding_cache=embedding_cache,
-            num_clusters=args.num_clusters,
-            auto_clusters=getattr(args, 'auto_clusters', False),
-            cluster_method=getattr(args, 'cluster_method', 'silhouette')
-        )
-
-        # Save embedding cache
-        embedding_cache.save()
-
-        # Save results
-        save_json(results.model_dump(), analysis_path)
-
-        duration = time.time() - start_time
-
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "analyze",
-                "incremental": True,
-                "status": "success",
-                "duration_seconds": round(duration, 2),
-                "output_file": str(analysis_path),
-                "stats": {
-                    "emails_analyzed": len(corpus.emails),
-                    "clusters_generated": len(results.content_clusters),
-                    "unique_senders": results.sender_analysis.unique_senders,
-                    "cached_embeddings": incremental_stats.get("cached_count", 0),
-                    "generated_embeddings": incremental_stats.get("generated_count", 0),
-                }
-            })
-        else:
-            logger.info(
-                f"Incremental analysis complete: "
-                f"Generated {incremental_stats.get('generated_count', 0)} new embeddings, "
-                f"used {incremental_stats.get('cached_count', 0)} cached"
-            )
+            if incremental and incremental_stats:
+                logger.info(
+                    f"Incremental analysis complete: "
+                    f"Generated {incremental_stats.get('generated_count', 0)} new embeddings, "
+                    f"used {incremental_stats.get('cached_count', 0)} cached"
+                )
+            else:
+                logger.info("Analysis complete")
             logger.info(f"  - {results.sender_analysis.unique_senders} unique senders")
             logger.info(f"  - {len(results.content_clusters)} semantic clusters")
 
         return 0
 
     except Exception as e:
-        logger.error(f"Incremental analysis failed: {e}", exc_info=True)
+        error_label = "Incremental analysis" if incremental else "Analysis"
+        logger.error(f"{error_label} failed: {e}", exc_info=True)
         if getattr(args, 'json', False):
-            output_json({
+            json_output = {
                 "command": "analyze",
-                "incremental": True,
                 "status": "error",
-                "error": str(e)
-            })
+                "error": str(e),
+            }
+            if incremental:
+                json_output["incremental"] = True
+            output_json(json_output)
         return 1

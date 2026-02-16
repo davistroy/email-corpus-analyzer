@@ -107,7 +107,7 @@ class TestFullPipeline:
         # Run analysis
         analysis_config = AnalyzeConfig(num_clusters=5)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(sample_corpus)
+        analysis, _stats = analysis_service.run(sample_corpus)
 
         # Run suggestion
         suggest_config = SuggestConfig(min_cluster_percentage=5.0, min_sender_count=5)
@@ -149,7 +149,7 @@ class TestFullPipeline:
 
         analysis_config = AnalyzeConfig(num_clusters=5)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(sample_corpus)
+        analysis, _stats = analysis_service.run(sample_corpus)
 
         # Verify all analysis components
         assert analysis.sender_analysis is not None
@@ -177,7 +177,7 @@ class TestFullPipeline:
 
         analysis_config = AnalyzeConfig(num_clusters=5)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(sample_corpus)
+        analysis, _stats = analysis_service.run(sample_corpus)
 
         suggest_config = SuggestConfig(min_cluster_percentage=5.0, min_sender_count=5)
         suggest_service = SuggestionService(suggest_config)
@@ -210,7 +210,7 @@ class TestFullPipeline:
         # Run analysis with callback
         analysis_config = AnalyzeConfig(num_clusters=5)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(sample_corpus, progress_callback=progress_callback)
+        analysis, _stats = analysis_service.run(sample_corpus, progress_callback=progress_callback)
 
         # Run suggestion with callback
         suggest_config = SuggestConfig()
@@ -250,7 +250,7 @@ class TestPipelineEdgeCases:
 
         analysis_config = AnalyzeConfig(num_clusters=1)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(corpus)
+        analysis, _stats = analysis_service.run(corpus)
 
         assert analysis.volume_stats.total_emails == 1
         assert analysis.sender_analysis.unique_senders == 1
@@ -293,7 +293,7 @@ class TestPipelineEdgeCases:
 
         analysis_config = AnalyzeConfig(num_clusters=3)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(corpus)
+        analysis, _stats = analysis_service.run(corpus)
 
         # All emails from same domain
         assert analysis.sender_analysis.unique_domains == 1
@@ -335,7 +335,7 @@ class TestDataPersistence:
         # Run analysis
         analysis_config = AnalyzeConfig(num_clusters=5)
         analysis_service = AnalysisService(analysis_config)
-        analysis = analysis_service.run(sample_corpus)
+        analysis, _stats = analysis_service.run(sample_corpus)
 
         # Save analysis
         analysis_path = temp_output_dir / "corpus_analysis_results.json"

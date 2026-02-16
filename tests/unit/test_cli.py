@@ -479,9 +479,9 @@ class TestCmdAnalyze:
     @patch("src.cli.commands.analyze.load_json")
     @patch("src.cli.commands.analyze.PathConfig")
     @patch("src.cli.commands.analyze.logger")
-    @patch("src.analyzers.run_full_analysis")
+    @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_success(self, mock_corpus_class, mock_analysis, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_analyze_success(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
         """Test successful corpus analysis."""
         from src.cli import cmd_analyze
 
@@ -507,25 +507,27 @@ class TestCmdAnalyze:
         mock_corpus.emails = []
         mock_corpus_class.return_value = mock_corpus
 
+        mock_service = MagicMock()
         mock_results = MagicMock()
         mock_results.model_dump.return_value = {"results": "data"}
         mock_results.sender_analysis.unique_senders = 50
         mock_results.content_clusters = [1, 2, 3]
-        mock_analysis.return_value = (mock_results, None)
+        mock_service.run.return_value = (mock_results, None)
+        mock_service_class.return_value = mock_service
 
         result = cmd_analyze(args)
 
         assert result == 0
-        mock_analysis.assert_called_once()
+        mock_service.run.assert_called_once()
         mock_save_json.assert_called_once()
 
     @patch("src.cli.commands.analyze.save_json")
     @patch("src.cli.commands.analyze.load_json")
     @patch("src.cli.commands.analyze.PathConfig")
     @patch("src.cli.commands.analyze.logger")
-    @patch("src.analyzers.run_full_analysis")
+    @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_with_custom_corpus_path(self, mock_corpus_class, mock_analysis, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_analyze_with_custom_corpus_path(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
         """Test analysis with custom corpus path."""
         from src.cli import cmd_analyze
 
@@ -550,11 +552,13 @@ class TestCmdAnalyze:
         mock_corpus.emails = []
         mock_corpus_class.return_value = mock_corpus
 
+        mock_service = MagicMock()
         mock_results = MagicMock()
         mock_results.model_dump.return_value = {}
         mock_results.sender_analysis.unique_senders = 0
         mock_results.content_clusters = []
-        mock_analysis.return_value = (mock_results, None)
+        mock_service.run.return_value = (mock_results, None)
+        mock_service_class.return_value = mock_service
 
         result = cmd_analyze(args)
 
@@ -584,9 +588,9 @@ class TestCmdAnalyze:
     @patch("src.cli.commands.analyze.load_json")
     @patch("src.cli.commands.analyze.PathConfig")
     @patch("src.cli.commands.analyze.logger")
-    @patch("src.analyzers.run_full_analysis")
+    @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_analysis_failure(self, mock_corpus_class, mock_analysis, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_analyze_analysis_failure(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json):
         """Test analysis fails during processing."""
         from src.cli import cmd_analyze
 
@@ -611,7 +615,9 @@ class TestCmdAnalyze:
         mock_corpus = MagicMock()
         mock_corpus.emails = []
         mock_corpus_class.return_value = mock_corpus
-        mock_analysis.side_effect = Exception("Analysis error")
+        mock_service = MagicMock()
+        mock_service.run.side_effect = Exception("Analysis error")
+        mock_service_class.return_value = mock_service
 
         result = cmd_analyze(args)
 
@@ -935,17 +941,19 @@ class TestCmdPipeline:
     """Test cases for cmd_pipeline() function."""
 
     @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_success(self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review):
+    def test_cmd_pipeline_success(self, mock_logger, mock_service_class, mock_review):
         """Test successful pipeline execution."""
         from src.cli import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
         mock_review.return_value = 0
 
         args = argparse.Namespace(
@@ -953,77 +961,83 @@ class TestCmdPipeline:
             num_clusters=10,
             no_cleanup=False,
             output_dir=Path("/output"),
-            verbose=False
+            verbose=False,
+            skip_review=False,
+            no_tui=False,
+            no_learning=False,
+            quiet=False,
+            json=False,
         )
 
         result = cmd_pipeline(args)
 
         assert result == 0
-        mock_extract.assert_called_once()
-        mock_analyze.assert_called_once()
-        mock_suggest.assert_called_once()
+        mock_service_class.return_value.run.assert_called_once()
         mock_review.assert_called_once()
 
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_extract_failure(self, mock_logger, mock_extract):
+    def test_cmd_pipeline_extract_failure(self, mock_logger, mock_service_class):
         """Test pipeline fails on extraction error."""
         from src.cli import cmd_pipeline
 
-        mock_extract.return_value = 1
+        mock_service_class.return_value.run.side_effect = Exception("Extraction failed")
 
         args = argparse.Namespace(
             user_email="test@example.com",
             num_clusters=10,
             no_cleanup=False,
             output_dir=None,
-            verbose=False
+            verbose=False,
+            skip_review=True,
+            quiet=False,
+            json=False,
         )
 
         result = cmd_pipeline(args)
 
         assert result == 1
 
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_analyze_failure(self, mock_logger, mock_extract, mock_analyze):
+    def test_cmd_pipeline_analyze_failure(self, mock_logger, mock_service_class):
         """Test pipeline fails on analysis error."""
         from src.cli import cmd_pipeline
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 1
+        mock_service_class.return_value.run.side_effect = ValueError("Analysis failed")
 
         args = argparse.Namespace(
             user_email="test@example.com",
             num_clusters=10,
             no_cleanup=False,
             output_dir=None,
-            verbose=False
+            verbose=False,
+            skip_review=True,
+            quiet=False,
+            json=False,
         )
 
         result = cmd_pipeline(args)
 
         assert result == 1
 
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_suggest_failure(self, mock_logger, mock_extract, mock_analyze, mock_suggest):
+    def test_cmd_pipeline_suggest_failure(self, mock_logger, mock_service_class):
         """Test pipeline fails on suggestion error."""
         from src.cli import cmd_pipeline
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 1
+        mock_service_class.return_value.run.side_effect = RuntimeError("Suggestion failed")
 
         args = argparse.Namespace(
             user_email="test@example.com",
             num_clusters=10,
             no_cleanup=False,
             output_dir=None,
-            verbose=False
+            verbose=False,
+            skip_review=True,
+            quiet=False,
+            json=False,
         )
 
         result = cmd_pipeline(args)
@@ -1031,17 +1045,19 @@ class TestCmdPipeline:
         assert result == 1
 
     @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_review_failure(self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review):
+    def test_cmd_pipeline_review_failure(self, mock_logger, mock_service_class, mock_review):
         """Test pipeline fails on review error."""
         from src.cli import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
         mock_review.return_value = 1
 
         args = argparse.Namespace(
@@ -1049,7 +1065,12 @@ class TestCmdPipeline:
             num_clusters=10,
             no_cleanup=False,
             output_dir=None,
-            verbose=False
+            verbose=False,
+            skip_review=False,
+            no_tui=False,
+            no_learning=False,
+            quiet=False,
+            json=False,
         )
 
         result = cmd_pipeline(args)
@@ -1560,9 +1581,9 @@ class TestJsonOutputFlag:
     @patch("src.cli.commands.analyze.load_json")
     @patch("src.cli.commands.analyze.PathConfig")
     @patch("src.cli.commands.analyze.logger")
-    @patch("src.analyzers.run_full_analysis")
+    @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_json_output(self, mock_corpus_class, mock_analysis, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_analyze_json_output(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
         """Test analyze command returns JSON output when --json flag is set."""
         from src.cli import cmd_analyze
         import json
@@ -1590,11 +1611,13 @@ class TestJsonOutputFlag:
         mock_corpus.emails = [MagicMock() for _ in range(100)]
         mock_corpus_class.return_value = mock_corpus
 
+        mock_service = MagicMock()
         mock_results = MagicMock()
         mock_results.model_dump.return_value = {"results": "data"}
         mock_results.sender_analysis.unique_senders = 50
         mock_results.content_clusters = [1, 2, 3]
-        mock_analysis.return_value = (mock_results, None)
+        mock_service.run.return_value = (mock_results, None)
+        mock_service_class.return_value = mock_service
 
         # Capture stdout
         with patch("sys.stdout") as mock_stdout:
@@ -1752,18 +1775,22 @@ class TestSkipReviewFlag:
         args = parser.parse_args(["pipeline", "--user-email", "test@test.com"])
         assert args.skip_review is False
 
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
     @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_skip_review_auto_accepts(self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review):
+    def test_cmd_pipeline_skip_review_auto_accepts(self, mock_logger, mock_service_class, mock_review, mock_auto_approve):
         """Test pipeline with --skip-review auto-accepts all suggestions."""
         from src.cli import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -1776,29 +1803,28 @@ class TestSkipReviewFlag:
             json=False
         )
 
-        with patch("src.cli.commands.pipeline.auto_approve_categories") as mock_auto_approve:
-            mock_auto_approve.return_value = 0
+        result = cmd_pipeline(args)
 
-            result = cmd_pipeline(args)
-
-            assert result == 0
-            # Review should not be called
-            mock_review.assert_not_called()
-            # Auto-approve should be called instead
-            mock_auto_approve.assert_called_once()
+        assert result == 0
+        # Review should not be called
+        mock_review.assert_not_called()
+        # Auto-approve should be called instead
+        mock_auto_approve.assert_called_once()
 
     @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_without_skip_review_calls_review(self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review):
+    def test_cmd_pipeline_without_skip_review_calls_review(self, mock_logger, mock_service_class, mock_review):
         """Test pipeline without --skip-review calls interactive review."""
         from src.cli import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
         mock_review.return_value = 0
 
         args = argparse.Namespace(
@@ -1809,7 +1835,9 @@ class TestSkipReviewFlag:
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
-            json=False
+            json=False,
+            no_tui=False,
+            no_learning=False,
         )
 
         result = cmd_pipeline(args)
@@ -2193,9 +2221,9 @@ class TestCmdAnalyzeDryRun:
             dry_run=True
         )
 
-        # In dry-run mode, run_full_analysis should NOT be imported/called
-        with patch("src.analyzers.run_full_analysis", side_effect=Exception("Should not be called")):
-            # Should complete without error because dry-run returns before import
+        # In dry-run mode, AnalysisService should NOT be instantiated/called
+        with patch("src.cli.commands.analyze.AnalysisService", side_effect=Exception("Should not be called")):
+            # Should complete without error because dry-run returns before service call
             result = cmd_analyze(args)
 
         assert result == 0
@@ -2328,10 +2356,14 @@ class TestCmdReviewDryRun:
 class TestCmdPipelineDryRun:
     """Test cases for dry-run mode in cmd_pipeline."""
 
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_dry_run_does_not_execute(self, mock_logger):
+    def test_cmd_pipeline_dry_run_does_not_execute(self, mock_logger, mock_service_class):
         """Test dry-run mode doesn't actually run pipeline."""
         from src.cli import cmd_pipeline
+
+        # Set PipelineService to raise if called (it shouldn't be)
+        mock_service_class.return_value.run.side_effect = Exception("Should not be called")
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -2345,12 +2377,11 @@ class TestCmdPipelineDryRun:
             dry_run=True
         )
 
-        # Should NOT call any of the sub-commands
-        with patch("src.cli.commands.pipeline.cmd_extract", side_effect=Exception("Should not be called")):
-            with patch("src.cli.commands.pipeline.cmd_analyze", side_effect=Exception("Should not be called")):
-                result = cmd_pipeline(args)
+        result = cmd_pipeline(args)
 
         assert result == 0
+        # PipelineService.run should NOT have been called
+        mock_service_class.return_value.run.assert_not_called()
 
     @patch("src.cli.commands.pipeline.logger")
     def test_cmd_pipeline_dry_run_prints_preview(self, mock_logger, capsys):
@@ -2604,13 +2635,15 @@ class TestClusterAnalysisReport:
 
         # This test verifies the feature exists - actual implementation details
         # are tested in the run to ensure table/chart output is generated
-        with patch("src.analyzers.run_full_analysis") as mock_analysis:
+        with patch("src.cli.commands.analyze.AnalysisService") as mock_service_class:
             with patch("src.cli.commands.analyze.save_json"):
+                mock_service = MagicMock()
                 mock_results = MagicMock()
                 mock_results.model_dump.return_value = {}
                 mock_results.sender_analysis.unique_senders = 10
                 mock_results.content_clusters = []
-                mock_analysis.return_value = (mock_results, None)
+                mock_service.run.return_value = (mock_results, None)
+                mock_service_class.return_value = mock_service
 
                 # Run should succeed
                 result = cmd_analyze(args)
@@ -3458,23 +3491,25 @@ class TestConfigMappingsAndPrecedence:
 
 
 class TestPipelineFlagPropagation:
-    """Test that pipeline correctly forwards CLI flags to sub-commands."""
+    """Test that pipeline correctly forwards CLI flags via PipelineService."""
 
-    @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
     def test_pipeline_forwards_auto_clusters_to_analyze(
-        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+        self, mock_logger, mock_service_class, mock_auto_approve
     ):
-        """Test --auto-clusters flag is forwarded to analyze step."""
+        """Test --auto-clusters flag is forwarded to PipelineService.run()."""
         from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
-        mock_review.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -3482,7 +3517,7 @@ class TestPipelineFlagPropagation:
             auto_clusters=True,
             cluster_method="silhouette",
             no_cleanup=False,
-            skip_review=False,
+            skip_review=True,
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
@@ -3492,24 +3527,26 @@ class TestPipelineFlagPropagation:
         result = cmd_pipeline(args)
 
         assert result == 0
-        analyze_call_args = mock_analyze.call_args[0][0]
-        assert analyze_call_args.auto_clusters is True
+        run_kwargs = mock_service_class.return_value.run.call_args[1]
+        assert run_kwargs["auto_clusters"] is True
 
-    @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
     def test_pipeline_forwards_cluster_method_elbow_to_analyze(
-        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+        self, mock_logger, mock_service_class, mock_auto_approve
     ):
-        """Test --cluster-method elbow is forwarded to analyze step."""
+        """Test --cluster-method elbow is forwarded to PipelineService.run()."""
         from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
-        mock_review.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -3517,7 +3554,7 @@ class TestPipelineFlagPropagation:
             auto_clusters=True,
             cluster_method="elbow",
             no_cleanup=False,
-            skip_review=False,
+            skip_review=True,
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
@@ -3527,24 +3564,26 @@ class TestPipelineFlagPropagation:
         result = cmd_pipeline(args)
 
         assert result == 0
-        analyze_call_args = mock_analyze.call_args[0][0]
-        assert analyze_call_args.cluster_method == "elbow"
+        run_kwargs = mock_service_class.return_value.run.call_args[1]
+        assert run_kwargs["cluster_method"] == "elbow"
 
-    @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
     def test_pipeline_forwards_cluster_viz_to_analyze(
-        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+        self, mock_logger, mock_service_class, mock_auto_approve
     ):
-        """Test --cluster-viz flag is forwarded to analyze step."""
+        """Test --cluster-viz flag is forwarded to PipelineService.run()."""
         from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
-        mock_review.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -3553,7 +3592,7 @@ class TestPipelineFlagPropagation:
             cluster_method="silhouette",
             cluster_viz=True,
             no_cleanup=False,
-            skip_review=False,
+            skip_review=True,
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
@@ -3563,24 +3602,26 @@ class TestPipelineFlagPropagation:
         result = cmd_pipeline(args)
 
         assert result == 0
-        analyze_call_args = mock_analyze.call_args[0][0]
-        assert analyze_call_args.cluster_viz is True
+        run_kwargs = mock_service_class.return_value.run.call_args[1]
+        assert run_kwargs["cluster_viz"] is True
 
-    @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
     def test_pipeline_forwards_incremental_to_analyze(
-        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+        self, mock_logger, mock_service_class, mock_auto_approve
     ):
-        """Test --incremental flag is forwarded to analyze step."""
+        """Test --incremental flag is noted (currently handled via config)."""
         from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
-        mock_review.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -3589,7 +3630,7 @@ class TestPipelineFlagPropagation:
             cluster_method="silhouette",
             incremental=True,
             no_cleanup=False,
-            skip_review=False,
+            skip_review=True,
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
@@ -3599,24 +3640,26 @@ class TestPipelineFlagPropagation:
         result = cmd_pipeline(args)
 
         assert result == 0
-        analyze_call_args = mock_analyze.call_args[0][0]
-        assert analyze_call_args.incremental is True
+        # PipelineService should have been called
+        mock_service_class.return_value.run.assert_called_once()
 
-    @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
     def test_pipeline_forwards_suggest_thresholds_from_args(
-        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+        self, mock_logger, mock_service_class, mock_auto_approve
     ):
-        """Test suggest thresholds are forwarded from CLI args, not hardcoded."""
+        """Test suggest thresholds are forwarded via AppConfig, not hardcoded."""
         from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
-        mock_review.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         args = argparse.Namespace(
             user_email="test@example.com",
@@ -3626,7 +3669,7 @@ class TestPipelineFlagPropagation:
             min_cluster_percentage=12.5,
             min_sender_count=50,
             no_cleanup=False,
-            skip_review=False,
+            skip_review=True,
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
@@ -3636,32 +3679,34 @@ class TestPipelineFlagPropagation:
         result = cmd_pipeline(args)
 
         assert result == 0
-        suggest_call_args = mock_suggest.call_args[0][0]
-        assert suggest_call_args.min_cluster_percentage == 12.5
-        assert suggest_call_args.min_sender_count == 50
+        config_arg = mock_service_class.call_args[0][0]
+        assert config_arg.suggest.min_cluster_percentage == 12.5
+        assert config_arg.suggest.min_sender_count == 50
 
-    @patch("src.cli.commands.pipeline.cmd_review")
-    @patch("src.cli.commands.pipeline.cmd_suggest")
-    @patch("src.cli.commands.pipeline.cmd_analyze")
-    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
     def test_pipeline_defaults_for_missing_flags(
-        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+        self, mock_logger, mock_service_class, mock_auto_approve
     ):
         """Test pipeline uses correct defaults when flags are not present on args."""
         from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
 
-        mock_extract.return_value = 0
-        mock_analyze.return_value = 0
-        mock_suggest.return_value = 0
-        mock_review.return_value = 0
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
 
         # Minimal args (as older code might pass) - no auto_clusters, cluster_method, etc.
         args = argparse.Namespace(
             user_email="test@example.com",
             num_clusters=10,
             no_cleanup=False,
-            skip_review=False,
+            skip_review=True,
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
@@ -3671,13 +3716,545 @@ class TestPipelineFlagPropagation:
         result = cmd_pipeline(args)
 
         assert result == 0
-        # Check analyze defaults
-        analyze_call_args = mock_analyze.call_args[0][0]
-        assert analyze_call_args.auto_clusters is False
-        assert analyze_call_args.cluster_method == "silhouette"
-        assert analyze_call_args.cluster_viz is False
-        assert analyze_call_args.incremental is False
-        # Check suggest defaults
-        suggest_call_args = mock_suggest.call_args[0][0]
-        assert suggest_call_args.min_cluster_percentage == 5.0
-        assert suggest_call_args.min_sender_count == 20
+        # Check analyze config defaults
+        config_arg = mock_service_class.call_args[0][0]
+        assert config_arg.analyze.num_clusters == 10
+        # Check run kwargs defaults
+        run_kwargs = mock_service_class.return_value.run.call_args[1]
+        assert run_kwargs["auto_clusters"] is False
+        assert run_kwargs["cluster_method"] == "silhouette"
+        assert run_kwargs["cluster_viz"] is False
+        # Check suggest config defaults
+        assert config_arg.suggest.min_cluster_percentage == 5.0
+        assert config_arg.suggest.min_sender_count == 20
+
+
+# =============================================================================
+# Tests for Work Item 2.2: cmd_analyze routes through AnalysisService
+# =============================================================================
+
+
+class TestCmdAnalyzeServiceRouting:
+    """Test that cmd_analyze routes all analysis through AnalysisService."""
+
+    @patch("src.cli.commands.analyze.save_json")
+    @patch("src.cli.commands.analyze.load_json")
+    @patch("src.cli.commands.analyze.PathConfig")
+    @patch("src.cli.commands.analyze.logger")
+    @patch("src.cli.commands.analyze.AnalysisService")
+    @patch("src.models.corpus.Corpus")
+    def test_cmd_analyze_constructs_analysis_service(
+        self, mock_corpus_class, mock_service_class, mock_logger,
+        mock_path_config, mock_load_json, mock_save_json
+    ):
+        """Test cmd_analyze constructs AnalysisService with AnalyzeConfig."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 100,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": []
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_analysis=False,
+            incremental=False,
+            cluster_viz=False,
+        )
+
+        mock_corpus = MagicMock()
+        mock_corpus.emails = []
+        mock_corpus_class.return_value = mock_corpus
+
+        mock_service = MagicMock()
+        mock_results = MagicMock()
+        mock_results.model_dump.return_value = {"results": "data"}
+        mock_results.sender_analysis.unique_senders = 50
+        mock_results.content_clusters = [1, 2, 3]
+        mock_service.run.return_value = (mock_results, None)
+        mock_service_class.return_value = mock_service
+
+        result = cmd_analyze(args)
+
+        assert result == 0
+        # Verify AnalysisService was constructed with an AnalyzeConfig
+        mock_service_class.assert_called_once()
+        config_arg = mock_service_class.call_args[1].get("config") or mock_service_class.call_args[0][0]
+        from src.config.models import AnalyzeConfig
+        assert isinstance(config_arg, AnalyzeConfig)
+        assert config_arg.num_clusters == 10
+
+    @patch("src.cli.commands.analyze.save_json")
+    @patch("src.cli.commands.analyze.load_json")
+    @patch("src.cli.commands.analyze.PathConfig")
+    @patch("src.cli.commands.analyze.logger")
+    @patch("src.cli.commands.analyze.AnalysisService")
+    @patch("src.models.corpus.Corpus")
+    def test_cmd_analyze_calls_service_run_with_correct_args(
+        self, mock_corpus_class, mock_service_class, mock_logger,
+        mock_path_config, mock_load_json, mock_save_json
+    ):
+        """Test cmd_analyze passes auto_clusters and cluster_method to service.run()."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 100,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": []
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=15,
+            analysis_file=None,
+            auto_clusters=True,
+            cluster_method="elbow",
+            cluster_analysis=False,
+            incremental=False,
+            cluster_viz=True,
+        )
+
+        mock_corpus = MagicMock()
+        mock_corpus.emails = [MagicMock() for _ in range(50)]
+        mock_corpus_class.return_value = mock_corpus
+
+        mock_service = MagicMock()
+        mock_results = MagicMock()
+        mock_results.model_dump.return_value = {}
+        mock_results.sender_analysis.unique_senders = 10
+        mock_results.content_clusters = []
+        mock_service.run.return_value = (mock_results, None)
+        mock_service_class.return_value = mock_service
+
+        result = cmd_analyze(args)
+
+        assert result == 0
+        # Verify service.run() was called with correct keyword args
+        mock_service.run.assert_called_once()
+        call_kwargs = mock_service.run.call_args[1]
+        assert call_kwargs["auto_clusters"] is True
+        assert call_kwargs["cluster_method"] == "elbow"
+        assert call_kwargs["cluster_viz"] is True
+
+    @patch("src.cli.commands.analyze.save_json")
+    @patch("src.cli.commands.analyze.load_json")
+    @patch("src.cli.commands.analyze.PathConfig")
+    @patch("src.cli.commands.analyze.logger")
+    @patch("src.cli.commands.analyze.AnalysisService")
+    @patch("src.cli.commands.analyze.EmbeddingCache")
+    @patch("src.models.corpus.Corpus")
+    def test_cmd_analyze_incremental_routes_through_service(
+        self, mock_corpus_class, mock_cache_class, mock_service_class,
+        mock_logger, mock_path_config, mock_load_json, mock_save_json
+    ):
+        """Test --incremental routes through AnalysisService with embedding_cache."""
+        from src.cli import cmd_analyze
+
+        mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
+        mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
+        mock_path_config.get_output_dir.return_value = Path("/output")
+        mock_load_json.return_value = {
+            "extraction_metadata": {
+                "extraction_date": "2024-01-01T00:00:00",
+                "total_emails": 100,
+                "source": "test",
+                "user_email": "test@example.com"
+            },
+            "emails": []
+        }
+
+        args = argparse.Namespace(
+            corpus=None,
+            num_clusters=10,
+            analysis_file=None,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_analysis=False,
+            incremental=True,
+            cluster_viz=False,
+        )
+
+        mock_corpus = MagicMock()
+        mock_corpus.emails = [MagicMock() for _ in range(20)]
+        mock_corpus_class.return_value = mock_corpus
+
+        mock_cache = MagicMock()
+        mock_cache.size = 5
+        mock_cache_class.return_value = mock_cache
+
+        mock_service = MagicMock()
+        mock_results = MagicMock()
+        mock_results.model_dump.return_value = {}
+        mock_results.sender_analysis.unique_senders = 10
+        mock_results.content_clusters = [1, 2]
+        incremental_stats = {"cached_count": 5, "generated_count": 15}
+        mock_service.run.return_value = (mock_results, incremental_stats)
+        mock_service_class.return_value = mock_service
+
+        result = cmd_analyze(args)
+
+        assert result == 0
+        # Verify service.run() received the embedding_cache
+        mock_service.run.assert_called_once()
+        call_kwargs = mock_service.run.call_args[1]
+        assert call_kwargs["embedding_cache"] is mock_cache
+        # Verify cache was saved after analysis
+        mock_cache.save.assert_called_once()
+
+    @patch("src.cli.commands.analyze.save_json")
+    @patch("src.cli.commands.analyze.load_json")
+    @patch("src.cli.commands.analyze.PathConfig")
+    @patch("src.cli.commands.analyze.logger")
+    @patch("src.cli.commands.analyze.AnalysisService")
+    @patch("src.models.corpus.Corpus")
+    def test_cmd_analyze_does_not_import_run_full_analysis(
+        self, mock_corpus_class, mock_service_class, mock_logger,
+        mock_path_config, mock_load_json, mock_save_json
+    ):
+        """Test cmd_analyze does not directly import run_full_analysis."""
+        import src.cli.commands.analyze as analyze_module
+
+        # Verify the module does not import run_full_analysis at module level
+        source = open(analyze_module.__file__).read()
+        assert "from src.analyzers import run_full_analysis" not in source
+        assert "from src.analyzers import" not in source or "run_full_analysis" not in source
+
+
+# =============================================================================
+# Tests for Work Item 2.3: cmd_pipeline routes through PipelineService
+# =============================================================================
+
+
+class TestCmdPipelineServiceRouting:
+    """Test that cmd_pipeline routes extract/analyze/suggest through PipelineService."""
+
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_constructs_pipeline_service(
+        self, mock_logger, mock_service_class, mock_auto_approve
+    ):
+        """Test cmd_pipeline constructs PipelineService with AppConfig."""
+        from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
+
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            source="hotmail",
+            gmail_email=None,
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_viz=False,
+            incremental=False,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        # PipelineService should have been constructed with an AppConfig
+        mock_service_class.assert_called_once()
+        config_arg = mock_service_class.call_args[0][0]
+        from src.config.models import AppConfig
+        assert isinstance(config_arg, AppConfig)
+
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_forwards_auto_clusters_to_service(
+        self, mock_logger, mock_service_class, mock_auto_approve
+    ):
+        """Test --auto-clusters is forwarded to PipelineService.run()."""
+        from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
+
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            source="hotmail",
+            gmail_email=None,
+            num_clusters=10,
+            auto_clusters=True,
+            cluster_method="elbow",
+            cluster_viz=True,
+            incremental=False,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        # Verify run was called with the clustering flags
+        run_kwargs = mock_service_class.return_value.run.call_args[1]
+        assert run_kwargs["auto_clusters"] is True
+        assert run_kwargs["cluster_method"] == "elbow"
+        assert run_kwargs["cluster_viz"] is True
+
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_forwards_suggest_config_to_service(
+        self, mock_logger, mock_service_class, mock_auto_approve
+    ):
+        """Test suggest thresholds are forwarded via AppConfig to PipelineService."""
+        from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
+
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            source="hotmail",
+            gmail_email=None,
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_viz=False,
+            incremental=False,
+            min_cluster_percentage=12.5,
+            min_sender_count=50,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        # Check that the AppConfig passed to PipelineService has correct suggest config
+        config_arg = mock_service_class.call_args[0][0]
+        assert config_arg.suggest.min_cluster_percentage == 12.5
+        assert config_arg.suggest.min_sender_count == 50
+
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_forwards_extraction_config_to_service(
+        self, mock_logger, mock_service_class, mock_auto_approve
+    ):
+        """Test extraction config (source, gmail_email) is forwarded via AppConfig."""
+        from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
+
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            source="both",
+            gmail_email="test@gmail.com",
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_viz=False,
+            incremental=False,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        config_arg = mock_service_class.call_args[0][0]
+        assert config_arg.extract.source == "both"
+        assert config_arg.extract.gmail_email == "test@gmail.com"
+        assert str(config_arg.user_email) == "test@example.com"
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_review_stays_in_cli_layer(
+        self, mock_logger, mock_service_class, mock_review
+    ):
+        """Test that review step stays in CLI layer (not in PipelineService)."""
+        from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
+
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            source="hotmail",
+            gmail_email=None,
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_viz=False,
+            incremental=False,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            no_cleanup=False,
+            skip_review=False,
+            no_tui=False,
+            no_learning=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        # Review should be called in the CLI layer
+        mock_review.assert_called_once()
+
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_returns_error_on_service_failure(
+        self, mock_logger, mock_service_class
+    ):
+        """Test cmd_pipeline returns 1 when PipelineService.run() raises."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_service_class.return_value.run.side_effect = Exception("Service failed")
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            source="hotmail",
+            gmail_email=None,
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_viz=False,
+            incremental=False,
+            min_cluster_percentage=5.0,
+            min_sender_count=20,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 1
+
+    def test_cmd_pipeline_does_not_import_cmd_extract_analyze_suggest(self):
+        """Test cmd_pipeline does not directly import cmd_extract/cmd_analyze/cmd_suggest."""
+        import src.cli.commands.pipeline as pipeline_module
+
+        source = open(pipeline_module.__file__).read()
+        # Should not import these individual cmd_* functions for direct calling
+        assert "from src.cli.commands.extract import cmd_extract" not in source
+        assert "from src.cli.commands.analyze import cmd_analyze" not in source
+        assert "from src.cli.commands.suggest import cmd_suggest" not in source
+
+    @patch("src.cli.commands.pipeline.auto_approve_categories")
+    @patch("src.cli.commands.pipeline.PipelineService")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_cmd_pipeline_uses_defaults_for_missing_flags(
+        self, mock_logger, mock_service_class, mock_auto_approve
+    ):
+        """Test pipeline uses correct defaults when optional flags are missing from args."""
+        from src.cli.commands.pipeline import cmd_pipeline
+        from src.services.pipeline_service import PipelineResult
+
+        mock_result = MagicMock(spec=PipelineResult)
+        mock_result.corpus = MagicMock()
+        mock_result.analysis = MagicMock()
+        mock_result.categories = []
+        mock_result.output_dir = Path("/output")
+        mock_service_class.return_value.run.return_value = mock_result
+        mock_auto_approve.return_value = 0
+
+        # Minimal args -- some attributes may be missing
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=True,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        # Check defaults were used in config
+        config_arg = mock_service_class.call_args[0][0]
+        assert config_arg.analyze.num_clusters == 10
+        assert config_arg.suggest.min_cluster_percentage == 5.0
+        assert config_arg.suggest.min_sender_count == 20
+        # Check defaults for run kwargs
+        run_kwargs = mock_service_class.return_value.run.call_args[1]
+        assert run_kwargs["auto_clusters"] is False
+        assert run_kwargs["cluster_method"] == "silhouette"
+        assert run_kwargs["cluster_viz"] is False

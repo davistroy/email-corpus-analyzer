@@ -17,6 +17,7 @@ import pytest
 
 from src.config.models import (
     AnalyzeConfig,
+    AnalyzerThresholds,
     AppConfig,
     ExtractConfig,
     PipelineConfig,
@@ -192,7 +193,7 @@ class TestAnalysisServiceRun:
 
     @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_run_returns_analysis_results(self, mock_st):
-        """Test that run returns AnalysisResults."""
+        """Test that run returns tuple of (AnalysisResults, stats)."""
         import numpy as np
 
         from src.services.analysis_service import AnalysisService
@@ -207,7 +208,10 @@ class TestAnalysisServiceRun:
 
         result = service.run(corpus)
 
-        assert isinstance(result, AnalysisResults)
+        assert isinstance(result, tuple)
+        analysis_results, incremental_stats = result
+        assert isinstance(analysis_results, AnalysisResults)
+        assert incremental_stats is None  # No embedding_cache provided
 
     @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_run_calls_progress_callback(self, mock_st):
@@ -229,9 +233,10 @@ class TestAnalysisServiceRun:
         def progress_callback(message: str):
             callback_calls.append(message)
 
-        service.run(corpus, progress_callback=progress_callback)
+        result = service.run(corpus, progress_callback=progress_callback)
 
         assert len(callback_calls) > 0
+        assert isinstance(result, tuple)
 
     def test_run_raises_on_empty_corpus(self):
         """Test that run raises error on empty corpus."""
@@ -296,6 +301,351 @@ class TestAnalysisServiceAnalyzers:
             assert type(analyzer) in _ANALYZER_RESULT_FIELDS, (
                 f"{analyzer.name} has no entry in _ANALYZER_RESULT_FIELDS"
             )
+
+
+# =============================================================================
+# Test AnalysisService Feature Parity (Work Item 2.1)
+# =============================================================================
+
+
+class TestAnalysisServiceAutoCluster:
+    """Test that AnalysisService passes auto_clusters to run_full_analysis."""
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_auto_clusters_true_reaches_run_full_analysis(self, mock_rfa):
+        """Test that auto_clusters=True is forwarded to run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig(num_clusters=5)
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(corpus, auto_clusters=True)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        assert kwargs["auto_clusters"] is True
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_cluster_method_elbow_reaches_run_full_analysis(self, mock_rfa):
+        """Test that cluster_method='elbow' is forwarded to run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(corpus, auto_clusters=True, cluster_method="elbow")
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        assert kwargs["cluster_method"] == "elbow"
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_auto_cluster_bounds_from_config(self, mock_rfa):
+        """Test that auto_cluster_min/max from config reach run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig(auto_cluster_min=5, auto_cluster_max=20)
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(corpus, auto_clusters=True)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        assert kwargs["auto_cluster_min"] == 5
+        assert kwargs["auto_cluster_max"] == 20
+
+
+class TestAnalysisServiceIncremental:
+    """Test that AnalysisService supports incremental analysis."""
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_incremental_mode_passes_embedding_cache(self, mock_rfa):
+        """Test that embedding_cache is forwarded to run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), {
+            "cached_count": 5, "generated_count": 5, "total_emails": 10, "hit_rate": 0.5
+        })
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+        mock_cache = MagicMock()
+
+        service.run(corpus, embedding_cache=mock_cache)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        assert kwargs["embedding_cache"] is mock_cache
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_incremental_returns_stats(self, mock_rfa):
+        """Test that incremental stats are returned from run()."""
+        from src.services.analysis_service import AnalysisService
+
+        expected_stats = {
+            "cached_count": 5, "generated_count": 5, "total_emails": 10, "hit_rate": 0.5
+        }
+        mock_rfa.return_value = (create_test_analysis_results(), expected_stats)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+        mock_cache = MagicMock()
+
+        result = service.run(corpus, embedding_cache=mock_cache)
+
+        # The result should be a tuple (AnalysisResults, incremental_stats)
+        assert isinstance(result, tuple)
+        analysis_results, incremental_stats = result
+        assert isinstance(analysis_results, AnalysisResults)
+        assert incremental_stats == expected_stats
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_non_incremental_returns_none_stats(self, mock_rfa):
+        """Test that non-incremental mode returns None for stats."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        result = service.run(corpus)
+
+        assert isinstance(result, tuple)
+        analysis_results, incremental_stats = result
+        assert isinstance(analysis_results, AnalysisResults)
+        assert incremental_stats is None
+
+
+class TestAnalysisServiceThresholds:
+    """Test that AnalysisService passes thresholds to run_full_analysis."""
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_thresholds_from_config_reach_run_full_analysis(self, mock_rfa):
+        """Test that thresholds from config are forwarded."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        custom_thresholds = AnalyzerThresholds(top_senders=100, top_domains=50)
+        config = AnalyzeConfig(thresholds=custom_thresholds)
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(corpus)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        assert kwargs["thresholds"].top_senders == 100
+        assert kwargs["thresholds"].top_domains == 50
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_default_thresholds_passed_when_not_configured(self, mock_rfa):
+        """Test that default thresholds are passed when not explicitly configured."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(corpus)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        # Should pass the default AnalyzerThresholds
+        assert isinstance(kwargs["thresholds"], AnalyzerThresholds)
+        assert kwargs["thresholds"].top_senders == 50  # default
+
+
+class TestAnalysisServiceProgressCallbacks:
+    """Test that AnalysisService progress callbacks work correctly."""
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_progress_callback_is_forwarded(self, mock_rfa):
+        """Test that progress callback is forwarded to run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        callback_calls = []
+
+        def progress_cb(msg):
+            callback_calls.append(msg)
+
+        service.run(corpus, progress_callback=progress_cb)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        # run_full_analysis should receive a progress_callback
+        assert kwargs["progress_callback"] is not None
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_progress_callback_called_for_start_and_complete(self, mock_rfa):
+        """Test that service calls progress_callback for start and complete."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        callback_calls = []
+
+        def progress_cb(msg):
+            callback_calls.append(msg)
+
+        service.run(corpus, progress_callback=progress_cb)
+
+        # Should have at least "Starting analysis..." and "Analysis complete!"
+        assert any("Starting" in c for c in callback_calls)
+        assert any("complete" in c.lower() for c in callback_calls)
+
+
+class TestAnalysisServiceClusterViz:
+    """Test that AnalysisService supports cluster_viz generation."""
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_cluster_viz_flag_stored(self, mock_rfa):
+        """Test that cluster_viz flag is accepted by run()."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        # Should not raise even though cluster_viz is True
+        result = service.run(corpus, cluster_viz=True)
+        assert result is not None
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_cluster_viz_returns_path_in_metadata(self, mock_rfa):
+        """Test that cluster_viz=True includes viz_path in result metadata."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        # When cluster_viz is True, result tuple should include viz_path
+        result = service.run(corpus, cluster_viz=True)
+        assert isinstance(result, tuple)
+
+
+class TestAnalysisServiceFeatureParity:
+    """Test complete feature parity between service and run_full_analysis."""
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_all_config_params_forwarded(self, mock_rfa):
+        """Test that all AnalyzeConfig params are forwarded to run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        custom_thresholds = AnalyzerThresholds(representative_samples=10)
+        config = AnalyzeConfig(
+            num_clusters=15,
+            max_embedding_text_length=2000,
+            auto_cluster_min=4,
+            auto_cluster_max=30,
+            thresholds=custom_thresholds,
+        )
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(
+            corpus,
+            auto_clusters=True,
+            cluster_method="elbow",
+        )
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        assert kwargs["num_clusters"] == 15
+        assert kwargs["max_embedding_text_length"] == 2000
+        assert kwargs["auto_cluster_min"] == 4
+        assert kwargs["auto_cluster_max"] == 30
+        assert kwargs["auto_clusters"] is True
+        assert kwargs["cluster_method"] == "elbow"
+        assert kwargs["thresholds"].representative_samples == 10
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_default_behavior_unchanged(self, mock_rfa):
+        """Test that default behavior (no extra params) remains unchanged."""
+        from src.services.analysis_service import AnalysisService
+
+        mock_rfa.return_value = (create_test_analysis_results(), None)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        service.run(corpus)
+
+        mock_rfa.assert_called_once()
+        _, kwargs = mock_rfa.call_args
+        # Default values
+        assert kwargs["num_clusters"] == 10
+        assert kwargs["auto_clusters"] is False
+        assert kwargs["cluster_method"] == "silhouette"
+        assert kwargs["embedding_cache"] is None
+        assert kwargs["max_embedding_text_length"] == 1500
+        assert kwargs["auto_cluster_min"] == 3
+        assert kwargs["auto_cluster_max"] == 25
+
+    def test_run_still_raises_on_empty_corpus(self):
+        """Test that empty corpus still raises ValueError."""
+        from src.services.analysis_service import AnalysisService
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus(emails=[])
+
+        with pytest.raises(ValueError, match="empty"):
+            service.run(corpus)
+
+    @patch("src.services.analysis_service.run_full_analysis")
+    def test_run_returns_tuple_matching_run_full_analysis(self, mock_rfa):
+        """Test that run() returns the same tuple shape as run_full_analysis."""
+        from src.services.analysis_service import AnalysisService
+
+        expected_results = create_test_analysis_results()
+        expected_stats = {"cached_count": 3, "generated_count": 7}
+        mock_rfa.return_value = (expected_results, expected_stats)
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        corpus = create_test_corpus()
+
+        result = service.run(corpus, embedding_cache=MagicMock())
+
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        analysis, stats = result
+        assert analysis is expected_results
+        assert stats is expected_stats
 
 
 # =============================================================================
@@ -985,7 +1335,7 @@ class TestPipelineServiceRun:
         mock_categories = create_test_categories()
 
         mock_extract.return_value.run.return_value = mock_corpus
-        mock_analyze.return_value.run.return_value = mock_analysis
+        mock_analyze.return_value.run.return_value = (mock_analysis, None)
         mock_suggest.return_value.run.return_value = mock_categories
 
         config = AppConfig(user_email="test@example.com")
@@ -1013,7 +1363,7 @@ class TestPipelineServiceRun:
         mock_categories = create_test_categories()
 
         mock_extract.return_value.run.return_value = mock_corpus
-        mock_analyze.return_value.run.return_value = mock_analysis
+        mock_analyze.return_value.run.return_value = (mock_analysis, None)
         mock_suggest.return_value.run.return_value = mock_categories
 
         config = AppConfig(user_email="test@example.com")
@@ -1058,6 +1408,9 @@ class TestServiceIndependence:
 
             result = service.run(corpus)
             assert result is not None
+            assert isinstance(result, tuple)
+            analysis_results, stats = result
+            assert isinstance(analysis_results, AnalysisResults)
 
     def test_suggestion_service_works_without_analysis(self):
         """Test SuggestionService works with pre-existing analysis."""
