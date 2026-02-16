@@ -2,11 +2,15 @@
 import argparse
 import time
 
-from src.cli.commands.analyze import cmd_analyze
-from src.cli.commands.extract import cmd_extract
 from src.cli.commands.review import auto_approve_categories, cmd_review
-from src.cli.commands.suggest import cmd_suggest
 from src.cli.formatters import output_json
+from src.config.models import (
+    AnalyzeConfig,
+    AppConfig,
+    ExtractConfig,
+    SuggestConfig,
+)
+from src.services.pipeline_service import PipelineService
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -132,9 +136,53 @@ The pipeline runs these stages in order:
     return pipeline_parser
 
 
+def _build_app_config(args: argparse.Namespace) -> AppConfig:
+    """
+    Build an AppConfig from parsed pipeline CLI arguments.
+
+    Maps pipeline CLI argument names to the appropriate nested config
+    fields (ExtractConfig, AnalyzeConfig, SuggestConfig).
+
+    Args:
+        args: Parsed command-line arguments
+
+    Returns:
+        AppConfig with values from CLI args
+    """
+    source = getattr(args, 'source', 'hotmail')
+    gmail_email = getattr(args, 'gmail_email', None)
+
+    # Build extract config - only set gmail_email if source requires it
+    extract_kwargs = {"source": source}
+    if source in ("gmail", "both"):
+        extract_kwargs["gmail_email"] = gmail_email or args.user_email
+
+    extract_config = ExtractConfig(**extract_kwargs)
+
+    analyze_config = AnalyzeConfig(
+        num_clusters=args.num_clusters,
+    )
+
+    suggest_config = SuggestConfig(
+        min_cluster_percentage=getattr(args, 'min_cluster_percentage', 5.0),
+        min_sender_count=getattr(args, 'min_sender_count', 20),
+    )
+
+    return AppConfig(
+        user_email=args.user_email,
+        output_dir=args.output_dir,
+        extract=extract_config,
+        analyze=analyze_config,
+        suggest=suggest_config,
+    )
+
+
 def cmd_pipeline(args: argparse.Namespace) -> int:
     """
     Execute complete pipeline command.
+
+    Routes extract -> analyze -> suggest through PipelineService.
+    The review step remains in the CLI layer since it is UI-specific.
 
     Args:
         args: Parsed command-line arguments
@@ -142,6 +190,8 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
     Returns:
         Exit code (0 = success, non-zero = error)
     """
+    from pathlib import Path
+
     from src.cli.parsers import validate_email_format
 
     # Validate email format first (even for dry-run)
@@ -195,59 +245,36 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
 
     logger.info("=== COMPLETE PIPELINE ===")
 
-    # Step 1: Extract
-    logger.info("Step 1/4: Extracting emails...")
-    extract_args = argparse.Namespace(
-        user_email=args.user_email,
-        source=getattr(args, 'source', 'hotmail'),
-        gmail_email=getattr(args, 'gmail_email', None),
-        corpus_file=None,
-        batch_size=500,
-        checkpoint_interval=100,
-        since_last=False,
-        dry_run=False,
-        output_dir=args.output_dir,
-        verbose=getattr(args, 'verbose', False),
-        quiet=getattr(args, 'quiet', False),
-        json=getattr(args, 'json', False)
-    )
-    if cmd_extract(extract_args) != 0:
+    # Build config and service
+    config = _build_app_config(args)
+    service = PipelineService(config)
+
+    # Determine output directory
+    output_dir = Path(args.output_dir) if args.output_dir else Path.home() / "data" / "outputs"
+
+    # Run extract -> analyze -> suggest through PipelineService
+    try:
+        def progress_callback(message: str) -> None:
+            logger.info(message)
+
+        _pipeline_result = service.run(  # noqa: F841 - result available for future review-step integration
+            output_dir=output_dir,
+            progress_callback=progress_callback,
+            auto_clusters=getattr(args, 'auto_clusters', False),
+            cluster_method=getattr(args, 'cluster_method', 'silhouette'),
+            cluster_viz=getattr(args, 'cluster_viz', False),
+        )
+    except Exception as e:
+        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        if getattr(args, 'json', False):
+            output_json({
+                "command": "pipeline",
+                "status": "error",
+                "error": str(e)
+            })
         return 1
 
-    # Step 2: Analyze
-    logger.info("Step 2/4: Analyzing corpus...")
-    analyze_args = argparse.Namespace(
-        corpus=None,
-        num_clusters=args.num_clusters,
-        auto_clusters=getattr(args, 'auto_clusters', False),
-        cluster_method=getattr(args, 'cluster_method', 'silhouette'),
-        cluster_viz=getattr(args, 'cluster_viz', False),
-        incremental=getattr(args, 'incremental', False),
-        analysis_file=None,
-        output_dir=args.output_dir,
-        verbose=getattr(args, 'verbose', False),
-        quiet=getattr(args, 'quiet', False),
-        json=getattr(args, 'json', False)
-    )
-    if cmd_analyze(analyze_args) != 0:
-        return 1
-
-    # Step 3: Suggest
-    logger.info("Step 3/4: Generating suggestions...")
-    suggest_args = argparse.Namespace(
-        analysis=None,
-        min_cluster_percentage=getattr(args, 'min_cluster_percentage', 5.0),
-        min_sender_count=getattr(args, 'min_sender_count', 20),
-        suggestions_file=None,
-        output_dir=args.output_dir,
-        verbose=getattr(args, 'verbose', False),
-        quiet=getattr(args, 'quiet', False),
-        json=getattr(args, 'json', False)
-    )
-    if cmd_suggest(suggest_args) != 0:
-        return 1
-
-    # Step 4: Review or Auto-approve
+    # Step 4: Review (stays in CLI layer - UI-specific)
     if getattr(args, 'skip_review', False):
         logger.info("Step 4/4: Auto-approving suggestions (--skip-review)...")
         review_args = argparse.Namespace(

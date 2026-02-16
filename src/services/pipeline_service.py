@@ -57,6 +57,9 @@ class PipelineService:
         progress_callback: Callable[[str], None] | None = None,
         skip_extraction: bool = False,
         existing_corpus: Corpus | None = None,
+        auto_clusters: bool = False,
+        cluster_method: str = "silhouette",
+        cluster_viz: bool = False,
     ) -> PipelineResult:
         """
         Run complete email analysis pipeline.
@@ -66,6 +69,9 @@ class PipelineService:
             progress_callback: Optional callback(message) for status updates
             skip_extraction: If True, skip extraction (requires existing_corpus)
             existing_corpus: Pre-existing corpus to use instead of extracting
+            auto_clusters: If True, automatically determine optimal cluster count
+            cluster_method: Method for auto-clustering: "elbow" or "silhouette"
+            cluster_viz: If True, generate cluster visualization PNG
 
         Returns:
             PipelineResult with corpus, analysis, and categories
@@ -111,9 +117,12 @@ class PipelineService:
 
         analysis_service = AnalysisService(config=self.config.analyze)
 
-        analysis = analysis_service.run(
+        analysis, _incremental_stats = analysis_service.run(
             corpus=corpus,
             progress_callback=progress_callback,
+            auto_clusters=auto_clusters,
+            cluster_method=cluster_method,
+            cluster_viz=cluster_viz,
         )
 
         # Save analysis (atomic write to prevent corruption)
