@@ -27,6 +27,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+class _SourceConfig:
+    """Configuration for a single extraction source."""
+
+    __slots__ = ("label", "factory_attr")
+
+    def __init__(self, label: str, factory_attr: str):
+        self.label = label
+        self.factory_attr = factory_attr
+
+
+# Registry mapping source names to their configs.
+# Adding a new source requires only a new entry here + a _get_<source>_extractor method.
+_SOURCE_REGISTRY: dict[str, list[_SourceConfig]] = {
+    "hotmail": [_SourceConfig(label="M365/Hotmail", factory_attr="_get_m365_extractor")],
+    "gmail": [_SourceConfig(label="Gmail", factory_attr="_get_gmail_extractor")],
+    "both": [
+        _SourceConfig(label="M365/Hotmail", factory_attr="_get_m365_extractor"),
+        _SourceConfig(label="Gmail", factory_attr="_get_gmail_extractor"),
+    ],
+}
+
+
 class ExtractionService:
     """
     Service for orchestrating email extraction.
@@ -203,9 +225,8 @@ class ExtractionService:
         """
         Run email extraction based on configured source.
 
-        For source="hotmail": extracts from M365/Hotmail only.
-        For source="gmail": extracts from Gmail only.
-        For source="both": extracts from both and merges with deduplication.
+        Uses _SOURCE_REGISTRY to dispatch extraction. Single-source entries
+        return the corpus directly; multi-source entries merge with deduplication.
 
         Args:
             progress_callback: Optional callback(message) for status updates
@@ -216,6 +237,7 @@ class ExtractionService:
             Extracted email corpus
 
         Raises:
+            ValueError: If source is not in _SOURCE_REGISTRY
             ConnectionError: If email server is unreachable
             AuthenticationError: If authentication fails
         """
@@ -224,53 +246,45 @@ class ExtractionService:
 
         source = self.config.source
 
+        if source not in _SOURCE_REGISTRY:
+            raise ValueError(f"Unknown source: {source!r}")
+
+        source_configs = _SOURCE_REGISTRY[source]
+
         try:
-            if source == "hotmail":
-                extractor = self._get_m365_extractor()
-                return self._run_single_extractor(
-                    extractor, "M365/Hotmail",
+            if len(source_configs) > 1 and progress_callback:
+                labels = " and ".join(sc.label for sc in source_configs)
+                progress_callback(f"Extracting from {labels}...")
+
+            corpora: list[Corpus] = []
+            for sc in source_configs:
+                extractor = getattr(self, sc.factory_attr)()
+                corpus = self._run_single_extractor(
+                    extractor, sc.label,
                     progress_callback, since_last, existing_corpus,
                 )
+                corpora.append(corpus)
 
-            if source == "gmail":
-                extractor = self._get_gmail_extractor()
-                return self._run_single_extractor(
-                    extractor, "Gmail",
-                    progress_callback, since_last, existing_corpus,
+            # Single source: return directly
+            if len(corpora) == 1:
+                return corpora[0]
+
+            # Multi-source: merge with deduplication
+            source_labels = [sc.label for sc in source_configs]
+            merged = self._merge_corpora(
+                corpora,
+                user_email=self.user_email,
+                source_labels=source_labels,
+            )
+
+            if progress_callback:
+                individual = " + ".join(str(len(c.emails)) for c in corpora)
+                progress_callback(
+                    f"Merged corpus: {len(merged.emails)} emails "
+                    f"(deduplicated from {individual})"
                 )
 
-            if source == "both":
-                if progress_callback:
-                    progress_callback("Extracting from both M365/Hotmail and Gmail...")
-
-                m365_extractor = self._get_m365_extractor()
-                gmail_extractor = self._get_gmail_extractor()
-
-                m365_corpus = self._run_single_extractor(
-                    m365_extractor, "M365/Hotmail",
-                    progress_callback, since_last, existing_corpus,
-                )
-                gmail_corpus = self._run_single_extractor(
-                    gmail_extractor, "Gmail",
-                    progress_callback, since_last, existing_corpus,
-                )
-
-                merged = self._merge_corpora(
-                    [m365_corpus, gmail_corpus],
-                    user_email=self.user_email,
-                    source_labels=["M365/Hotmail", "Gmail"],
-                )
-
-                if progress_callback:
-                    progress_callback(
-                        f"Merged corpus: {len(merged.emails)} emails "
-                        f"(deduplicated from {len(m365_corpus.emails)} + "
-                        f"{len(gmail_corpus.emails)})"
-                    )
-
-                return merged
-
-            raise ValueError(f"Unknown source: {source}")
+            return merged
 
         except Exception as e:
             logger.error(f"Extraction failed: {e}")

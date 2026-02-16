@@ -9,6 +9,7 @@ Refactored in Work Item 1.3: Now inherits from BaseExtractor.
 """
 from datetime import datetime
 
+from src.exceptions import RateLimitError
 from src.extractors.base_extractor import (
     BaseExtractor,
     ExtractionError,
@@ -18,6 +19,7 @@ from src.extractors.base_extractor import (
 from src.extractors.html_parser import extract_plain_text
 from src.models.corpus import Corpus
 from src.models.email import Email
+from src.utils.constants import EMAIL_COUNT_SENTINEL
 from src.utils.logger import get_logger
 
 # Re-export dataclasses for backward compatibility
@@ -98,7 +100,7 @@ class EmailExtractor(BaseExtractor):
 
             return emails
 
-        except ConnectionError:
+        except (ConnectionError, RateLimitError):
             raise
         except Exception as e:
             self.logger.error(f"Failed to fetch batch {start}-{end}: {e}")
@@ -216,9 +218,9 @@ class EmailExtractor(BaseExtractor):
 
             # Return a large sentinel value that will be updated during pagination
             # This ensures we don't prematurely stop fetching
-            return 999999
+            return EMAIL_COUNT_SENTINEL
 
-        except ConnectionError:
+        except (ConnectionError, RateLimitError):
             raise
         except Exception as e:
             self.logger.error(f"Failed to get email count: {e}")

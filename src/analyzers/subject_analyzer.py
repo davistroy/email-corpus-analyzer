@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from ..models.analysis_results import SubjectPatterns
 from ..models.corpus import Corpus
+from ..utils.text import STOP_WORDS as _SHARED_STOP_WORDS
 from .base import BaseAnalyzer
 
 if TYPE_CHECKING:
@@ -40,15 +41,8 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
         """Return human-readable analyzer name."""
         return "Subject Analyzer"
 
-    # Standard English stop words
-    STOP_WORDS = {
-        'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
-        'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-        'to', 'was', 'will', 'with', 'you', 'your', 'have', 'this', 'but',
-        'or', 'not', 'can', 'we', 'all', 'been', 'were', 'when', 'what',
-        'which', 'who', 'if', 'out', 'so', 'up', 'there', 'their', 'they',
-        'me', 'my', 'our', 'us', 'am', 'i', 'them'
-    }
+    # Shared stop words from src.utils.text (single source of truth)
+    STOP_WORDS = _SHARED_STOP_WORDS
 
     # Common prefixes to extract (case-insensitive)
     PREFIX_PATTERNS = [

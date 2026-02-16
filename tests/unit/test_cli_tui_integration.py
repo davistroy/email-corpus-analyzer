@@ -123,8 +123,8 @@ class TestTUILaunch:
 class TestHeadlessMode:
     """Test headless/automation mode."""
 
-    @patch("src.cli.auto_approve_categories")
-    @patch("src.cli.PathConfig")
+    @patch("src.cli.commands.review.auto_approve_categories")
+    @patch("src.cli.commands.review.PathConfig")
     def test_headless_flag_auto_approves(self, mock_path_config, mock_auto_approve):
         """Test that --headless auto-approves all suggestions."""
         from src.cli import cmd_review
@@ -202,8 +202,8 @@ class TestTUIImport:
 class TestCmdReviewWithTUI:
     """Test cmd_review with TUI integration."""
 
-    @patch("src.cli.load_json")
-    @patch("src.cli.PathConfig")
+    @patch("src.cli.commands.review.load_json")
+    @patch("src.cli.commands.review.PathConfig")
     def test_cmd_review_calls_review_categories_with_ui(self, mock_path_config, mock_load_json):
         """Test that cmd_review uses the TUI-aware review function."""
         from src.cli import cmd_review

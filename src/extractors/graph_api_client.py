@@ -17,6 +17,7 @@ from typing import Any
 import msal
 import requests
 
+from src.exceptions import RateLimitError
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -186,7 +187,9 @@ class GraphAPIClient:
             response = requests.get(url, headers=headers, params=params, timeout=30)
 
         if response.status_code == 429:
-            raise ConnectionError("Rate limited by Microsoft Graph API")
+            retry_after_header = response.headers.get("Retry-After")
+            retry_seconds = int(retry_after_header) if retry_after_header else None
+            raise RateLimitError(retry_after=retry_seconds)
 
         response.raise_for_status()
         return response.json()

@@ -297,6 +297,34 @@ class ExtractionError(EmailAnalyzerError):
         )
 
 
+class RateLimitError(ExtractionError):
+    """
+    Raised when a provider rate limit is exceeded (HTTP 429).
+
+    Carries an optional retry_after hint (seconds) extracted from the
+    provider's response headers so callers can back off intelligently.
+    """
+
+    def __init__(
+        self,
+        retry_after: int | None = None,
+        context: dict[str, Any] | None = None,
+    ):
+        """
+        Initialize rate limit error.
+
+        Args:
+            retry_after: Seconds to wait before retrying (from provider header)
+            context: Additional context for debugging
+        """
+        super().__init__(
+            message="Rate limit exceeded",
+            recovery_hint="Wait and retry. The provider is throttling requests.",
+            context=context or {},
+        )
+        self.retry_after = retry_after
+
+
 class M365AuthError(ExtractionError):
     """
     Raised when M365 authentication fails.

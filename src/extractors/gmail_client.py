@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from src.exceptions import RateLimitError
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -176,7 +177,12 @@ class GmailClient:
             logger.info(f"Fetched {len(messages)} emails from Gmail")
             return messages
 
+        except RateLimitError:
+            raise
         except Exception as e:
+            # Check for Google API HttpError with 429 status
+            if self._is_rate_limit_error(e):
+                raise RateLimitError() from e
             raise ConnectionError(f"Gmail API error: {e}") from e
 
     def _list_message_ids(
@@ -427,6 +433,33 @@ class GmailClient:
                 pass
 
         return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    @staticmethod
+    def _is_rate_limit_error(exc: Exception) -> bool:
+        """
+        Check if an exception represents an HTTP 429 rate-limit response.
+
+        Works with googleapiclient.errors.HttpError which stores the HTTP
+        status in exc.resp.status (httplib2 Response).
+
+        Args:
+            exc: The caught exception
+
+        Returns:
+            True if the exception indicates a 429 rate limit
+        """
+        # googleapiclient.errors.HttpError has a .resp attribute (httplib2.Response)
+        # with .status as an int
+        resp = getattr(exc, "resp", None)
+        if resp is not None:
+            status = getattr(resp, "status", None)
+            if status is not None and int(status) == 429:
+                return True
+        # Also check for status_code attribute (requests-style)
+        status_code = getattr(exc, "status_code", None)
+        if status_code is not None and int(status_code) == 429:
+            return True
+        return False
 
     def get_message_body(self, message_id: str) -> str:
         """

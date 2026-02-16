@@ -19,10 +19,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+from src.exceptions import RateLimitError
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
+from src.utils.constants import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_CHECKPOINT_INTERVAL,
+    EMAIL_COUNT_SENTINEL,
+    MAX_BACKOFF_SECONDS,
+)
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -158,7 +166,7 @@ class BaseExtractor(ABC):
         Returns:
             Total email count or sentinel value
         """
-        return 999999
+        return EMAIL_COUNT_SENTINEL
 
     def _fetch_incremental_batch(
         self,
@@ -184,60 +192,76 @@ class BaseExtractor(ABC):
 
     # ── Shared implementation ─────────────────────────────────────────
 
-    def extract_all(
+    def _execute_batch_loop(
         self,
-        max_batch_size: int = 500,
-        checkpoint_interval: int = 100,
-        progress_callback: Callable[[int, int], None] | None = None,
-    ) -> ExtractionResult:
+        fetch_fn: Callable[..., list[dict]],
+        existing_ids: set[str] | None,
+        max_batch_size: int,
+        checkpoint_interval: int,
+        progress_callback: Callable[[int, int], None] | None,
+        fetch_kwargs: dict[str, Any] | None = None,
+    ) -> tuple[list[Email], list[ExtractionError]]:
         """
-        Extract all emails from the provider inbox.
+        Execute the shared batch processing loop for both full and incremental extraction.
+
+        Handles pagination, per-email error handling, checkpoint saving, rate-limit
+        backoff, deduplication (when existing_ids is provided), and progress callbacks.
 
         Args:
-            max_batch_size: Maximum emails per API request (default 500)
-            checkpoint_interval: Save checkpoint every N emails (default 100)
+            fetch_fn: Callable to fetch a batch of raw email data.
+                      For full extraction: self._fetch_batch(start, end, last_id)
+                      For incremental: self._fetch_incremental_batch(start, batch_size, **kwargs)
+            existing_ids: Set of already-known email IDs for deduplication.
+                          None for full extraction, a set for incremental.
+            max_batch_size: Maximum emails per API request
+            checkpoint_interval: Save checkpoint every N emails
             progress_callback: Optional callback(current, total) for progress
+            fetch_kwargs: Extra keyword arguments passed to fetch_fn (e.g. filter_after, query)
 
         Returns:
-            ExtractionResult with corpus and error summary
-
-        Raises:
-            ConnectionError: If the email server is unreachable
-            AuthenticationError: If authentication fails
+            Tuple of (successfully processed emails, list of extraction errors)
         """
-        source_name = self._get_source_name()
-        self.logger.info(f"Starting {source_name} email extraction...")
+        fetch_kwargs = fetch_kwargs or {}
 
-        # Check for existing checkpoint
+        # Check for existing checkpoint (resume support)
         emails_processed, last_id = self.checkpoint_manager.get_resume_point()
         if emails_processed > 0:
             self.logger.info(
                 f"Resuming from checkpoint: {emails_processed} emails already processed"
             )
 
-        failed_emails: list[ExtractionError] = []
         all_emails: list[Email] = []
+        failed_emails: list[ExtractionError] = []
 
-        # Get total count (may be a sentinel for APIs without counts)
-        try:
-            total_emails = self._get_total_email_count()
-            self.logger.info(f"Found {total_emails} total emails to process")
-        except Exception as e:
-            self.logger.error(f"Failed to get email count: {e}")
-            raise ConnectionError(f"{source_name} server unreachable: {e}") from e
+        # For full extraction, get total count; for incremental, loop until empty
+        total_emails = EMAIL_COUNT_SENTINEL
+        if existing_ids is None:
+            try:
+                total_emails = self._get_total_email_count()
+                self.logger.info(f"Found {total_emails} total emails to process")
+            except Exception as e:
+                source_name = self._get_source_name()
+                self.logger.error(f"Failed to get email count: {e}")
+                raise ConnectionError(f"{source_name} server unreachable: {e}") from e
 
-        # Process in batches
         current_batch = emails_processed // max_batch_size
+
         while emails_processed < total_emails:
             batch_start = current_batch * max_batch_size
             batch_end = min(batch_start + max_batch_size, total_emails)
 
             self.logger.debug(
-                f"Processing batch {current_batch + 1}: emails {batch_start}-{batch_end}"
+                f"Processing batch {current_batch + 1}: starting at {batch_start}"
             )
 
             try:
-                batch_emails = self._fetch_batch(batch_start, batch_end, last_id)
+                # Call the appropriate fetch function
+                if existing_ids is not None:
+                    # Incremental: fetch_fn is _fetch_incremental_batch(start, batch_size, **kwargs)
+                    batch_emails = fetch_fn(batch_start, max_batch_size, **fetch_kwargs)
+                else:
+                    # Full: fetch_fn is _fetch_batch(start, end, last_id)
+                    batch_emails = fetch_fn(batch_start, batch_end, last_id)
 
                 # Empty batch = end of available emails
                 if not batch_emails:
@@ -246,10 +270,21 @@ class BaseExtractor(ABC):
 
                 for email_data in batch_emails:
                     try:
+                        # Dedup check for incremental mode
+                        if existing_ids is not None:
+                            email_id = email_data.get("id", "")
+                            if email_id in existing_ids:
+                                self.logger.debug(f"Skipping duplicate email: {email_id}")
+                                continue
+
                         email = self._process_email(email_data)
                         all_emails.append(email)
                         emails_processed += 1
                         last_id = email.id
+
+                        # Track dedup for incremental
+                        if existing_ids is not None:
+                            existing_ids.add(email.id)
 
                         # Save checkpoint at intervals
                         if self.checkpoint_manager.should_checkpoint(emails_processed):
@@ -273,27 +308,62 @@ class BaseExtractor(ABC):
                         ))
 
                 # Fewer than requested = end of inbox
-                if len(batch_emails) < (batch_end - batch_start):
+                requested_size = max_batch_size if existing_ids is not None else (batch_end - batch_start)
+                if len(batch_emails) < requested_size:
                     self.logger.info(
                         f"Received {len(batch_emails)} emails "
                         f"(less than requested), stopping pagination"
                     )
                     break
 
+            except RateLimitError as e:
+                self.logger.error(f"Batch fetch failed (rate limited): {e}")
+                self._handle_rate_limit(current_batch, retry_after=e.retry_after)
             except Exception as e:
                 self.logger.error(f"Batch fetch failed: {e}")
-                if "rate" in str(e).lower():
-                    self._handle_rate_limit(current_batch)
-                else:
-                    failed_emails.append(ExtractionError(
-                        email_id=f"batch_{current_batch}",
-                        error_type="timeout",
-                        error_message=str(e),
-                        timestamp=datetime.now(),
-                    ))
-                    break  # Stop on non-rate-limit errors
+                failed_emails.append(ExtractionError(
+                    email_id=f"batch_{current_batch}",
+                    error_type="timeout",
+                    error_message=str(e),
+                    timestamp=datetime.now(),
+                ))
+                break  # Stop on non-rate-limit errors
 
             current_batch += 1
+
+        return all_emails, failed_emails
+
+    def extract_all(
+        self,
+        max_batch_size: int = DEFAULT_BATCH_SIZE,
+        checkpoint_interval: int = DEFAULT_CHECKPOINT_INTERVAL,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> ExtractionResult:
+        """
+        Extract all emails from the provider inbox.
+
+        Args:
+            max_batch_size: Maximum emails per API request (default 500)
+            checkpoint_interval: Save checkpoint every N emails (default 100)
+            progress_callback: Optional callback(current, total) for progress
+
+        Returns:
+            ExtractionResult with corpus and error summary
+
+        Raises:
+            ConnectionError: If the email server is unreachable
+            AuthenticationError: If authentication fails
+        """
+        source_name = self._get_source_name()
+        self.logger.info(f"Starting {source_name} email extraction...")
+
+        all_emails, failed_emails = self._execute_batch_loop(
+            fetch_fn=self._fetch_batch,
+            existing_ids=None,
+            max_batch_size=max_batch_size,
+            checkpoint_interval=checkpoint_interval,
+            progress_callback=progress_callback,
+        )
 
         # Build corpus with metadata
         email_ids_hash = self._compute_email_ids_hash(all_emails)
@@ -301,7 +371,6 @@ class BaseExtractor(ABC):
             "batch_size": max_batch_size,
             "checkpoint_interval": checkpoint_interval,
         }
-
         metadata = CorpusMetadata(
             extraction_date=datetime.now(),
             total_emails=len(all_emails),
@@ -332,8 +401,8 @@ class BaseExtractor(ABC):
     def extract_incremental(
         self,
         existing_corpus: Corpus,
-        max_batch_size: int = 500,
-        checkpoint_interval: int = 100,
+        max_batch_size: int = DEFAULT_BATCH_SIZE,
+        checkpoint_interval: int = DEFAULT_CHECKPOINT_INTERVAL,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> IncrementalExtractionResult:
         """
@@ -355,72 +424,16 @@ class BaseExtractor(ABC):
         previous_count = len(existing_corpus.emails)
         self.logger.info(f"Existing corpus has {previous_count} emails")
 
-        # Let subclass build any provider-specific query params
         incremental_kwargs = self._get_incremental_kwargs(existing_corpus)
 
-        failed_emails: list[ExtractionError] = []
-        new_emails: list[Email] = []
-        current_batch = 0
-        emails_processed = 0
-
-        while True:
-            batch_start = current_batch * max_batch_size
-
-            self.logger.debug(
-                f"Processing batch {current_batch + 1}: starting at {batch_start}"
-            )
-
-            try:
-                batch_emails = self._fetch_incremental_batch(
-                    batch_start, max_batch_size, **incremental_kwargs
-                )
-
-                if not batch_emails:
-                    self.logger.info("No more emails to fetch, stopping pagination")
-                    break
-
-                for email_data in batch_emails:
-                    try:
-                        email_id = email_data.get("id", "")
-
-                        # Deduplicate against existing corpus
-                        if email_id in existing_ids:
-                            self.logger.debug(f"Skipping duplicate email: {email_id}")
-                            continue
-
-                        email = self._process_email(email_data)
-                        new_emails.append(email)
-                        existing_ids.add(email_id)
-                        emails_processed += 1
-
-                        if progress_callback:
-                            progress_callback(emails_processed, emails_processed)
-
-                    except Exception as e:
-                        self.logger.warning(f"Failed to process email: {e}")
-                        failed_emails.append(ExtractionError(
-                            email_id=email_data.get("id", "unknown"),
-                            error_type="malformed",
-                            error_message=str(e),
-                            timestamp=datetime.now(),
-                        ))
-
-                # Fewer than requested = end of inbox
-                if len(batch_emails) < max_batch_size:
-                    self.logger.info(
-                        f"Received {len(batch_emails)} emails "
-                        f"(less than requested), stopping pagination"
-                    )
-                    break
-
-            except Exception as e:
-                self.logger.error(f"Batch fetch failed: {e}")
-                if "rate" in str(e).lower():
-                    self._handle_rate_limit(current_batch)
-                else:
-                    break
-
-            current_batch += 1
+        new_emails, failed_emails = self._execute_batch_loop(
+            fetch_fn=self._fetch_incremental_batch,
+            existing_ids=existing_ids,
+            max_batch_size=max_batch_size,
+            checkpoint_interval=checkpoint_interval,
+            progress_callback=progress_callback,
+            fetch_kwargs=incremental_kwargs,
+        )
 
         # Merge new emails with existing corpus
         all_emails = list(existing_corpus.emails) + new_emails
@@ -439,7 +452,6 @@ class BaseExtractor(ABC):
             "checkpoint_interval": checkpoint_interval,
             "incremental": True,
         }
-
         metadata = CorpusMetadata(
             extraction_date=existing_corpus.extraction_metadata.extraction_date,
             total_emails=total_count,
@@ -449,7 +461,6 @@ class BaseExtractor(ABC):
             email_ids_hash=email_ids_hash,
             extraction_params=extraction_params,
         )
-
         merged_corpus = Corpus(extraction_metadata=metadata, emails=all_emails)
 
         return IncrementalExtractionResult(
@@ -475,14 +486,21 @@ class BaseExtractor(ABC):
         """
         return {}
 
-    def _handle_rate_limit(self, attempt: int) -> None:
+    def _handle_rate_limit(self, attempt: int, retry_after: int | None = None) -> None:
         """
         Handle rate limiting with exponential backoff.
 
+        Uses the provider-supplied Retry-After value when available,
+        otherwise falls back to exponential backoff.
+
         Args:
             attempt: Current attempt number (used for backoff calculation)
+            retry_after: Seconds to wait, from the provider's Retry-After header
         """
-        backoff_seconds = min(2 ** attempt, 8)  # Max 8 seconds
+        if retry_after is not None and retry_after > 0:
+            backoff_seconds = min(retry_after, MAX_BACKOFF_SECONDS)
+        else:
+            backoff_seconds = min(2 ** attempt, MAX_BACKOFF_SECONDS)
         self.logger.warning(f"Rate limited, backing off for {backoff_seconds} seconds")
         time.sleep(backoff_seconds)
 

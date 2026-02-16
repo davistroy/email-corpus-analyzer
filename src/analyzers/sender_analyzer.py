@@ -155,10 +155,12 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
             SenderType enum value
         """
         # Check for service indicators in email or domain
-        service_indicators = ["noreply", "no-reply", "donotreply", "notification", "notify", "alert"]
         email_lower = sender.email.lower()
         domain_lower = sender.domain.lower()
-        if any(indicator in email_lower or indicator in domain_lower for indicator in service_indicators):
+        if any(
+            indicator in email_lower or indicator in domain_lower
+            for indicator in self.thresholds.service_keywords
+        ):
             logger.debug(f"Classified {sender.email} as SERVICE (email/domain contains service indicator)")
             return SenderType.SERVICE
 
@@ -166,9 +168,8 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
         all_subjects_text = " ".join(sender.sample_subjects).lower()
 
         # Check for marketing indicators (requires sufficient emails)
-        marketing_keywords = ["unsubscribe", "promotional", "offer", "discount", "sale", "promotion"]
         if sender.frequency_count > self.thresholds.marketing_min_emails:
-            if any(keyword in all_subjects_text for keyword in marketing_keywords):
+            if any(keyword in all_subjects_text for keyword in self.thresholds.marketing_keywords):
                 logger.debug(
                     f"Classified {sender.email} as MARKETING "
                     f"(count: {sender.frequency_count}, keywords found)"
@@ -176,8 +177,7 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
                 return SenderType.MARKETING
 
         # Check for work indicators
-        work_keywords = ["meeting", "project", "team", "re:", "fwd:"]
-        if any(keyword in all_subjects_text for keyword in work_keywords):
+        if any(keyword in all_subjects_text for keyword in self.thresholds.work_keywords):
             logger.debug(f"Classified {sender.email} as WORK (keywords found)")
             return SenderType.WORK
 
