@@ -83,9 +83,12 @@ email-corpus-analyzer/
 │   ├── extractors/          # Email extraction (Hotmail via Graph API, Gmail via Gmail API)
 │   ├── analyzers/           # 5 core + 2 optional analysis modules
 │   ├── generators/          # Category suggestion generation
+│   ├── services/            # Service layer (extraction, analysis, suggestion orchestration)
+│   ├── cli/                 # CLI package (commands, parsers, formatters)
 │   ├── ui/                  # Interactive review (CLI + TUI)
 │   ├── cache/               # Embedding cache for incremental analysis
 │   ├── config/              # YAML configuration system
+│   ├── data/                # External data files (templates.json)
 │   ├── exporters/           # CSV, HTML, Outlook rules, Gmail filters export
 │   ├── learning/            # Feedback learning system
 │   ├── preview/             # Dry-run estimators
@@ -93,7 +96,7 @@ email-corpus-analyzer/
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests (1663 tests, 86% coverage)
+│   └── unit/                # Unit tests (1835 tests, 86% coverage)
 ├── docs/                    # Documentation
 ├── scripts/                 # Standalone scripts
 ├── specs/                   # Design specifications
