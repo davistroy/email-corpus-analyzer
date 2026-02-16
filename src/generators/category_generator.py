@@ -117,9 +117,8 @@ class CategoryGenerator:
         logger.info(f"Generated {len(all_categories)} unique categories")
 
         # Task 5B.3: Apply learned rename patterns to improve category names
-        all_categories = self._apply_learned_patterns(all_categories)
+        return self._apply_learned_patterns(all_categories)
 
-        return all_categories
 
     def _apply_learned_patterns(
         self,

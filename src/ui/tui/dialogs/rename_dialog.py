@@ -110,10 +110,7 @@ class RenameDialog(ModalScreen[str | None]):
         if not stripped:
             return False
 
-        if len(stripped) > MAX_NAME_LENGTH:
-            return False
-
-        return True
+        return not len(stripped) > MAX_NAME_LENGTH
 
     def get_validation_error(self, name: str) -> str | None:
         """

@@ -101,6 +101,6 @@ def strip_domain_suffix(domain: str) -> str:
     parts = domain.lower().split(".")
     if len(parts) >= 3 and parts[-2] in _SECOND_LEVEL_TLDS:
         return ".".join(parts[:-2])
-    elif len(parts) >= 2:
+    if len(parts) >= 2:
         return ".".join(parts[:-1])
     return domain

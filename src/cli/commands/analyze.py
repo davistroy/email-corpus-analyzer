@@ -11,8 +11,8 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
-def build_analyze_parser(subparsers) -> None:
-    """Add analyze subparser to the CLI."""
+def build_analyze_parser(subparsers) -> argparse.ArgumentParser:
+    """Add analyze subparser to the CLI and return it."""
     analyze_parser = subparsers.add_parser(
         "analyze",
         help="Analyze email corpus for patterns",
@@ -99,6 +99,8 @@ Note: --auto-clusters and --num-clusters are mutually exclusive.
         help="Generate cluster visualization PNG (requires matplotlib)"
     )
 
+    return analyze_parser
+
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     """
@@ -142,10 +144,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     logger.info("=== CORPUS ANALYSIS ===")
 
     # Determine corpus path
-    if args.corpus:
-        corpus_path = args.corpus
-    else:
-        corpus_path = PathConfig.get_corpus_path()
+    corpus_path = args.corpus or PathConfig.get_corpus_path()
 
     logger.info(f"Corpus input: {corpus_path}")
 
@@ -166,10 +165,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         return 1
 
     # Determine analysis output path
-    if args.analysis_file:
-        analysis_path = args.analysis_file
-    else:
-        analysis_path = PathConfig.get_analysis_path()
+    analysis_path = args.analysis_file or PathConfig.get_analysis_path()
 
     logger.info(f"Analysis output: {analysis_path}")
 

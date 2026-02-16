@@ -424,15 +424,18 @@ class AppConfig(BaseModel):
 def _merge_nested_config(
     base: BaseModel,
     override: BaseModel,
-    defaults: BaseModel
 ) -> dict[str, Any]:
     """
-    Merge two nested config models, preserving base values for None overrides.
+    Merge two nested config models, using model_fields_set to determine
+    which override values were explicitly provided.
+
+    Uses Pydantic v2's model_fields_set tracking instead of comparing
+    against defaults, so that explicitly setting a value to the default
+    in the override correctly takes precedence over the base.
 
     Args:
         base: Base configuration to start from
         override: Configuration with override values
-        defaults: Default configuration to check for non-default values
 
     Returns:
         Merged dictionary suitable for model construction
@@ -440,19 +443,13 @@ def _merge_nested_config(
     result = {}
     base_dict = base.model_dump()
     override_dict = override.model_dump()
-    defaults_dict = defaults.model_dump()
 
     for key in base_dict:
-        base_val = base_dict[key]
-        override_val = override_dict[key]
-        default_val = defaults_dict[key]
-
-        # If override has a non-default value, use it
-        # Otherwise use the base value
-        if override_val != default_val:
-            result[key] = override_val
+        # If the key was explicitly set in the override, use override value
+        if key in override.model_fields_set:
+            result[key] = override_dict[key]
         else:
-            result[key] = base_val
+            result[key] = base_dict[key]
 
     return result
 
@@ -461,8 +458,12 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
     """
     Merge two AppConfig instances with override taking precedence.
 
-    Values in override replace values in base, except when override value
-    is None or matches the default value.
+    Uses Pydantic v2's model_fields_set to determine which values in
+    the override were explicitly provided. This means an override that
+    explicitly sets a value to the default (e.g., verbose=False) will
+    correctly take precedence over a base value (e.g., verbose=True).
+
+    Fields not present in override.model_fields_set are preserved from base.
 
     Args:
         base: Base configuration
@@ -471,22 +472,20 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
     Returns:
         New AppConfig with merged values
     """
-    defaults = AppConfig()
-
     # Merge top-level fields
     merged = {}
 
     # Handle simple fields
     for field in ["output_dir", "user_email", "verbose"]:
-        base_val = getattr(base, field)
-        override_val = getattr(override, field)
-        default_val = getattr(defaults, field)
-
-        # Use override if it's not None/default, else use base
-        if override_val is not None and override_val != default_val:
-            merged[field] = override_val
+        if field in override.model_fields_set:
+            override_val = getattr(override, field)
+            # For optional fields, None means "not set" even if explicit
+            if override_val is not None:
+                merged[field] = override_val
+            else:
+                merged[field] = getattr(base, field)
         else:
-            merged[field] = base_val
+            merged[field] = getattr(base, field)
 
     # Handle nested configs
     for config_name, config_cls in [
@@ -499,11 +498,14 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
     ]:
         base_nested = getattr(base, config_name)
         override_nested = getattr(override, config_name)
-        defaults_nested = config_cls()
 
-        merged_nested = _merge_nested_config(
-            base_nested, override_nested, defaults_nested
-        )
-        merged[config_name] = config_cls(**merged_nested)
+        # Only merge if the nested config was explicitly provided in override
+        if config_name in override.model_fields_set:
+            merged_nested = _merge_nested_config(
+                base_nested, override_nested,
+            )
+            merged[config_name] = config_cls(**merged_nested)
+        else:
+            merged[config_name] = base_nested
 
     return AppConfig(**merged)

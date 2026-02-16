@@ -10,8 +10,8 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
-def build_suggest_parser(subparsers) -> None:
-    """Add suggest subparser to the CLI."""
+def build_suggest_parser(subparsers) -> argparse.ArgumentParser:
+    """Add suggest subparser to the CLI and return it."""
     from pathlib import Path
 
     suggest_parser = subparsers.add_parser(
@@ -65,6 +65,8 @@ Examples:
         help="Show what would be done without actually executing"
     )
 
+    return suggest_parser
+
 
 def cmd_suggest(args: argparse.Namespace) -> int:
     """
@@ -106,10 +108,7 @@ def cmd_suggest(args: argparse.Namespace) -> int:
     logger.info("=== CATEGORY SUGGESTION ===")
 
     # Determine analysis path
-    if args.analysis:
-        analysis_path = args.analysis
-    else:
-        analysis_path = PathConfig.get_analysis_path()
+    analysis_path = args.analysis or PathConfig.get_analysis_path()
 
     logger.info(f"Analysis input: {analysis_path}")
 
@@ -129,10 +128,7 @@ def cmd_suggest(args: argparse.Namespace) -> int:
         return 1
 
     # Determine suggestions output path
-    if args.suggestions_file:
-        suggestions_path = args.suggestions_file
-    else:
-        suggestions_path = PathConfig.get_suggestions_path()
+    suggestions_path = args.suggestions_file or PathConfig.get_suggestions_path()
 
     logger.info(f"Suggestions output: {suggestions_path}")
 

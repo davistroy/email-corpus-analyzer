@@ -49,6 +49,5 @@ def extract_plain_text(html_content: str) -> str:
 
     # Collapse multiple spaces to single space
     import re
-    text = re.sub(r'\s+', ' ', text)
+    return re.sub(r'\s+', ' ', text)
 
-    return text

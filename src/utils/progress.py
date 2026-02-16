@@ -137,7 +137,6 @@ def wrap_with_progress(
 
     try:
         kwargs['progress_callback'] = callback
-        result = func(*args, **kwargs)
-        return result
+        return func(*args, **kwargs)
     finally:
         cleanup()

@@ -101,10 +101,9 @@ def interpret_silhouette(score: float) -> str:
     confidence = silhouette_to_confidence(score)
     if confidence > 0.7:
         return "strong"
-    elif confidence >= 0.4:
+    if confidence >= 0.4:
         return "moderate"
-    else:
-        return "weak"
+    return "weak"
 
 
 @dataclass
@@ -214,7 +213,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         confidence = self._calculate_confidence(k_values, inertias, optimal_k)
 
         # Build k_scores dictionary
-        k_scores = dict(zip(k_values, inertias))
+        k_scores = dict(zip(k_values, inertias, strict=False))
 
         logger.info(f"Elbow method found optimal k={optimal_k} with confidence={confidence:.2f}")
 
@@ -249,10 +248,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         k_min, k_max = k_norm.min(), k_norm.max()
         inertia_min, inertia_max = inertia_norm.min(), inertia_norm.max()
 
-        if k_max - k_min > 0:
-            k_norm = (k_norm - k_min) / (k_max - k_min)
-        else:
-            k_norm = np.zeros_like(k_norm)
+        k_norm = (k_norm - k_min) / (k_max - k_min) if k_max - k_min > 0 else np.zeros_like(k_norm)
 
         if inertia_max - inertia_min > 0:
             inertia_norm = (inertia_norm - inertia_min) / (inertia_max - inertia_min)
@@ -268,7 +264,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         if line_len == 0:
             return k_values[0]
 
-        line_unit = line_vec / line_len
+        line_vec / line_len
 
         # Calculate perpendicular distance from each point to the line
         distances = []

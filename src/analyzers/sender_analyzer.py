@@ -168,8 +168,7 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
         all_subjects_text = " ".join(sender.sample_subjects).lower()
 
         # Check for marketing indicators (requires sufficient emails)
-        if sender.frequency_count > self.thresholds.marketing_min_emails:
-            if any(keyword in all_subjects_text for keyword in self.thresholds.marketing_keywords):
+        if sender.frequency_count > self.thresholds.marketing_min_emails and any(keyword in all_subjects_text for keyword in self.thresholds.marketing_keywords):
                 logger.debug(
                     f"Classified {sender.email} as MARKETING "
                     f"(count: {sender.frequency_count}, keywords found)"

@@ -867,3 +867,135 @@ class TestGeneratorThresholds:
         # Generator thresholds via suggest config
         assert config.suggest.thresholds.max_senders_for_categories == 20
         assert config.suggest.thresholds.merge_name_similarity == 0.8
+
+
+class TestConfigMergePrecedence:
+    """Test cases for config merge precedence using model_fields_set.
+
+    These tests verify that explicitly setting a value to the default
+    in a higher-precedence config correctly overrides a non-default
+    value from a lower-precedence config. This is the fix for B1.
+    """
+
+    def test_merge_verbose_false_overrides_verbose_true(self):
+        """Project config setting verbose=false should override global verbose=true.
+
+        This is the primary bug: a boolean default value (False) in the override
+        config should still take precedence over a non-default base value.
+        """
+        from src.config.models import AppConfig, merge_configs
+
+        global_config = AppConfig(verbose=True)
+        project_config = AppConfig(verbose=False)  # Explicit default value
+
+        result = merge_configs(global_config, project_config)
+
+        # verbose=False was EXPLICITLY set in project_config,
+        # so it should override global's verbose=True
+        assert result.verbose is False
+
+    def test_merge_num_clusters_default_overrides_non_default(self):
+        """Project config setting num_clusters=10 (default) should override
+        global's num_clusters=15.
+
+        When a user explicitly sets a value that happens to match the default,
+        the merge should still honor it over the base config.
+        """
+        from src.config.models import AppConfig, AnalyzeConfig, merge_configs
+
+        global_config = AppConfig(analyze=AnalyzeConfig(num_clusters=15))
+        project_config = AppConfig(analyze=AnalyzeConfig(num_clusters=10))
+
+        result = merge_configs(global_config, project_config)
+
+        # num_clusters=10 was EXPLICITLY set, should override 15
+        assert result.analyze.num_clusters == 10
+
+    def test_merge_unset_fields_dont_override(self):
+        """Unset fields in override should NOT replace base values.
+
+        This ensures we don't accidentally break the other direction:
+        fields NOT present in override should leave base values intact.
+        """
+        from src.config.models import AppConfig, AnalyzeConfig, merge_configs
+
+        global_config = AppConfig(
+            verbose=True,
+            analyze=AnalyzeConfig(num_clusters=15, max_embedding_text_length=2000)
+        )
+        # Override only sets num_clusters, NOT verbose or max_embedding_text_length
+        project_config = AppConfig(analyze=AnalyzeConfig(num_clusters=20))
+
+        result = merge_configs(global_config, project_config)
+
+        # Overridden field should take new value
+        assert result.analyze.num_clusters == 20
+        # Unset fields should preserve base values
+        assert result.verbose is True
+        assert result.analyze.max_embedding_text_length == 2000
+
+    def test_merge_no_cleanup_false_overrides_true(self):
+        """Explicit no_cleanup=false in override should override base's true.
+
+        Another boolean default-value override scenario, this time on
+        a nested config field.
+        """
+        from src.config.models import AppConfig, ReviewConfig, merge_configs
+
+        base = AppConfig(review=ReviewConfig(no_cleanup=True))
+        override = AppConfig(review=ReviewConfig(no_cleanup=False))
+
+        result = merge_configs(base, override)
+
+        assert result.review.no_cleanup is False
+
+    def test_merge_batch_size_default_overrides_custom(self):
+        """Explicit batch_size=500 (default) should override base's 200."""
+        from src.config.models import AppConfig, ExtractConfig, merge_configs
+
+        base = AppConfig(extract=ExtractConfig(batch_size=200))
+        override = AppConfig(extract=ExtractConfig(batch_size=500))
+
+        result = merge_configs(base, override)
+
+        # 500 is the default but was explicitly set
+        assert result.extract.batch_size == 500
+
+    def test_merge_three_level_explicit_default_override(self):
+        """Three-level merge where project restores a default overridden by global.
+
+        defaults (num_clusters=10) -> global (num_clusters=15) -> project (num_clusters=10)
+        The final result should be 10, because project explicitly set it.
+        """
+        from src.config.models import AppConfig, AnalyzeConfig, merge_configs
+
+        defaults = AppConfig()
+        global_config = AppConfig(analyze=AnalyzeConfig(num_clusters=15))
+        project_config = AppConfig(analyze=AnalyzeConfig(num_clusters=10))
+
+        # Chain: defaults <- global <- project
+        intermediate = merge_configs(defaults, global_config)
+        result = merge_configs(intermediate, project_config)
+
+        assert result.analyze.num_clusters == 10
+
+    def test_merge_none_values_in_override_dont_override_base(self):
+        """None values in override config should not replace base values.
+
+        This ensures that optional fields left as None in the override
+        don't wipe out base config values.
+        """
+        from src.config.models import AppConfig, merge_configs
+        from pathlib import Path
+
+        base = AppConfig(
+            output_dir=Path("/base/output"),
+            user_email="base@example.com"
+        )
+        # Override with only user_email, output_dir left as None (default)
+        override = AppConfig(user_email="override@example.com")
+
+        result = merge_configs(base, override)
+
+        assert result.user_email == "override@example.com"
+        assert result.output_dir == Path("/base/output")

@@ -632,7 +632,7 @@ def is_tui_supported() -> bool:
 
     # Check if we can import textual
     try:
-        from textual.app import App
+        from textual.app import App  # noqa: F401
         return True
     except ImportError:
         return False

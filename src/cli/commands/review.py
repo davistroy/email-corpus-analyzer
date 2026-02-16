@@ -10,8 +10,8 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
-def build_review_parser(subparsers) -> None:
-    """Add review subparser to the CLI."""
+def build_review_parser(subparsers) -> argparse.ArgumentParser:
+    """Add review subparser to the CLI and return it."""
     from pathlib import Path
 
     review_parser = subparsers.add_parser(
@@ -76,6 +76,8 @@ Note: --headless and --no-tui are mutually exclusive in practice.
         help="Disable feedback learning (don't log decisions or apply learned patterns)"
     )
 
+    return review_parser
+
 
 def cmd_review(args: argparse.Namespace) -> int:
     """
@@ -124,10 +126,7 @@ def cmd_review(args: argparse.Namespace) -> int:
     logger.info("=== CATEGORY REVIEW ===")
 
     # Determine suggestions path
-    if args.suggestions:
-        suggestions_path = args.suggestions
-    else:
-        suggestions_path = PathConfig.get_suggestions_path()
+    suggestions_path = args.suggestions or PathConfig.get_suggestions_path()
 
     logger.info(f"Suggestions input: {suggestions_path}")
 
@@ -147,10 +146,7 @@ def cmd_review(args: argparse.Namespace) -> int:
         return 1
 
     # Determine approved output path
-    if args.approved_file:
-        approved_path = args.approved_file
-    else:
-        approved_path = PathConfig.get_approved_categories_path()
+    approved_path = args.approved_file or PathConfig.get_approved_categories_path()
 
     logger.info(f"Approved categories output: {approved_path}")
 

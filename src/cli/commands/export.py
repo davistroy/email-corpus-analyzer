@@ -11,8 +11,8 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
-def build_export_parser(subparsers) -> None:
-    """Add export subparser to the CLI."""
+def build_export_parser(subparsers) -> argparse.ArgumentParser:
+    """Add export subparser to the CLI and return it."""
     export_parser = subparsers.add_parser(
         "export",
         help="Export categories to CSV, HTML, or email rules format",
@@ -61,6 +61,8 @@ Import Instructions:
         help="Input categories file (default: approved_categories.json)"
     )
 
+    return export_parser
+
 
 def cmd_export(args: argparse.Namespace) -> int:
     """
@@ -86,10 +88,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     logger.info(f"=== CATEGORY EXPORT ({args.format.upper()}) ===")
 
     # Determine input path
-    if args.input:
-        input_path = args.input
-    else:
-        input_path = PathConfig.get_approved_categories_path()
+    input_path = args.input or PathConfig.get_approved_categories_path()
 
     logger.info(f"Input file: {input_path}")
 

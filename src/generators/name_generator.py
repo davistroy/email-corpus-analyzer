@@ -132,7 +132,7 @@ class TfidfNameGenerator:
 
             # Create term-score pairs
             term_scores = []
-            for term, score in zip(feature_names, cluster_scores):
+            for term, score in zip(feature_names, cluster_scores, strict=False):
                 if score > 0 and term.lower() not in STOP_WORDS and len(term) > 2:
                     term_scores.append((term, score))
 
@@ -171,7 +171,7 @@ class TfidfNameGenerator:
             scores = tfidf_matrix[0].toarray().flatten()
 
             term_scores = []
-            for term, score in zip(feature_names, scores):
+            for term, score in zip(feature_names, scores, strict=False):
                 if score > 0 and term.lower() not in STOP_WORDS and len(term) > 2:
                     term_scores.append((term, score))
 
@@ -196,7 +196,7 @@ class TfidfNameGenerator:
 
         # Filter out very short terms and format
         filtered_terms = []
-        for term, score in terms:
+        for term, _score in terms:
             if len(term) > 2:
                 filtered_terms.append(term.title())
 

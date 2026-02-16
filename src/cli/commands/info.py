@@ -11,8 +11,8 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
-def build_info_parser(subparsers) -> None:
-    """Add info subparser to the CLI."""
+def build_info_parser(subparsers) -> argparse.ArgumentParser:
+    """Add info subparser to the CLI and return it."""
     info_parser = subparsers.add_parser(
         "info",
         help="Show corpus statistics",
@@ -36,6 +36,8 @@ Examples:
         help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)"
     )
 
+    return info_parser
+
 
 def cmd_info(args: argparse.Namespace) -> int:
     """
@@ -48,10 +50,7 @@ def cmd_info(args: argparse.Namespace) -> int:
         Exit code (0 = success, non-zero = error)
     """
     # Determine corpus path
-    if args.corpus:
-        corpus_path = args.corpus
-    else:
-        corpus_path = PathConfig.get_corpus_path()
+    corpus_path = args.corpus or PathConfig.get_corpus_path()
 
     # Load corpus data
     try:
