@@ -17,8 +17,8 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def build_config_parser(subparsers) -> None:
-    """Add config subparser to the CLI."""
+def build_config_parser(subparsers) -> argparse.ArgumentParser:
+    """Add config subparser to the CLI and return it."""
     config_parser = subparsers.add_parser(
         "config",
         help="Manage configuration files",
@@ -62,6 +62,8 @@ def build_config_parser(subparsers) -> None:
         help="Validate configuration settings",
         description="Check all configuration values and runtime conditions."
     )
+
+    return config_parser
 
 
 def validate_config(config) -> list[dict]:

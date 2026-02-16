@@ -268,7 +268,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
 
         # Use distance that would give approximately target clusters
         # Work backwards from dendrogram structure
-        n_samples = linkage_matrix.shape[0] + 1
+        linkage_matrix.shape[0] + 1
 
         # Find distance that gives closest to target clusters
         best_distance = max_dist / 2
@@ -323,10 +323,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
                 continue
 
             # Generate cluster ID
-            if level == 0:
-                cluster_id = f"cluster_{label_idx}"
-            else:
-                cluster_id = f"{parent_id}_{label_idx}"
+            cluster_id = f"cluster_{label_idx}" if level == 0 else f"{parent_id}_{label_idx}"
 
             # Calculate percentage
             percentage = (cluster_size / total_emails) * 100

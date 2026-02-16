@@ -9,7 +9,6 @@ Authentication:
     - Subsequent runs: uses cached token (no re-auth needed)
     - Token cache: ~/.email-analyzer/ms_token_cache.json
 """
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -74,10 +73,9 @@ class GraphAPIClient:
             import os
             self.token_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self.token_cache_path.write_text(cache.serialize())
-            try:
-                os.chmod(self.token_cache_path, 0o600)
-            except OSError:
-                pass  # Windows may not support chmod
+            import contextlib
+            with contextlib.suppress(OSError):
+                os.chmod(self.token_cache_path, 0o600)  # Windows may not support chmod
 
     def _get_app(self) -> msal.PublicClientApplication:
         """Get or create the MSAL application."""

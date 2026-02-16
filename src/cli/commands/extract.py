@@ -12,8 +12,8 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
-def build_extract_parser(subparsers) -> None:
-    """Add extract subparser to the CLI."""
+def build_extract_parser(subparsers) -> argparse.ArgumentParser:
+    """Add extract subparser to the CLI and return it."""
     extract_parser = subparsers.add_parser(
         "extract",
         help="Extract emails from Hotmail/Gmail inbox",
@@ -86,6 +86,8 @@ Examples:
         help="Incremental extraction: only fetch emails since last extraction (Task 4B.2)"
     )
 
+    return extract_parser
+
 
 def cmd_extract(args: argparse.Namespace) -> int:
     """
@@ -140,10 +142,7 @@ def cmd_extract(args: argparse.Namespace) -> int:
     logger.info(f"Source: {source}")
 
     # Determine corpus path
-    if args.corpus_file:
-        corpus_path = args.corpus_file
-    else:
-        corpus_path = PathConfig.get_corpus_path()
+    corpus_path = args.corpus_file or PathConfig.get_corpus_path()
 
     logger.info(f"Corpus output: {corpus_path}")
 

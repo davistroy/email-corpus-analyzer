@@ -75,7 +75,6 @@ class AnalysisService:
     def run(
         self,
         corpus: Corpus,
-        incremental: bool = False,
         progress_callback: Callable[[str], None] | None = None,
     ) -> AnalysisResults:
         """
@@ -83,7 +82,6 @@ class AnalysisService:
 
         Args:
             corpus: Email corpus to analyze
-            incremental: If True, use incremental analysis where supported
             progress_callback: Optional callback(message) for status updates
 
         Returns:

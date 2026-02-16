@@ -3177,65 +3177,52 @@ class TestCLIHelpExamples:
 
     def test_analyze_command_has_epilog_with_examples(self):
         """Test analyze command has epilog with usage examples."""
-        from src.cli import create_parser
+        from src.cli import SUBPARSERS, create_parser
 
-        parser = create_parser()
-        # Access the subparser for analyze
-        subparsers = parser._subparsers._group_actions[0].choices
-
-        analyze_parser = subparsers["analyze"]
+        create_parser()
+        analyze_parser = SUBPARSERS["analyze"]
         assert analyze_parser.epilog is not None
         assert "example" in analyze_parser.epilog.lower()
 
     def test_extract_command_has_epilog_with_examples(self):
         """Test extract command has epilog with usage examples."""
-        from src.cli import create_parser
+        from src.cli import SUBPARSERS, create_parser
 
-        parser = create_parser()
-        subparsers = parser._subparsers._group_actions[0].choices
-
-        extract_parser = subparsers["extract"]
+        create_parser()
+        extract_parser = SUBPARSERS["extract"]
         assert extract_parser.epilog is not None
         assert "example" in extract_parser.epilog.lower()
 
     def test_suggest_command_has_epilog_with_examples(self):
         """Test suggest command has epilog with usage examples."""
-        from src.cli import create_parser
+        from src.cli import SUBPARSERS, create_parser
 
-        parser = create_parser()
-        subparsers = parser._subparsers._group_actions[0].choices
-
-        suggest_parser = subparsers["suggest"]
+        create_parser()
+        suggest_parser = SUBPARSERS["suggest"]
         assert suggest_parser.epilog is not None
 
     def test_review_command_has_epilog_with_examples(self):
         """Test review command has epilog with usage examples."""
-        from src.cli import create_parser
+        from src.cli import SUBPARSERS, create_parser
 
-        parser = create_parser()
-        subparsers = parser._subparsers._group_actions[0].choices
-
-        review_parser = subparsers["review"]
+        create_parser()
+        review_parser = SUBPARSERS["review"]
         assert review_parser.epilog is not None
 
     def test_pipeline_command_has_epilog_with_examples(self):
         """Test pipeline command has epilog with usage examples."""
-        from src.cli import create_parser
+        from src.cli import SUBPARSERS, create_parser
 
-        parser = create_parser()
-        subparsers = parser._subparsers._group_actions[0].choices
-
-        pipeline_parser = subparsers["pipeline"]
+        create_parser()
+        pipeline_parser = SUBPARSERS["pipeline"]
         assert pipeline_parser.epilog is not None
 
     def test_export_command_has_epilog_with_examples(self):
         """Test export command has epilog with usage examples."""
-        from src.cli import create_parser
+        from src.cli import SUBPARSERS, create_parser
 
-        parser = create_parser()
-        subparsers = parser._subparsers._group_actions[0].choices
-
-        export_parser = subparsers["export"]
+        create_parser()
+        export_parser = SUBPARSERS["export"]
         assert export_parser.epilog is not None
 
 
@@ -3463,3 +3450,234 @@ class TestConfigMappingsAndPrecedence:
 
         assert args.min_cluster_percentage == 15.0
         assert args.min_sender_count == 100
+
+
+# =============================================================================
+# Tests for Pipeline Flag Propagation (B2)
+# =============================================================================
+
+
+class TestPipelineFlagPropagation:
+    """Test that pipeline correctly forwards CLI flags to sub-commands."""
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.cmd_suggest")
+    @patch("src.cli.commands.pipeline.cmd_analyze")
+    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_pipeline_forwards_auto_clusters_to_analyze(
+        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+    ):
+        """Test --auto-clusters flag is forwarded to analyze step."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            auto_clusters=True,
+            cluster_method="silhouette",
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        analyze_call_args = mock_analyze.call_args[0][0]
+        assert analyze_call_args.auto_clusters is True
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.cmd_suggest")
+    @patch("src.cli.commands.pipeline.cmd_analyze")
+    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_pipeline_forwards_cluster_method_elbow_to_analyze(
+        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+    ):
+        """Test --cluster-method elbow is forwarded to analyze step."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            auto_clusters=True,
+            cluster_method="elbow",
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        analyze_call_args = mock_analyze.call_args[0][0]
+        assert analyze_call_args.cluster_method == "elbow"
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.cmd_suggest")
+    @patch("src.cli.commands.pipeline.cmd_analyze")
+    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_pipeline_forwards_cluster_viz_to_analyze(
+        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+    ):
+        """Test --cluster-viz flag is forwarded to analyze step."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            cluster_viz=True,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        analyze_call_args = mock_analyze.call_args[0][0]
+        assert analyze_call_args.cluster_viz is True
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.cmd_suggest")
+    @patch("src.cli.commands.pipeline.cmd_analyze")
+    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_pipeline_forwards_incremental_to_analyze(
+        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+    ):
+        """Test --incremental flag is forwarded to analyze step."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            incremental=True,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        analyze_call_args = mock_analyze.call_args[0][0]
+        assert analyze_call_args.incremental is True
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.cmd_suggest")
+    @patch("src.cli.commands.pipeline.cmd_analyze")
+    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_pipeline_forwards_suggest_thresholds_from_args(
+        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+    ):
+        """Test suggest thresholds are forwarded from CLI args, not hardcoded."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            auto_clusters=False,
+            cluster_method="silhouette",
+            min_cluster_percentage=12.5,
+            min_sender_count=50,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        suggest_call_args = mock_suggest.call_args[0][0]
+        assert suggest_call_args.min_cluster_percentage == 12.5
+        assert suggest_call_args.min_sender_count == 50
+
+    @patch("src.cli.commands.pipeline.cmd_review")
+    @patch("src.cli.commands.pipeline.cmd_suggest")
+    @patch("src.cli.commands.pipeline.cmd_analyze")
+    @patch("src.cli.commands.pipeline.cmd_extract")
+    @patch("src.cli.commands.pipeline.logger")
+    def test_pipeline_defaults_for_missing_flags(
+        self, mock_logger, mock_extract, mock_analyze, mock_suggest, mock_review
+    ):
+        """Test pipeline uses correct defaults when flags are not present on args."""
+        from src.cli.commands.pipeline import cmd_pipeline
+
+        mock_extract.return_value = 0
+        mock_analyze.return_value = 0
+        mock_suggest.return_value = 0
+        mock_review.return_value = 0
+
+        # Minimal args (as older code might pass) - no auto_clusters, cluster_method, etc.
+        args = argparse.Namespace(
+            user_email="test@example.com",
+            num_clusters=10,
+            no_cleanup=False,
+            skip_review=False,
+            output_dir=Path("/output"),
+            verbose=False,
+            quiet=False,
+            json=False,
+        )
+
+        result = cmd_pipeline(args)
+
+        assert result == 0
+        # Check analyze defaults
+        analyze_call_args = mock_analyze.call_args[0][0]
+        assert analyze_call_args.auto_clusters is False
+        assert analyze_call_args.cluster_method == "silhouette"
+        assert analyze_call_args.cluster_viz is False
+        assert analyze_call_args.incremental is False
+        # Check suggest defaults
+        suggest_call_args = mock_suggest.call_args[0][0]
+        assert suggest_call_args.min_cluster_percentage == 5.0
+        assert suggest_call_args.min_sender_count == 20

@@ -102,10 +102,7 @@ class ExtractEstimator:
             ExtractEstimate with predictions
         """
         # Determine output path
-        if args.corpus_file:
-            output_path = args.corpus_file
-        else:
-            output_path = PathConfig.get_corpus_path()
+        output_path = args.corpus_file or PathConfig.get_corpus_path()
 
         return ExtractEstimate(
             user_email=args.user_email,
@@ -143,10 +140,7 @@ class AnalyzeEstimator:
             AnalyzeEstimate with predictions
         """
         # Determine paths
-        if args.corpus:
-            corpus_path = args.corpus
-        else:
-            corpus_path = PathConfig.get_corpus_path()
+        corpus_path = args.corpus or PathConfig.get_corpus_path()
 
         if hasattr(args, "analysis_file") and args.analysis_file:
             output_path = args.analysis_file
@@ -220,10 +214,7 @@ class SuggestEstimator:
             SuggestEstimate with predictions
         """
         # Determine paths
-        if args.analysis:
-            analysis_path = args.analysis
-        else:
-            analysis_path = PathConfig.get_analysis_path()
+        analysis_path = args.analysis or PathConfig.get_analysis_path()
 
         if hasattr(args, "suggestions_file") and args.suggestions_file:
             output_path = args.suggestions_file
@@ -271,10 +262,7 @@ class ReviewEstimator:
             ReviewEstimate with predictions
         """
         # Determine paths
-        if args.suggestions:
-            suggestions_path = args.suggestions
-        else:
-            suggestions_path = PathConfig.get_suggestions_path()
+        suggestions_path = args.suggestions or PathConfig.get_suggestions_path()
 
         if hasattr(args, "approved_file") and args.approved_file:
             output_path = args.approved_file

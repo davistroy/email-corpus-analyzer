@@ -17,7 +17,6 @@ Setup:
     5. Download client_secret JSON → save as ~/.email-analyzer/gmail_credentials.json
 """
 import base64
-import json
 from pathlib import Path
 from typing import Any
 
@@ -117,10 +116,9 @@ class GmailClient:
         import os
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.token_path.write_text(creds.to_json())
-        try:
-            os.chmod(self.token_path, 0o600)
-        except OSError:
-            pass  # Windows may not support chmod
+        import contextlib
+        with contextlib.suppress(OSError):
+            os.chmod(self.token_path, 0o600)  # Windows may not support chmod
 
     def _get_service(self):
         """Get or create Gmail API service."""
@@ -457,9 +455,7 @@ class GmailClient:
                 return True
         # Also check for status_code attribute (requests-style)
         status_code = getattr(exc, "status_code", None)
-        if status_code is not None and int(status_code) == 429:
-            return True
-        return False
+        return bool(status_code is not None and int(status_code) == 429)
 
     def get_message_body(self, message_id: str) -> str:
         """

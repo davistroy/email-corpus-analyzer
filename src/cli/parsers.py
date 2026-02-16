@@ -10,6 +10,12 @@ from src.utils.paths import PathConfig
 logger = get_logger(__name__)
 
 
+# Registry of subparsers keyed by command name.
+# Populated by create_parser() in __init__.py so that _apply_config_defaults()
+# can look up subparser defaults without accessing private argparse internals.
+SUBPARSERS: dict[str, argparse.ArgumentParser] = {}
+
+
 # Email validation regex pattern (RFC 5322 simplified)
 EMAIL_REGEX = re.compile(
     r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
@@ -94,10 +100,7 @@ def _apply_config_defaults(
     # command-specific arguments.
     subparser = None
     if hasattr(args, "command") and args.command:
-        subparser_actions = parser._subparsers._group_actions
-        if subparser_actions:
-            choices = subparser_actions[0].choices
-            subparser = choices.get(args.command)
+        subparser = SUBPARSERS.get(args.command)
 
     def _get_parser_default(attr: str):
         """Return the argparse default for *attr*, checking subparser first."""

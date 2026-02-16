@@ -78,7 +78,7 @@ def export_categories_to_html(
 
     try:
         template = env.get_template(TEMPLATE_NAME)
-    except TemplateNotFound:
+    except TemplateNotFound as err:
         template_path = TEMPLATE_DIR / TEMPLATE_NAME
         raise ExportError(
             message=f"Template not found at {template_path}. "
@@ -89,7 +89,7 @@ def export_categories_to_html(
                 f"template file at {template_path}"
             ),
             context={"template_path": str(template_path), "template_name": TEMPLATE_NAME},
-        )
+        ) from err
 
     # Calculate statistics
     total_categories = len(categories)

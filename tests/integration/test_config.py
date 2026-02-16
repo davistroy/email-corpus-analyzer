@@ -355,3 +355,75 @@ class TestConfigMerge:
         assert merged.extract.batch_size == 300
         # checkpoint_interval should keep base value
         assert merged.extract.checkpoint_interval == 50
+
+
+# =============================================================================
+# Test Explicit Default Override via YAML (B1 fix)
+# =============================================================================
+
+
+class TestExplicitDefaultOverride:
+    """Integration tests for config merge precedence fix (B1).
+
+    These tests verify the end-to-end YAML loading path where a
+    project config explicitly sets a value back to the default,
+    overriding a global config's non-default value.
+    """
+
+    @patch("src.config.loader.get_global_config_path")
+    @patch("src.config.loader.get_project_config_path")
+    def test_project_verbose_false_overrides_global_verbose_true(
+        self, mock_project_path, mock_global_path, temp_home_dir, temp_project_dir
+    ):
+        """Project YAML setting verbose: false should override global verbose: true."""
+        global_config = {"verbose": True}
+        global_path = create_global_config(temp_home_dir, global_config)
+        mock_global_path.return_value = global_path
+
+        project_config = {"verbose": False}
+        project_path = create_project_config(temp_project_dir, project_config)
+        mock_project_path.return_value = project_path
+
+        config = load_config()
+
+        assert config.verbose is False
+
+    @patch("src.config.loader.get_global_config_path")
+    @patch("src.config.loader.get_project_config_path")
+    def test_project_restores_default_num_clusters_over_global(
+        self, mock_project_path, mock_global_path, temp_home_dir, temp_project_dir
+    ):
+        """Project YAML setting num_clusters: 10 (default) should override global's 15."""
+        global_config = {"analyze": {"num_clusters": 15}}
+        global_path = create_global_config(temp_home_dir, global_config)
+        mock_global_path.return_value = global_path
+
+        project_config = {"analyze": {"num_clusters": 10}}
+        project_path = create_project_config(temp_project_dir, project_config)
+        mock_project_path.return_value = project_path
+
+        config = load_config()
+
+        assert config.analyze.num_clusters == 10
+
+    @patch("src.config.loader.get_global_config_path")
+    @patch("src.config.loader.get_project_config_path")
+    def test_custom_config_restores_default_over_project_and_global(
+        self, mock_project_path, mock_global_path, temp_home_dir, temp_project_dir
+    ):
+        """Custom config setting batch_size: 500 (default) overrides all layers."""
+        global_config = {"extract": {"batch_size": 200}}
+        global_path = create_global_config(temp_home_dir, global_config)
+        mock_global_path.return_value = global_path
+
+        project_config = {"extract": {"batch_size": 300}}
+        project_path = create_project_config(temp_project_dir, project_config)
+        mock_project_path.return_value = project_path
+
+        # Custom config restores the default
+        custom_config_path = temp_project_dir / "custom_config.yaml"
+        custom_config_path.write_text(yaml.dump({"extract": {"batch_size": 500}}))
+
+        config = load_config(config_path=custom_config_path)
+
+        assert config.extract.batch_size == 500

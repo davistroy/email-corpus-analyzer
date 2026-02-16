@@ -39,6 +39,7 @@ from src.cli.formatters import output_json
 from src.cli.parsers import (
     _CONFIG_MAPPINGS,
     EMAIL_REGEX,
+    SUBPARSERS,
     _apply_config_defaults,
     setup_output_directory,
     validate_email_format,
@@ -70,6 +71,7 @@ __all__ = [
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
+    "SUBPARSERS",
     "_CONFIG_MAPPINGS",
     "_apply_config_defaults",
 ]
@@ -152,15 +154,18 @@ For more information, see: specs/001-use-the-document/quickstart.md
         help="Command to execute"
     )
 
-    # Build each command's subparser
-    build_extract_parser(subparsers)
-    build_analyze_parser(subparsers)
-    build_suggest_parser(subparsers)
-    build_review_parser(subparsers)
-    build_pipeline_parser(subparsers)
-    build_info_parser(subparsers)
-    build_export_parser(subparsers)
-    build_config_parser(subparsers)
+    # Build each command's subparser and register in SUBPARSERS
+    # so _apply_config_defaults() can look up defaults without
+    # accessing private argparse internals.
+    SUBPARSERS.clear()
+    SUBPARSERS["extract"] = build_extract_parser(subparsers)
+    SUBPARSERS["analyze"] = build_analyze_parser(subparsers)
+    SUBPARSERS["suggest"] = build_suggest_parser(subparsers)
+    SUBPARSERS["review"] = build_review_parser(subparsers)
+    SUBPARSERS["pipeline"] = build_pipeline_parser(subparsers)
+    SUBPARSERS["info"] = build_info_parser(subparsers)
+    SUBPARSERS["export"] = build_export_parser(subparsers)
+    SUBPARSERS["config"] = build_config_parser(subparsers)
 
     return parser
 
