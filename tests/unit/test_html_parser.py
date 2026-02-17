@@ -4,7 +4,7 @@ Unit tests for HTML parser.
 Tests the extract_plain_text function with various HTML scenarios
 including malformed HTML, scripts, styles, and edge cases.
 """
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -126,7 +126,7 @@ class TestHTMLParserFallback:
                 mock_soup
             ]
 
-            result = extract_plain_text(html)
+            extract_plain_text(html)
 
             # Verify both parsers were tried
             assert mock_bs.call_count == 2

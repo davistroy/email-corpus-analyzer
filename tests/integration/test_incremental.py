@@ -4,7 +4,6 @@ Integration tests for incremental extraction and analysis.
 Tests the incremental workflow for extracting new emails and updating analysis.
 Per Phase 7, Track 7C specification.
 """
-import json
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,7 +14,6 @@ import pytest
 
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
-
 
 # =============================================================================
 # Test Fixtures
@@ -174,8 +172,8 @@ class TestIncrementalAnalysis:
         self, mock_st, initial_corpus, temp_output_dir
     ):
         """Test that incremental analysis utilizes embedding cache."""
-        from src.cache.embedding_cache import EmbeddingCache
         from src.analyzers.semantic_analyzer import SemanticAnalyzer
+        from src.cache.embedding_cache import EmbeddingCache
 
         # Setup mock
         mock_model = MagicMock()
@@ -212,8 +210,8 @@ class TestIncrementalAnalysis:
         self, mock_st, initial_corpus, temp_output_dir
     ):
         """Test that incremental analysis updates the cache with new embeddings."""
-        from src.cache.embedding_cache import EmbeddingCache
         from src.analyzers.semantic_analyzer import SemanticAnalyzer
+        from src.cache.embedding_cache import EmbeddingCache
 
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(20, 1024)
@@ -242,8 +240,8 @@ class TestIncrementalAnalysis:
         self, mock_st, initial_corpus, temp_output_dir
     ):
         """Test incremental analysis when all emails are already cached."""
-        from src.cache.embedding_cache import EmbeddingCache
         from src.analyzers.semantic_analyzer import SemanticAnalyzer
+        from src.cache.embedding_cache import EmbeddingCache
 
         mock_model = MagicMock()
         mock_st.return_value = mock_model

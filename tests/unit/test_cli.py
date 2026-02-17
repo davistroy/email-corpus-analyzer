@@ -6,10 +6,10 @@ Tests cover:
 Uses mocking to avoid real file I/O, network calls, and external dependencies.
 """
 import argparse
+import contextlib
 import sys
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -380,7 +380,7 @@ class TestCmdExtract:
         mock_extractor.extract_all.return_value = mock_result
         mock_extractor_class.return_value = mock_extractor
 
-        result = cmd_extract(args)
+        cmd_extract(args)
 
         # Verify custom path is used
         mock_save.assert_called_once()
@@ -560,7 +560,7 @@ class TestCmdAnalyze:
         mock_service.run.return_value = (mock_results, None)
         mock_service_class.return_value = mock_service
 
-        result = cmd_analyze(args)
+        cmd_analyze(args)
 
         # Verify custom path used for loading
         mock_load_json.assert_called_once_with(Path("/custom/corpus.json"))
@@ -679,22 +679,24 @@ class TestCmdSuggest:
             suggestions_file=None
         )
 
-        with patch("src.generators.category_generator.CategoryGenerator") as mock_gen_class:
-            with patch("src.models.analysis_results.AnalysisResults") as mock_results_class:
-                mock_results = MagicMock()
-                mock_results_class.return_value = mock_results
+        with (
+            patch("src.generators.category_generator.CategoryGenerator") as mock_gen_class,
+            patch("src.models.analysis_results.AnalysisResults") as mock_results_class,
+        ):
+            mock_results = MagicMock()
+            mock_results_class.return_value = mock_results
 
-                mock_gen = MagicMock()
-                mock_category = MagicMock()
-                mock_category.model_dump.return_value = {"id": "cat1"}
-                mock_gen.generate_suggestions.return_value = [mock_category]
-                mock_gen.generate_report.return_value = "# Report"
-                mock_gen_class.return_value = mock_gen
+            mock_gen = MagicMock()
+            mock_category = MagicMock()
+            mock_category.model_dump.return_value = {"id": "cat1"}
+            mock_gen.generate_suggestions.return_value = [mock_category]
+            mock_gen.generate_report.return_value = "# Report"
+            mock_gen_class.return_value = mock_gen
 
-                result = cmd_suggest(args)
+            result = cmd_suggest(args)
 
-                assert result == 0
-                mock_gen.generate_suggestions.assert_called_once()
+            assert result == 0
+            mock_gen.generate_suggestions.assert_called_once()
 
     @patch("src.cli.commands.suggest.load_json")
     @patch("src.cli.commands.suggest.PathConfig")
@@ -776,7 +778,7 @@ class TestCmdSuggest:
         mock_gen.generate_report.return_value = ""
         mock_gen_class.return_value = mock_gen
 
-        result = cmd_suggest(args)
+        cmd_suggest(args)
 
         mock_load_json.assert_called_once_with(Path("/custom/analysis.json"))
         # Verify custom suggestions path is used
@@ -1163,8 +1165,9 @@ class TestCliMain:
     @patch("src.cli.create_parser")
     def test_main_with_verbose_flag(self, mock_create_parser, mock_setup):
         """Test main enables debug logging with verbose flag."""
-        from src.cli import main
         import logging
+
+        from src.cli import main
 
         mock_parser = MagicMock()
         mock_args = MagicMock()
@@ -1173,16 +1176,18 @@ class TestCliMain:
         mock_parser.parse_args.return_value = mock_args
         mock_create_parser.return_value = mock_parser
 
-        with patch("src.cli.cmd_extract") as mock_extract:
-            with patch("src.cli.logging.getLogger") as mock_get_logger:
-                mock_root_logger = MagicMock()
-                mock_get_logger.return_value = mock_root_logger
-                mock_extract.return_value = 0
+        with (
+            patch("src.cli.cmd_extract") as mock_extract,
+            patch("src.cli.logging.getLogger") as mock_get_logger,
+        ):
+            mock_root_logger = MagicMock()
+            mock_get_logger.return_value = mock_root_logger
+            mock_extract.return_value = 0
 
-                main()
+            main()
 
-                # Verify the root logger's setLevel was called with DEBUG
-                mock_root_logger.setLevel.assert_called_with(logging.DEBUG)
+            # Verify the root logger's setLevel was called with DEBUG
+            mock_root_logger.setLevel.assert_called_with(logging.DEBUG)
 
 
 # =============================================================================
@@ -1261,17 +1266,19 @@ class TestCmdConfigInit:
             config_global=False
         )
 
-        with patch("src.cli.commands.config.generate_template") as mock_gen:
-            with patch("src.cli.commands.config.get_project_config_path") as mock_path:
-                mock_gen.return_value = "# Template"
-                mock_path.return_value = Path(".email-analyzer.yaml")
+        with (
+            patch("src.cli.commands.config.generate_template") as mock_gen,
+            patch("src.cli.commands.config.get_project_config_path") as mock_path,
+            patch("builtins.open", mock_open()) as mock_file,
+        ):
+            mock_gen.return_value = "# Template"
+            mock_path.return_value = Path(".email-analyzer.yaml")
 
-                with patch("builtins.open", mock_open()) as mock_file:
-                    result = cmd_config_init(args)
+            result = cmd_config_init(args)
 
-                    assert result == 0
-                    mock_gen.assert_called_once()
-                    mock_file.assert_called_once()
+            assert result == 0
+            mock_gen.assert_called_once()
+            mock_file.assert_called_once()
 
     @patch("src.cli.commands.config.logger")
     def test_cmd_config_init_with_custom_output(self, mock_logger):
@@ -1283,16 +1290,18 @@ class TestCmdConfigInit:
             config_global=False
         )
 
-        with patch("src.cli.commands.config.generate_template") as mock_gen:
+        with (
+            patch("src.cli.commands.config.generate_template") as mock_gen,
+            patch("builtins.open", mock_open()) as mock_file,
+        ):
             mock_gen.return_value = "# Template"
 
-            with patch("builtins.open", mock_open()) as mock_file:
-                result = cmd_config_init(args)
+            result = cmd_config_init(args)
 
-                assert result == 0
-                mock_file.assert_called_once_with(
-                    Path("/custom/config.yaml"), "w", encoding="utf-8"
-                )
+            assert result == 0
+            mock_file.assert_called_once_with(
+                Path("/custom/config.yaml"), "w", encoding="utf-8"
+            )
 
     @patch("src.cli.commands.config.logger")
     def test_cmd_config_init_global_creates_in_global_path(self, mock_logger):
@@ -1304,17 +1313,19 @@ class TestCmdConfigInit:
             config_global=True
         )
 
-        with patch("src.cli.commands.config.generate_template") as mock_gen:
-            with patch("src.cli.commands.config.get_global_config_path") as mock_path:
-                mock_gen.return_value = "# Template"
-                mock_path.return_value = Path("/home/user/.config/email-analyzer/config.yaml")
+        with (
+            patch("src.cli.commands.config.generate_template") as mock_gen,
+            patch("src.cli.commands.config.get_global_config_path") as mock_path,
+            patch("builtins.open", mock_open()),
+            patch("pathlib.Path.mkdir"),
+        ):
+            mock_gen.return_value = "# Template"
+            mock_path.return_value = Path("/home/user/.config/email-analyzer/config.yaml")
 
-                with patch("builtins.open", mock_open()):
-                    with patch("pathlib.Path.mkdir"):
-                        result = cmd_config_init(args)
+            result = cmd_config_init(args)
 
-                        assert result == 0
-                        mock_path.assert_called_once()
+            assert result == 0
+            mock_path.assert_called_once()
 
     @patch("src.cli.commands.config.logger")
     def test_cmd_config_init_handles_write_error(self, mock_logger):
@@ -1367,18 +1378,19 @@ class TestCmdConfigShow:
 
         args = argparse.Namespace(config=Path("/custom/config.yaml"))
 
-        with patch("src.cli.commands.config.load_config") as mock_load:
+        with (
+            patch("src.cli.commands.config.load_config") as mock_load,
+            patch("src.cli.commands.config.show_resolved_config") as mock_show,
+            patch("builtins.print"),
+        ):
             mock_load.return_value = AppConfig()
+            mock_show.return_value = "# Config"
 
-            with patch("src.cli.commands.config.show_resolved_config") as mock_show:
-                mock_show.return_value = "# Config"
+            cmd_config_show(args)
 
-                with patch("builtins.print"):
-                    result = cmd_config_show(args)
-
-                    mock_load.assert_called_once_with(
-                        config_path=Path("/custom/config.yaml")
-                    )
+            mock_load.assert_called_once_with(
+                config_path=Path("/custom/config.yaml")
+            )
 
     @patch("src.cli.commands.config.logger")
     def test_cmd_config_show_handles_load_error(self, mock_logger):
@@ -1420,7 +1432,7 @@ class TestConfigIntegration:
         with patch("src.cli.cmd_analyze") as mock_analyze:
             mock_analyze.return_value = 0
 
-            result = main()
+            main()
 
             # Config should be loaded
             mock_load_config.assert_called_once()
@@ -1431,7 +1443,7 @@ class TestConfigIntegration:
     def test_cli_args_override_config_values(self, mock_create_parser, mock_load_config, mock_setup):
         """Test CLI arguments override config file values."""
         from src.cli import main
-        from src.config.models import AppConfig, AnalyzeConfig
+        from src.config.models import AnalyzeConfig, AppConfig
 
         mock_parser = MagicMock()
         mock_args = MagicMock()
@@ -1503,9 +1515,10 @@ class TestQuietFlag:
     @patch("src.cli.create_parser")
     def test_quiet_mode_sets_warning_log_level(self, mock_create_parser, mock_load_config, mock_setup):
         """Test quiet mode sets log level to WARNING."""
+        import logging
+
         from src.cli import main
         from src.config.models import AppConfig
-        import logging
 
         mock_parser = MagicMock()
         mock_args = MagicMock()
@@ -1517,15 +1530,17 @@ class TestQuietFlag:
         mock_create_parser.return_value = mock_parser
         mock_load_config.return_value = AppConfig()
 
-        with patch("src.cli.cmd_analyze") as mock_analyze:
-            with patch("src.cli.logging.getLogger") as mock_get_logger:
-                mock_root_logger = MagicMock()
-                mock_get_logger.return_value = mock_root_logger
-                mock_analyze.return_value = 0
+        with (
+            patch("src.cli.cmd_analyze") as mock_analyze,
+            patch("src.cli.logging.getLogger") as mock_get_logger,
+        ):
+            mock_root_logger = MagicMock()
+            mock_get_logger.return_value = mock_root_logger
+            mock_analyze.return_value = 0
 
-                main()
+            main()
 
-                mock_root_logger.setLevel.assert_called_with(logging.WARNING)
+            mock_root_logger.setLevel.assert_called_with(logging.WARNING)
 
 
 class TestJsonOutputFlag:
@@ -1585,8 +1600,8 @@ class TestJsonOutputFlag:
     @patch("src.models.corpus.Corpus")
     def test_cmd_analyze_json_output(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
         """Test analyze command returns JSON output when --json flag is set."""
+
         from src.cli import cmd_analyze
-        import json
 
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
@@ -1620,17 +1635,19 @@ class TestJsonOutputFlag:
         mock_service_class.return_value = mock_service
 
         # Capture stdout
-        with patch("sys.stdout") as mock_stdout:
-            with patch("src.cli.commands.analyze.output_json") as mock_output_json:
-                result = cmd_analyze(args)
+        with (
+            patch("sys.stdout"),
+            patch("src.cli.commands.analyze.output_json") as mock_output_json,
+        ):
+            result = cmd_analyze(args)
 
-                assert result == 0
-                mock_output_json.assert_called_once()
-                call_args = mock_output_json.call_args[0][0]
-                assert call_args["command"] == "analyze"
-                assert call_args["status"] == "success"
-                assert "duration_seconds" in call_args
-                assert "output_file" in call_args
+            assert result == 0
+            mock_output_json.assert_called_once()
+            call_args = mock_output_json.call_args[0][0]
+            assert call_args["command"] == "analyze"
+            assert call_args["status"] == "success"
+            assert "duration_seconds" in call_args
+            assert "output_file" in call_args
 
 
 class TestInfoCommand:
@@ -1685,11 +1702,10 @@ class TestInfoCommand:
             json=False
         )
 
-        with patch("builtins.print") as mock_print:
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value = MagicMock(st_size=45_000_000)  # 45 MB
-                with patch("pathlib.Path.exists", return_value=True):
-                    result = cmd_info(args)
+        with patch("builtins.print"), patch("pathlib.Path.stat") as mock_stat:
+            mock_stat.return_value = MagicMock(st_size=45_000_000)  # 45 MB
+            with patch("pathlib.Path.exists", return_value=True):
+                result = cmd_info(args)
 
         assert result == 0
 
@@ -1722,11 +1738,13 @@ class TestInfoCommand:
             json=True
         )
 
-        with patch("src.cli.commands.info.output_json") as mock_output_json:
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value = MagicMock(st_size=45_000_000)
-                with patch("pathlib.Path.exists", return_value=True):
-                    result = cmd_info(args)
+        with (
+            patch("src.cli.commands.info.output_json") as mock_output_json,
+            patch("pathlib.Path.stat") as mock_stat,
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            mock_stat.return_value = MagicMock(st_size=45_000_000)
+            result = cmd_info(args)
 
         assert result == 0
         mock_output_json.assert_called_once()
@@ -1927,7 +1945,6 @@ class TestVersionFlag:
     def test_create_parser_has_version_option(self):
         """Test parser has --version option."""
         from src.cli import create_parser
-        from src import __version__
 
         parser = create_parser()
 
@@ -1939,10 +1956,10 @@ class TestVersionFlag:
 
     def test_version_output_format(self):
         """Test version output format."""
-        from src.cli import create_parser
-        from src import __version__
         import io
-        import sys
+
+        from src import __version__
+        from src.cli import create_parser
 
         parser = create_parser()
 
@@ -1950,10 +1967,8 @@ class TestVersionFlag:
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
 
-        try:
+        with contextlib.suppress(SystemExit):
             parser.parse_args(["--version"])
-        except SystemExit:
-            pass
 
         output = sys.stdout.getvalue()
         sys.stdout = old_stdout
@@ -2019,10 +2034,10 @@ class TestOutputJsonFunction:
 
     def test_output_json_writes_formatted_json(self):
         """Test output_json writes properly formatted JSON to stdout."""
-        from src.cli import output_json
         import io
-        import sys
         import json
+
+        from src.cli import output_json
 
         data = {"command": "test", "status": "success"}
 
@@ -2041,10 +2056,10 @@ class TestOutputJsonFunction:
 
     def test_output_json_includes_all_fields(self):
         """Test output_json preserves all fields."""
-        from src.cli import output_json
         import io
-        import sys
         import json
+
+        from src.cli import output_json
 
         data = {
             "command": "analyze",
@@ -2193,7 +2208,7 @@ class TestCmdExtractDryRun:
             dry_run=True
         )
 
-        result = cmd_extract(args)
+        cmd_extract(args)
 
         captured = capsys.readouterr()
         assert "[DRY RUN]" in captured.out
@@ -2244,7 +2259,7 @@ class TestCmdAnalyzeDryRun:
             dry_run=True
         )
 
-        result = cmd_analyze(args)
+        cmd_analyze(args)
 
         captured = capsys.readouterr()
         assert "[DRY RUN]" in captured.out
@@ -2295,7 +2310,7 @@ class TestCmdSuggestDryRun:
             dry_run=True
         )
 
-        result = cmd_suggest(args)
+        cmd_suggest(args)
 
         captured = capsys.readouterr()
         assert "[DRY RUN]" in captured.out
@@ -2346,7 +2361,7 @@ class TestCmdReviewDryRun:
             dry_run=True
         )
 
-        result = cmd_review(args)
+        cmd_review(args)
 
         captured = capsys.readouterr()
         assert "[DRY RUN]" in captured.out
@@ -2400,7 +2415,7 @@ class TestCmdPipelineDryRun:
             dry_run=True
         )
 
-        result = cmd_pipeline(args)
+        cmd_pipeline(args)
 
         captured = capsys.readouterr()
         assert "[DRY RUN]" in captured.out
@@ -2461,8 +2476,9 @@ class TestDryRunWithJsonOutput:
     @patch("src.cli.commands.extract.logger")
     def test_extract_dry_run_with_json_output(self, mock_logger, mock_path_config, capsys):
         """Test dry-run mode respects --json flag."""
-        from src.cli import cmd_extract
         import json
+
+        from src.cli import cmd_extract
 
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_path_config.get_output_dir.return_value = Path("/output")
@@ -2635,21 +2651,23 @@ class TestClusterAnalysisReport:
 
         # This test verifies the feature exists - actual implementation details
         # are tested in the run to ensure table/chart output is generated
-        with patch("src.cli.commands.analyze.AnalysisService") as mock_service_class:
-            with patch("src.cli.commands.analyze.save_json"):
-                mock_service = MagicMock()
-                mock_results = MagicMock()
-                mock_results.model_dump.return_value = {}
-                mock_results.sender_analysis.unique_senders = 10
-                mock_results.content_clusters = []
-                mock_service.run.return_value = (mock_results, None)
-                mock_service_class.return_value = mock_service
+        with (
+            patch("src.cli.commands.analyze.AnalysisService") as mock_service_class,
+            patch("src.cli.commands.analyze.save_json"),
+        ):
+            mock_service = MagicMock()
+            mock_results = MagicMock()
+            mock_results.model_dump.return_value = {}
+            mock_results.sender_analysis.unique_senders = 10
+            mock_results.content_clusters = []
+            mock_service.run.return_value = (mock_results, None)
+            mock_service_class.return_value = mock_service
 
-                # Run should succeed
-                result = cmd_analyze(args)
+            # Run should succeed
+            result = cmd_analyze(args)
 
-                # Command should complete (actual output tested via integration)
-                assert result == 0
+            # Command should complete (actual output tested via integration)
+            assert result == 0
 
     def test_cluster_analysis_with_json_output(self):
         """Test --cluster-analysis works with --json flag."""
@@ -3017,7 +3035,6 @@ class TestExceptionHandlingInCli:
     def test_cmd_analyze_corpus_not_found_error(self, mock_path_config, mock_load_json, mock_logger):
         """Test analyze shows recovery hint when corpus not found."""
         from src.cli import cmd_analyze
-        from src.exceptions import CorpusNotFoundError
 
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
 
@@ -3191,18 +3208,20 @@ class TestConfigValidateCommand:
             json=True
         )
 
-        with patch("src.cli.commands.config.load_config") as mock_load:
+        with (
+            patch("src.cli.commands.config.load_config") as mock_load,
+            patch("src.cli.commands.config.validate_config") as mock_validate,
+            patch("src.cli.commands.config.output_json") as mock_output_json,
+        ):
             mock_load.return_value = AppConfig()
-            with patch("src.cli.commands.config.validate_config") as mock_validate:
-                mock_validate.return_value = []
+            mock_validate.return_value = []
 
-                with patch("src.cli.commands.config.output_json") as mock_output_json:
-                    result = cmd_config_validate(args)
+            cmd_config_validate(args)
 
-                    mock_output_json.assert_called_once()
-                    call_args = mock_output_json.call_args[0][0]
-                    assert "command" in call_args
-                    assert "validations" in call_args
+            mock_output_json.assert_called_once()
+            call_args = mock_output_json.call_args[0][0]
+            assert "command" in call_args
+            assert "validations" in call_args
 
 
 class TestCLIHelpExamples:
@@ -3309,7 +3328,7 @@ class TestConfigMappingsAndPrecedence:
     def test_apply_config_defaults_analyze_num_clusters(self):
         """Config overrides default num_clusters for analyze command."""
         from src.cli import _apply_config_defaults, create_parser
-        from src.config.models import AppConfig, AnalyzeConfig
+        from src.config.models import AnalyzeConfig, AppConfig
 
         parser = create_parser()
         args = parser.parse_args(["analyze"])
@@ -3323,7 +3342,7 @@ class TestConfigMappingsAndPrecedence:
     def test_apply_config_defaults_analyze_cli_wins(self):
         """Explicit --num-clusters on CLI overrides config."""
         from src.cli import _apply_config_defaults, create_parser
-        from src.config.models import AppConfig, AnalyzeConfig
+        from src.config.models import AnalyzeConfig, AppConfig
 
         parser = create_parser()
         args = parser.parse_args(["analyze", "--num-clusters", "30"])
@@ -3932,7 +3951,8 @@ class TestCmdAnalyzeServiceRouting:
         import src.cli.commands.analyze as analyze_module
 
         # Verify the module does not import run_full_analysis at module level
-        source = open(analyze_module.__file__).read()
+        with open(analyze_module.__file__) as f:
+            source = f.read()
         assert "from src.analyzers import run_full_analysis" not in source
         assert "from src.analyzers import" not in source or "run_full_analysis" not in source
 
@@ -4209,7 +4229,8 @@ class TestCmdPipelineServiceRouting:
         """Test cmd_pipeline does not directly import cmd_extract/cmd_analyze/cmd_suggest."""
         import src.cli.commands.pipeline as pipeline_module
 
-        source = open(pipeline_module.__file__).read()
+        with open(pipeline_module.__file__) as f:
+            source = f.read()
         # Should not import these individual cmd_* functions for direct calling
         assert "from src.cli.commands.extract import cmd_extract" not in source
         assert "from src.cli.commands.analyze import cmd_analyze" not in source

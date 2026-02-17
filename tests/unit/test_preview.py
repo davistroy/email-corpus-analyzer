@@ -13,9 +13,8 @@ Uses mocking to avoid real file I/O, network calls, and external dependencies.
 Following TDD - these tests are written before implementation.
 """
 import argparse
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -258,10 +257,12 @@ class TestAnalyzeEstimator:
         )
 
         # Mock file existence and size
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "stat") as mock_stat:
-                mock_stat.return_value.st_size = 47185920  # ~45 MB
-                estimate = estimator.estimate(args)
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "stat") as mock_stat,
+        ):
+            mock_stat.return_value.st_size = 47185920  # ~45 MB
+            estimate = estimator.estimate(args)
 
         assert estimate.corpus_exists is True
         assert estimate.email_count == 5432
@@ -295,10 +296,12 @@ class TestAnalyzeEstimator:
             analysis_file=None,
         )
 
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "stat") as mock_stat:
-                mock_stat.return_value.st_size = 47185920
-                estimate = estimator.estimate(args)
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "stat") as mock_stat,
+        ):
+            mock_stat.return_value.st_size = 47185920
+            estimate = estimator.estimate(args)
 
         # Embedding time ~0.1s per email
         assert estimate.embedding_time_estimate_seconds is not None
@@ -380,10 +383,12 @@ class TestSuggestEstimator:
             suggestions_file=None,
         )
 
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "stat") as mock_stat:
-                mock_stat.return_value.st_size = 2097152  # 2 MB
-                estimate = estimator.estimate(args)
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "stat") as mock_stat,
+        ):
+            mock_stat.return_value.st_size = 2097152  # 2 MB
+            estimate = estimator.estimate(args)
 
         assert estimate.analysis_exists is True
         # Suggest is fast - typically < 10 seconds

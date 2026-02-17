@@ -4,12 +4,9 @@ Unit tests for the interactive category review CLI module.
 Tests the CategoryReview class and related functions with mocked
 user input and file I/O operations.
 """
-import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, call, mock_open, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from src.models.category import Category, CategorySource
 from src.models.email import Email
@@ -583,7 +580,6 @@ class TestSaveApprovedCategories:
         result = reviewer.save_approved_categories(output_path)
 
         mock_save_json.assert_called_once()
-        call_args = mock_save_json.call_args
 
         # Verify structure
         assert "approval_date" in result
@@ -634,7 +630,7 @@ class TestReviewCategoriesFunction:
         mock_reviewer_class.return_value = mock_reviewer
 
         categories = [create_test_category()]
-        result = review_categories(categories)
+        review_categories(categories)
 
         mock_reviewer_class.assert_called_once()
         mock_reviewer.run_interactive_review.assert_called_once()
@@ -695,7 +691,7 @@ class TestReviewCategoriesFunction:
         mock_reviewer.run_interactive_review.return_value = [cat_temp, cat_custom]
         mock_reviewer_class.return_value = mock_reviewer
 
-        result = review_categories([])
+        review_categories([])
 
         # IDs should have been replaced
         assert cat_temp.category_id.startswith("cat_")

@@ -3,7 +3,6 @@ Unit tests for TUI dialog widgets.
 
 Tests the RenameDialog and MergeDialog widgets for Tasks 3B.2 and 3B.3.
 """
-import pytest
 
 from src.models.category import Category, CategorySource
 
@@ -286,7 +285,7 @@ class TestDialogsPackageInit:
 
     def test_package_can_be_imported(self):
         """Test that dialogs package can be imported."""
-        from src.ui.tui.dialogs import RenameDialog, MergeDialog
+        from src.ui.tui.dialogs import MergeDialog, RenameDialog
 
         assert RenameDialog is not None
         assert MergeDialog is not None

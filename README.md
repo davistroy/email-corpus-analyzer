@@ -168,7 +168,7 @@ python -m src.cli config show  # Display resolved configuration
 The project maintains high code quality with comprehensive test coverage:
 
 ```bash
-# Run all tests (1879 tests, 85% coverage)
+# Run all tests (1968 tests, 86% coverage)
 pytest
 
 # Run specific test suite
@@ -219,9 +219,9 @@ email-corpus-analyzer/
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests (1879 tests, 85% coverage)
+│   └── unit/                # Unit tests (1968 tests, 86% coverage)
 ├── docs/                    # Documentation
-├── scripts/                 # Standalone scripts
+├── .specify/                # Constitution and templates
 ├── specs/                   # Design specifications
 │   └── 001-use-the-document/
 ├── requirements.txt

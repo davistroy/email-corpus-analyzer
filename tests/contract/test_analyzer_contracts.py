@@ -15,7 +15,7 @@ from src.analyzers.base import AnalysisError, BaseAnalyzer
 from src.analyzers.sender_analyzer import SenderAnalyzer
 from src.analyzers.subject_analyzer import SubjectAnalyzer
 from src.analyzers.temporal_analyzer import TemporalAnalyzer
-from src.analyzers.thread_analyzer import ThreadAnalyzer
+from src.analyzers.thread_analyzer import ThreadAnalysisResult, ThreadAnalyzer
 from src.analyzers.volume_analyzer import VolumeAnalyzer
 from src.models.analysis_results import (
     SenderAnalysis,
@@ -23,7 +23,6 @@ from src.models.analysis_results import (
     TemporalPatterns,
     VolumeStats,
 )
-from src.analyzers.thread_analyzer import ThreadAnalysisResult
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 

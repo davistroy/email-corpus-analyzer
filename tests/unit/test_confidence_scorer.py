@@ -398,8 +398,8 @@ class TestEnhancedConfidenceScorer:
     def test_calculate_confidence_enhanced_with_custom_weights(self):
         """Test enhanced confidence with custom weights."""
         from src.generators.confidence_scorer import (
+            ConfidenceWeights,
             calculate_confidence_enhanced,
-            ConfidenceWeights
         )
 
         category = Category(
@@ -1150,7 +1150,6 @@ class TestLogarithmicVolumeScaling:
 
     def test_volume_100_emails_equals_one(self):
         """100 emails should produce volume score of 1.0."""
-        import math
         from src.generators.confidence_scorer import calculate_confidence_enhanced
 
         category = Category(
@@ -1549,8 +1548,8 @@ class TestConfigurableWeights:
 
     def test_from_thresholds_creates_weights(self):
         """ConfidenceWeights.from_thresholds creates weights from config."""
-        from src.generators.confidence_scorer import ConfidenceWeights
         from src.config.models import GeneratorThresholds
+        from src.generators.confidence_scorer import ConfidenceWeights
 
         thresholds = GeneratorThresholds()
         weights = ConfidenceWeights.from_thresholds(thresholds)
@@ -1564,11 +1563,11 @@ class TestConfigurableWeights:
 
     def test_custom_thresholds_produce_different_scores(self):
         """Custom weights from config should produce different scores."""
+        from src.config.models import GeneratorThresholds
         from src.generators.confidence_scorer import (
             ConfidenceWeights,
-            calculate_confidence_enhanced
+            calculate_confidence_enhanced,
         )
-        from src.config.models import GeneratorThresholds
 
         category = Category(
             category_id="config_test",
@@ -1607,8 +1606,8 @@ class TestConfigurableWeights:
 
     def test_default_thresholds_match_default_weights(self):
         """Default GeneratorThresholds should produce same weights as ConfidenceWeights()."""
-        from src.generators.confidence_scorer import ConfidenceWeights
         from src.config.models import GeneratorThresholds
+        from src.generators.confidence_scorer import ConfidenceWeights
 
         default_weights = ConfidenceWeights()
         from_config = ConfidenceWeights.from_thresholds(GeneratorThresholds())

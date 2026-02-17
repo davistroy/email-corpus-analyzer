@@ -9,19 +9,18 @@ Tests the following cluster optimization components:
 - SilhouetteOptimizer class - finds optimal k using silhouette scores
 """
 import math
-from unittest.mock import MagicMock, patch
+
 import numpy as np
 import pytest
 
 from src.analyzers.cluster_optimizer import (
+    ClusterOptimizationResult,
     ElbowOptimizer,
     SilhouetteOptimizer,
-    ClusterOptimizationResult,
     compute_max_k,
     interpret_silhouette,
     silhouette_to_confidence,
 )
-
 
 # ============================================================================
 # Test compute_max_k

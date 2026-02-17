@@ -3,7 +3,6 @@ Unit tests for TUI progress bar and stats panel widgets.
 
 Tests the ProgressBar and StatsPanel widgets for Task 3B.1.
 """
-import pytest
 
 from src.models.category import Category, CategorySource
 

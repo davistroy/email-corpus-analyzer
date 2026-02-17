@@ -1,4 +1,4 @@
-# Email Processor - Usage Guide
+# Email Corpus Analyzer - Usage Guide
 
 ## Quick Start
 

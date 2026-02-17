@@ -13,7 +13,6 @@ import pytest
 
 from src.models.category import Category, CategorySource
 
-
 # ============================================================================
 # Test Fixtures
 # ============================================================================
@@ -317,7 +316,7 @@ class TestCategoryFiltering:
         table = CategoryTable(categories=sample_categories)
 
         table.apply_filter("source:template")
-        visible = table.get_visible_categories()
+        table.get_visible_categories()
 
         assert table.filter_count_text == "2 of 5 categories"
 

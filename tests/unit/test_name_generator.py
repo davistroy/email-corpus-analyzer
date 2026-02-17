@@ -4,14 +4,12 @@ Unit tests for TF-IDF name generator.
 Tests TfidfNameGenerator class for generating descriptive category names
 from email clusters using TF-IDF analysis.
 """
-import pytest
 
 from src.generators.name_generator import (
+    NameQualityScore,
     TfidfNameGenerator,
     score_name_quality,
-    NameQualityScore,
 )
-
 
 # -----------------------------------------------------------------------------
 # Task 2B.1: TF-IDF Name Generator Tests

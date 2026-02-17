@@ -437,7 +437,7 @@ class TestEmailExtractor:
         """Test handling of email with missing sender info raises validation error."""
         mock_email_data["from"] = {}
         # Email model requires valid sender_email (EmailStr), so this raises
-        with pytest.raises(Exception):
+        with pytest.raises((KeyError, ValueError, TypeError)):
             extractor._process_email(mock_email_data)
 
     def test_process_email_html_body_conversion(self, extractor, mock_email_data):
@@ -505,7 +505,7 @@ class TestEmailExtractor:
         def progress_callback(current, total):
             progress_values.append((current, total))
 
-        result = extractor.extract_all(
+        extractor.extract_all(
             max_batch_size=1,
             checkpoint_interval=100,
             progress_callback=progress_callback
@@ -542,7 +542,7 @@ class TestEmailExtractor:
         ]
 
         with patch.object(extractor, "_handle_rate_limit") as mock_rate_limit:
-            result = extractor.extract_all(max_batch_size=10)
+            extractor.extract_all(max_batch_size=10)
             mock_rate_limit.assert_called_once_with(0, retry_after=5)
 
     @patch.object(EmailExtractor, "_get_total_email_count")
@@ -775,7 +775,7 @@ class TestEmailExtractorResume:
         """Test resume_from_checkpoint delegates to extract_all."""
         with patch.object(extractor_with_checkpoint, "extract_all") as mock_extract:
             mock_extract.return_value = MagicMock(spec=ExtractionResult)
-            result = extractor_with_checkpoint.resume_from_checkpoint("path")
+            extractor_with_checkpoint.resume_from_checkpoint("path")
             mock_extract.assert_called_once()
 
     @patch.object(EmailExtractor, "_get_total_email_count")
@@ -1216,7 +1216,7 @@ class TestEmailExtractorEdgeCases:
         }
 
         # This should raise due to invalid email format in Pydantic model
-        with pytest.raises(Exception):
+        with pytest.raises((KeyError, ValueError, TypeError, IndexError)):
             extractor._process_email(email_data)
 
     def test_process_email_special_characters_in_body(self, extractor):

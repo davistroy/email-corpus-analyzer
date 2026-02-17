@@ -10,14 +10,12 @@ import json
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from src.learning.decision_logger import (
+    DecisionAction,
     DecisionLogger,
     ReviewDecision,
-    DecisionAction,
     get_default_decisions_path,
 )
 
@@ -145,11 +143,13 @@ class TestDecisionLoggerInit:
 
     def test_init_with_default_path(self):
         """Test initializing with default path."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("src.learning.decision_logger.get_default_decisions_path") as mock_path:
-                mock_path.return_value = Path(tmpdir) / "decisions.jsonl"
-                logger = DecisionLogger()
-                assert logger.decisions_path.name == "decisions.jsonl"
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch("src.learning.decision_logger.get_default_decisions_path") as mock_path,
+        ):
+            mock_path.return_value = Path(tmpdir) / "decisions.jsonl"
+            logger = DecisionLogger()
+            assert logger.decisions_path.name == "decisions.jsonl"
 
     def test_init_with_custom_path(self):
         """Test initializing with custom path."""
@@ -162,7 +162,7 @@ class TestDecisionLoggerInit:
         """Test that parent directory is created if it doesn't exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
             nested_path = Path(tmpdir) / "nested" / "dir" / "decisions.jsonl"
-            logger = DecisionLogger(decisions_path=nested_path)
+            DecisionLogger(decisions_path=nested_path)
             assert nested_path.parent.exists()
 
 
@@ -181,7 +181,7 @@ class TestDecisionLoggerLogDecision:
             )
 
             # Read the file and verify
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 line = f.readline()
                 data = json.loads(line)
 
@@ -202,7 +202,7 @@ class TestDecisionLoggerLogDecision:
                 new_name="New Category Name",
             )
 
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.loads(f.readline())
 
             assert data["action"] == "rename"
@@ -221,7 +221,7 @@ class TestDecisionLoggerLogDecision:
                 merge_target="Target",
             )
 
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.loads(f.readline())
 
             assert data["action"] == "merge"
@@ -239,7 +239,7 @@ class TestDecisionLoggerLogDecision:
                 confidence=0.25,
             )
 
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.loads(f.readline())
 
             assert data["action"] == "delete"
@@ -255,7 +255,7 @@ class TestDecisionLoggerLogDecision:
             logger.log_decision("Cat2", DecisionAction.DELETE)
             logger.log_decision("Cat3", DecisionAction.RENAME, old_name="Old", new_name="Cat3")
 
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             assert len(lines) == 3
@@ -276,7 +276,7 @@ class TestDecisionLoggerLogDecision:
                 another_key=123,
             )
 
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.loads(f.readline())
 
             assert data["context"]["custom_key"] == "custom_value"

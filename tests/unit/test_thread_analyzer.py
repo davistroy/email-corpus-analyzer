@@ -16,7 +16,7 @@ from src.models.email import Email
 
 
 def create_test_email(
-    id: str = "test_001",
+    email_id: str = "test_001",
     sender_email: str = "sender@example.com",
     sender_domain: str = "example.com",
     subject: str = "Test Subject",
@@ -30,8 +30,8 @@ def create_test_email(
     if received_date is None:
         received_date = datetime(2024, 1, 15, 10, 0)
 
-    email = Email(
-        id=id,
+    return Email(
+        id=email_id,
         sender_email=sender_email,
         sender_name="Test Sender",
         sender_domain=sender_domain,
@@ -43,13 +43,12 @@ def create_test_email(
         in_reply_to=in_reply_to,
         references=references or [],
     )
-    return email
 
 
 def create_test_corpus(emails: list[Email] | None = None) -> Corpus:
     """Factory function to create Corpus objects for testing."""
     if emails is None:
-        emails = [create_test_email(id=f"email_{i}") for i in range(5)]
+        emails = [create_test_email(email_id=f"email_{i}") for i in range(5)]
     return Corpus(
         extraction_metadata=CorpusMetadata(
             extraction_date=datetime.now(),
@@ -111,16 +110,16 @@ class TestThreadDetectionInReplyTo:
 
         # Create a chain: original -> reply1, reply2
         original = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             subject="Original Message",
         )
         reply1 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original Message",
             in_reply_to="msg_001",
         )
         reply2 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             subject="Re: Original Message",
             in_reply_to="msg_001",
         )
@@ -144,14 +143,14 @@ class TestThreadDetectionInReplyTo:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         # Create a chain: msg1 -> msg2 -> msg3
-        msg1 = create_test_email(id="msg_001", subject="Hello")
+        msg1 = create_test_email(email_id="msg_001", subject="Hello")
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Hello",
             in_reply_to="msg_001",
         )
         msg3 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             subject="Re: Re: Hello",
             in_reply_to="msg_002",
         )
@@ -179,14 +178,14 @@ class TestThreadDetectionReferences:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         # Create emails with references header
-        msg1 = create_test_email(id="msg_001", subject="Original")
+        msg1 = create_test_email(email_id="msg_001", subject="Original")
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original",
             references=["msg_001"],
         )
         msg3 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             subject="Re: Re: Original",
             references=["msg_001", "msg_002"],
         )
@@ -205,9 +204,9 @@ class TestThreadDetectionReferences:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         # Some email clients use both headers
-        msg1 = create_test_email(id="msg_001", subject="Original")
+        msg1 = create_test_email(email_id="msg_001", subject="Original")
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original",
             in_reply_to="msg_001",
             references=["msg_001"],
@@ -232,9 +231,9 @@ class TestSingleEmailThreads:
         """Test that unrelated emails each get their own thread."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Topic A")
-        msg2 = create_test_email(id="msg_002", subject="Topic B")
-        msg3 = create_test_email(id="msg_003", subject="Topic C")
+        msg1 = create_test_email(email_id="msg_001", subject="Topic A")
+        msg2 = create_test_email(email_id="msg_002", subject="Topic B")
+        msg3 = create_test_email(email_id="msg_003", subject="Topic C")
 
         corpus = create_test_corpus([msg1, msg2, msg3])
         analyzer = ThreadAnalyzer()
@@ -249,7 +248,7 @@ class TestSingleEmailThreads:
         """Test that generated thread IDs have proper format."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Standalone")
+        msg1 = create_test_email(email_id="msg_001", subject="Standalone")
 
         corpus = create_test_corpus([msg1])
         analyzer = ThreadAnalyzer()
@@ -274,7 +273,7 @@ class TestThreadAnalysisResult:
         """Test that result contains threads dictionary."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Test")
+        msg1 = create_test_email(email_id="msg_001", subject="Test")
         corpus = create_test_corpus([msg1])
 
         analyzer = ThreadAnalyzer()
@@ -287,7 +286,7 @@ class TestThreadAnalysisResult:
         """Test result includes total thread count."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Test")
+        msg1 = create_test_email(email_id="msg_001", subject="Test")
         corpus = create_test_corpus([msg1])
 
         analyzer = ThreadAnalyzer()
@@ -301,13 +300,13 @@ class TestThreadAnalysisResult:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         # One conversation (2 emails) and one single email
-        msg1 = create_test_email(id="msg_001", subject="Original")
+        msg1 = create_test_email(email_id="msg_001", subject="Original")
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original",
             in_reply_to="msg_001",
         )
-        msg3 = create_test_email(id="msg_003", subject="Standalone")
+        msg3 = create_test_email(email_id="msg_003", subject="Standalone")
 
         corpus = create_test_corpus([msg1, msg2, msg3])
         analyzer = ThreadAnalyzer()
@@ -320,13 +319,13 @@ class TestThreadAnalysisResult:
         """Test result includes count of single-email threads."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Original")
+        msg1 = create_test_email(email_id="msg_001", subject="Original")
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original",
             in_reply_to="msg_001",
         )
-        msg3 = create_test_email(id="msg_003", subject="Standalone")
+        msg3 = create_test_email(email_id="msg_003", subject="Standalone")
 
         corpus = create_test_corpus([msg1, msg2, msg3])
         analyzer = ThreadAnalyzer()
@@ -348,7 +347,7 @@ class TestThreadModel:
         """Test Thread model has all required attributes."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Test")
+        msg1 = create_test_email(email_id="msg_001", subject="Test")
         corpus = create_test_corpus([msg1])
 
         analyzer = ThreadAnalyzer()
@@ -367,12 +366,12 @@ class TestThreadModel:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             subject="Original Subject",
             received_date=datetime(2024, 1, 1, 10, 0),
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original Subject",
             in_reply_to="msg_001",
             received_date=datetime(2024, 1, 2, 10, 0),
@@ -391,18 +390,18 @@ class TestThreadModel:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             subject="Hello",
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             subject="Re: Hello",
             in_reply_to="msg_001",
         )
         msg3 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             sender_email="alice@example.com",  # Alice replies again
             subject="Re: Re: Hello",
             in_reply_to="msg_002",
@@ -440,7 +439,7 @@ class TestEdgeCases:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         # Email with no In-Reply-To or References
-        msg1 = create_test_email(id="msg_001", subject="No headers")
+        msg1 = create_test_email(email_id="msg_001", subject="No headers")
 
         corpus = create_test_corpus([msg1])
         analyzer = ThreadAnalyzer()
@@ -455,7 +454,7 @@ class TestEdgeCases:
 
         # References a message not in our corpus
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             subject="Re: External Thread",
             in_reply_to="external_msg_001",  # Not in corpus
             references=["external_msg_001"],
@@ -691,21 +690,21 @@ class TestSubjectBasedFallback:
 
         base_date = datetime(2024, 1, 15, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Meeting Notes",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Re: Meeting Notes",
             received_date=base_date + timedelta(days=1),
         )
         msg3 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="RE: Meeting Notes",
@@ -730,14 +729,14 @@ class TestSubjectBasedFallback:
 
         base_date = datetime(2024, 1, 15, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Meeting Notes",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Lunch Plans",
@@ -757,14 +756,14 @@ class TestSubjectBasedFallback:
 
         base_date = datetime(2024, 1, 15, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@company-a.com",
             sender_domain="company-a.com",
             subject="Weekly Report",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@company-b.com",
             sender_domain="company-b.com",
             subject="Weekly Report",
@@ -784,14 +783,14 @@ class TestSubjectBasedFallback:
 
         base_date = datetime(2024, 1, 1, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Weekly Report",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Re: Weekly Report",
@@ -811,14 +810,14 @@ class TestSubjectBasedFallback:
 
         base_date = datetime(2024, 1, 1, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Project Update",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Re: Project Update",
@@ -841,14 +840,14 @@ class TestSubjectBasedFallback:
 
         base_date = datetime(2024, 1, 15, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Meeting Notes",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Re: Meeting Notes",
@@ -874,11 +873,11 @@ class TestThreadMethodTracking:
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             subject="Original Message",
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Original Message",
             in_reply_to="msg_001",
         )
@@ -898,14 +897,14 @@ class TestThreadMethodTracking:
 
         base_date = datetime(2024, 1, 15, 10, 0)
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Budget Discussion",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Re: Budget Discussion",
@@ -925,7 +924,7 @@ class TestThreadMethodTracking:
         """Single-email threads (ungrouped) default to thread_method='header'."""
         from src.analyzers.thread_analyzer import ThreadAnalyzer
 
-        msg1 = create_test_email(id="msg_001", subject="Standalone Email")
+        msg1 = create_test_email(email_id="msg_001", subject="Standalone Email")
         corpus = create_test_corpus([msg1])
         analyzer = ThreadAnalyzer()
         result = analyzer.analyze(corpus)
@@ -941,12 +940,12 @@ class TestThreadMethodTracking:
 
         # Header-grouped thread
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             subject="Header Thread",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             subject="Re: Header Thread",
             in_reply_to="msg_001",
             received_date=base_date + timedelta(hours=1),
@@ -954,14 +953,14 @@ class TestThreadMethodTracking:
 
         # Subject-grouped thread (no headers)
         msg3 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             sender_email="alice@corp.com",
             sender_domain="corp.com",
             subject="Subject Thread",
             received_date=base_date,
         )
         msg4 = create_test_email(
-            id="msg_004",
+            email_id="msg_004",
             sender_email="bob@corp.com",
             sender_domain="corp.com",
             subject="Re: Subject Thread",
@@ -992,14 +991,14 @@ class TestSubjectHeuristicNoInterference:
         base_date = datetime(2024, 1, 15, 10, 0)
         # Two emails connected by In-Reply-To
         msg1 = create_test_email(
-            id="msg_001",
+            email_id="msg_001",
             sender_email="alice@example.com",
             sender_domain="example.com",
             subject="Project Alpha",
             received_date=base_date,
         )
         msg2 = create_test_email(
-            id="msg_002",
+            email_id="msg_002",
             sender_email="bob@example.com",
             sender_domain="example.com",
             subject="Re: Project Alpha",
@@ -1008,7 +1007,7 @@ class TestSubjectHeuristicNoInterference:
         )
         # Third email, same subject but no headers, different domain
         msg3 = create_test_email(
-            id="msg_003",
+            email_id="msg_003",
             sender_email="charlie@other.com",
             sender_domain="other.com",
             subject="Re: Project Alpha",

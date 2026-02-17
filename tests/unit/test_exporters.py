@@ -19,7 +19,6 @@ import pytest
 from src.exceptions import ExportError
 from src.models.category import Category, CategorySource
 
-
 # ============================================================================
 # Test Fixtures
 # ============================================================================
@@ -487,20 +486,16 @@ class TestHtmlExporter:
     ):
         """Test that missing template file raises ExportError with clear message."""
         from src.exporters.html_exporter import (
-            TEMPLATE_DIR,
-            TEMPLATE_NAME,
             export_categories_to_html,
         )
 
         output_path = temp_output_dir / "report.html"
-        expected_path = str(TEMPLATE_DIR / TEMPLATE_NAME)
 
         with patch(
             "src.exporters.html_exporter.TEMPLATE_DIR",
             Path(temp_output_dir / "nonexistent_templates"),
-        ):
-            with pytest.raises(ExportError, match="Template not found at"):
-                export_categories_to_html(sample_categories, output_path)
+        ), pytest.raises(ExportError, match="Template not found at"):
+            export_categories_to_html(sample_categories, output_path)
 
     def test_export_html_missing_template_error_message_includes_path(
         self, sample_categories, temp_output_dir
@@ -539,9 +534,8 @@ class TestHtmlExporter:
         with patch(
             "src.exporters.html_exporter.TEMPLATE_DIR",
             empty_template_dir,
-        ):
-            with pytest.raises(ExportError, match="Template not found at"):
-                export_categories_to_html(sample_categories, output_path)
+        ), pytest.raises(ExportError, match="Template not found at"):
+            export_categories_to_html(sample_categories, output_path)
 
 
 # ============================================================================

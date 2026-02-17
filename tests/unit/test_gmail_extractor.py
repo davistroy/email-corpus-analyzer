@@ -1,8 +1,7 @@
 """Tests for GmailClient and GmailExtractor."""
 import base64
 from datetime import datetime, timezone
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,7 +9,6 @@ from src.extractors.gmail_client import GmailClient
 from src.extractors.gmail_extractor import GmailExtractor
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
-
 
 # ─── GmailClient Tests ────────────────────────────────────────────────
 

@@ -8,12 +8,9 @@ Task 5B.2: Pattern Detection
 Task 4.2: Temporal Decay tests
 """
 import json
-import math
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
-import pytest
 
 from src.learning.decision_logger import DecisionAction, DecisionLogger, ReviewDecision
 from src.learning.pattern_detector import (

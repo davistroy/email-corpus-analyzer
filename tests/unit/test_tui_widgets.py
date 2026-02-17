@@ -3,7 +3,6 @@ Unit tests for the TUI widgets.
 
 Tests CategoryTable, DetailPanel, and ActionBar widgets.
 """
-import pytest
 
 from src.models.category import Category, CategorySource
 
@@ -131,8 +130,9 @@ class TestCategoryTableNavigation:
 
     def test_table_move_down(self):
         """Test moving selection down."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         categories = [
             create_test_category(category_id="cat1"),
@@ -150,8 +150,9 @@ class TestCategoryTableNavigation:
 
     def test_table_move_up(self):
         """Test moving selection up."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         categories = [
             create_test_category(category_id="cat1"),
@@ -167,8 +168,9 @@ class TestCategoryTableNavigation:
 
     def test_table_move_down_at_end_wraps(self):
         """Test that moving down at end wraps to beginning."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         categories = [
             create_test_category(category_id="cat1"),
@@ -185,8 +187,9 @@ class TestCategoryTableNavigation:
 
     def test_table_move_up_at_start_wraps(self):
         """Test that moving up at start wraps to end."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         categories = [
             create_test_category(category_id="cat1"),
@@ -207,8 +210,9 @@ class TestCategoryTableRemove:
 
     def test_table_remove_category(self):
         """Test removing a category from table."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         cat1 = create_test_category(category_id="cat1")
         cat2 = create_test_category(category_id="cat2")
@@ -223,8 +227,9 @@ class TestCategoryTableRemove:
 
     def test_table_remove_updates_selection(self):
         """Test that removing category updates selection."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         cat1 = create_test_category(category_id="cat1")
         cat2 = create_test_category(category_id="cat2")
@@ -383,39 +388,39 @@ class TestActionBarCommands:
 
     def test_bar_shows_accept_command(self):
         """Test that action bar shows accept command."""
-        from src.ui.tui.widgets.action_bar import ActionBar, COMMANDS
+        from src.ui.tui.widgets.action_bar import COMMANDS
 
-        assert any("accept" in cmd.lower() or cmd == "A" for cmd in COMMANDS.keys())
+        assert any("accept" in cmd.lower() or cmd == "A" for cmd in COMMANDS)
 
     def test_bar_shows_rename_command(self):
         """Test that action bar shows rename command."""
-        from src.ui.tui.widgets.action_bar import ActionBar, COMMANDS
+        from src.ui.tui.widgets.action_bar import COMMANDS
 
-        assert any("rename" in cmd.lower() or cmd == "R" for cmd in COMMANDS.keys())
+        assert any("rename" in cmd.lower() or cmd == "R" for cmd in COMMANDS)
 
     def test_bar_shows_merge_command(self):
         """Test that action bar shows merge command."""
-        from src.ui.tui.widgets.action_bar import ActionBar, COMMANDS
+        from src.ui.tui.widgets.action_bar import COMMANDS
 
-        assert any("merge" in cmd.lower() or cmd == "M" for cmd in COMMANDS.keys())
+        assert any("merge" in cmd.lower() or cmd == "M" for cmd in COMMANDS)
 
     def test_bar_shows_delete_command(self):
         """Test that action bar shows delete command."""
-        from src.ui.tui.widgets.action_bar import ActionBar, COMMANDS
+        from src.ui.tui.widgets.action_bar import COMMANDS
 
-        assert any("delete" in cmd.lower() or cmd == "D" for cmd in COMMANDS.keys())
+        assert any("delete" in cmd.lower() or cmd == "D" for cmd in COMMANDS)
 
     def test_bar_shows_skip_command(self):
         """Test that action bar shows skip command."""
-        from src.ui.tui.widgets.action_bar import ActionBar, COMMANDS
+        from src.ui.tui.widgets.action_bar import COMMANDS
 
-        assert any("skip" in cmd.lower() or cmd == "S" for cmd in COMMANDS.keys())
+        assert any("skip" in cmd.lower() or cmd == "S" for cmd in COMMANDS)
 
     def test_bar_shows_help_command(self):
         """Test that action bar shows help command."""
-        from src.ui.tui.widgets.action_bar import ActionBar, COMMANDS
+        from src.ui.tui.widgets.action_bar import COMMANDS
 
-        assert any("help" in cmd.lower() or cmd == "?" for cmd in COMMANDS.keys())
+        assert any("help" in cmd.lower() or cmd == "?" for cmd in COMMANDS)
 
 
 class TestCommandsModule:
@@ -461,7 +466,7 @@ class TestWidgetsPackageInit:
 
     def test_package_imports(self):
         """Test that widgets package can be imported."""
-        from src.ui.tui.widgets import CategoryTable, DetailPanel, ActionBar
+        from src.ui.tui.widgets import ActionBar, CategoryTable, DetailPanel
 
         assert CategoryTable is not None
         assert DetailPanel is not None
@@ -624,8 +629,9 @@ class TestHierarchicalCategoryTable:
 
     def test_table_toggle_expand_collapse(self):
         """Test expanding/collapsing categories with subcategories."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         child = self.create_hierarchical_category(
             category_id="child_1",
@@ -735,8 +741,9 @@ class TestHierarchicalCategoryActions:
 
     def test_promote_subcategory_to_top_level(self):
         """Test promoting a subcategory to top level."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         child = self.create_hierarchical_category(
             category_id="child_1",
@@ -762,8 +769,9 @@ class TestHierarchicalCategoryActions:
 
     def test_demote_top_level_to_subcategory(self):
         """Test demoting a top-level category to subcategory."""
-        from src.ui.tui.widgets.category_table import CategoryTable
         from unittest.mock import patch
+
+        from src.ui.tui.widgets.category_table import CategoryTable
 
         cat1 = self.create_hierarchical_category(
             category_id="cat_1",

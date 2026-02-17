@@ -7,10 +7,7 @@ Tests the abstract base class for all email analyzers with:
 - Name property requirement
 - Incremental analysis support flag
 """
-from abc import ABC
 from datetime import datetime
-from typing import Generic, TypeVar
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,7 +16,7 @@ from src.models.email import Email
 
 
 def create_test_email(
-    id: str = "test_001",
+    email_id: str = "test_001",
     sender_email: str = "sender@example.com",
     sender_domain: str = "example.com",
     subject: str = "Test Subject",
@@ -30,7 +27,7 @@ def create_test_email(
     if received_date is None:
         received_date = datetime(2024, 1, 15, 10, 0)
     return Email(
-        id=id,
+        id=email_id,
         sender_email=sender_email,
         sender_name="Test Sender",
         sender_domain=sender_domain,
@@ -44,7 +41,7 @@ def create_test_email(
 def create_test_corpus(emails: list[Email] | None = None) -> Corpus:
     """Factory function to create Corpus objects for testing."""
     if emails is None:
-        emails = [create_test_email(id=f"email_{i}") for i in range(5)]
+        emails = [create_test_email(email_id=f"email_{i}") for i in range(5)]
     return Corpus(
         extraction_metadata=CorpusMetadata(
             extraction_date=datetime.now(),
