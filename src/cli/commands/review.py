@@ -135,8 +135,24 @@ def cmd_review(args: argparse.Namespace) -> int:
         suggestions_data = load_json(suggestions_path)
         categories = [Category(**cat) for cat in suggestions_data]
 
+    except FileNotFoundError:
+        logger.error(
+            f"Suggestions file not found: {suggestions_path}. "
+            f"Run 'suggest' first to generate category suggestions, "
+            f"or specify a valid path with --suggestions."
+        )
+        if getattr(args, 'json', False):
+            output_json({
+                "command": "review",
+                "status": "error",
+                "error": f"Suggestions file not found: {suggestions_path}"
+            })
+        return 1
     except Exception as e:
-        logger.error(f"Failed to load suggestions: {e}")
+        logger.error(
+            f"Failed to load suggestions from {suggestions_path}: {e}. "
+            f"The file may be corrupted. Try re-running 'suggest' to regenerate it."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "review",
@@ -188,7 +204,12 @@ def cmd_review(args: argparse.Namespace) -> int:
         return 0
 
     except Exception as e:
-        logger.error(f"Review failed: {e}", exc_info=True)
+        logger.error(
+            f"Review failed for suggestions from {suggestions_path}: {e}. "
+            f"Approved output was targeted at {approved_path}. "
+            f"Use --verbose for full traceback.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "review",
@@ -251,17 +272,24 @@ def auto_approve_categories(args: argparse.Namespace) -> int:
 
         return 0
 
-    except FileNotFoundError as e:
-        logger.error(f"Suggestions file not found: {e}")
+    except FileNotFoundError:
+        logger.error(
+            f"Suggestions file not found: {suggestions_path}. "
+            f"Run 'suggest' first to generate category suggestions."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "auto_approve",
                 "status": "error",
-                "error": str(e)
+                "error": f"Suggestions file not found: {suggestions_path}"
             })
         return 1
     except Exception as e:
-        logger.error(f"Auto-approve failed: {e}", exc_info=True)
+        logger.error(
+            f"Auto-approve failed. Input: {suggestions_path}, Output: {approved_path}. "
+            f"Error: {e}. Use --verbose for full traceback.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "auto_approve",

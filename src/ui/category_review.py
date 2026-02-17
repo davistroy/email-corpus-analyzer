@@ -610,7 +610,10 @@ def cleanup_intermediate_files(output_dir: str = "outputs") -> None:
             logger.debug(f"Deleted intermediate file: {file_path}")
         except Exception as e:
             print(f"Error deleting {file_path}: {e}")
-            logger.error(f"Failed to delete {file_path}: {e}")
+            logger.error(
+                f"Failed to delete intermediate file {file_path}: {e}. "
+                f"You may need to delete it manually."
+            )
 
     print("\nCleanup complete!")
     print(f"Kept: {', '.join(keep_files)}")
@@ -724,14 +727,21 @@ def review_categories_with_ui(
             corpus_data = load_json(corpus_path)
             email_lookup = {email["id"]: Email(**email) for email in corpus_data.get("emails", [])}
     except Exception as e:
-        logger.warning(f"Could not load email corpus for display: {e}")
+        logger.warning(
+            f"Could not load email corpus from {corpus_path} for sample display: {e}. "
+            f"Review will continue without sample emails. "
+            f"Run 'extract' to create or update the corpus file."
+        )
 
     # Determine if we should use TUI
     if use_tui and is_tui_supported():
         try:
             return run_tui_review(categories, email_lookup, output_path)
         except Exception as e:
-            logger.warning(f"TUI failed, falling back to legacy CLI: {e}")
+            logger.warning(
+                f"TUI review failed, falling back to legacy CLI: {e}. "
+                f"Use --no-tui to skip TUI and go directly to CLI review."
+            )
             # Fall through to legacy CLI
 
     # Use legacy CLI

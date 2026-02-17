@@ -12,7 +12,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.generators.confidence_scorer import calculate_confidence
+from src.generators.confidence_scorer import (
+    ConfidenceWeights,
+    calculate_confidence_enhanced,
+    calculate_pairwise_overlap,
+)
 from src.generators.name_generator import TfidfNameGenerator, score_name_quality
 from src.generators.template_matcher import match_templates
 from src.learning.decision_logger import DecisionLogger
@@ -103,10 +107,20 @@ class CategoryGenerator:
         all_categories.extend(template_categories)
         logger.debug(f"Created {len(template_categories)} template-based categories")
 
-        # FR-025: Calculate confidence scores
-        logger.debug("Calculating confidence scores")
+        # FR-025: Calculate enhanced confidence scores with configurable weights
+        logger.debug("Calculating enhanced confidence scores")
+        weights = ConfidenceWeights.from_thresholds(self.thresholds)
+        overlap_map = calculate_pairwise_overlap(all_categories)
         for category in all_categories:
-            category.confidence = calculate_confidence(category, total_emails)
+            cat_overlaps = overlap_map.get(category.category_id)
+            confidence, breakdown = calculate_confidence_enhanced(
+                category,
+                total_emails,
+                weights=weights,
+                overlap_scores=cat_overlaps if cat_overlaps else None,
+            )
+            category.confidence = confidence
+            category.confidence_breakdown = breakdown
 
         # FR-027: Merge similar categories
         logger.debug("Merging similar categories")
@@ -264,7 +278,17 @@ class CategoryGenerator:
         return "Miscellaneous"
 
     def _merge_similar(self, categories: list[Category]) -> list[Category]:
-        """Merge categories with similar names and overlapping emails."""
+        """Merge categories with similar names and overlapping emails.
+
+        Uses a two-tier strategy:
+        - Very high name similarity (>0.9): merge based on email count ratio,
+          bypassing example ID overlap which is noisy with small sample sets
+          (max 10 IDs per category).
+        - Normal similarity (>threshold): requires both name similarity AND
+          example email ID overlap above threshold.
+        """
+        from difflib import SequenceMatcher
+
         merged = []
         merged_indices = set()
 
@@ -278,13 +302,31 @@ class CategoryGenerator:
                 if j in merged_indices:
                     continue
 
-                # Check name similarity using configurable threshold
-                if self._names_similar(
-                    cat1.category_name,
-                    cat2.category_name,
-                    threshold=self.thresholds.merge_name_similarity,
-                ):
-                    # Check email overlap against configurable threshold
+                # Calculate name similarity ratio
+                n1 = cat1.category_name.lower()
+                n2 = cat2.category_name.lower()
+                name_ratio = 1.0 if n1 == n2 else SequenceMatcher(None, n1, n2).ratio()
+
+                if name_ratio > 0.9:
+                    # Very high name similarity: use count ratio instead of
+                    # example ID overlap (which is noisy with max 10 IDs)
+                    count1 = cat1.email_count or 0
+                    count2 = cat2.email_count or 0
+                    max_count = max(count1, count2)
+                    if max_count > 0:
+                        count_ratio = min(count1, count2) / max_count
+                    else:
+                        count_ratio = 0.0
+                    if count_ratio > 0.3:
+                        similar.append(cat2)
+                        merged_indices.add(j)
+                        logger.debug(
+                            f"Merge (high name similarity {name_ratio:.2f}, "
+                            f"count ratio {count_ratio:.2f}): "
+                            f"'{cat1.category_name}' + '{cat2.category_name}'"
+                        )
+                elif name_ratio >= self.thresholds.merge_name_similarity:
+                    # Normal path: check email overlap against configurable threshold
                     overlap = self._calculate_overlap(
                         set(cat1.example_email_ids),
                         set(cat2.example_email_ids)
@@ -410,11 +452,33 @@ class CategoryGenerator:
 
             categories.append(parent_category)
 
-        # Calculate confidence for all categories
+        # Calculate enhanced confidence for all categories
+        weights = ConfidenceWeights.from_thresholds(self.thresholds)
+        # Build flat list for pairwise overlap (parents + children)
+        all_cats = list(categories)
+        for cat in categories:
+            all_cats.extend(cat.subcategories)
+        overlap_map = calculate_pairwise_overlap(all_cats)
         for category in categories:
-            category.confidence = calculate_confidence(category, total_emails)
+            cat_overlaps = overlap_map.get(category.category_id)
+            confidence, breakdown = calculate_confidence_enhanced(
+                category,
+                total_emails,
+                weights=weights,
+                overlap_scores=cat_overlaps if cat_overlaps else None,
+            )
+            category.confidence = confidence
+            category.confidence_breakdown = breakdown
             for subcategory in category.subcategories:
-                subcategory.confidence = calculate_confidence(subcategory, total_emails)
+                sub_overlaps = overlap_map.get(subcategory.category_id)
+                sub_confidence, sub_breakdown = calculate_confidence_enhanced(
+                    subcategory,
+                    total_emails,
+                    weights=weights,
+                    overlap_scores=sub_overlaps if sub_overlaps else None,
+                )
+                subcategory.confidence = sub_confidence
+                subcategory.confidence_breakdown = sub_breakdown
 
         # Sort by confidence
         categories.sort(key=lambda c: c.confidence, reverse=True)
@@ -554,8 +618,12 @@ class CategoryGenerator:
         return match_templates(analysis_results, PREDEFINED_TEMPLATES)
 
     def score_confidence(self, category: Category, total_emails: int) -> float:
-        """Calculate confidence score for category."""
-        return calculate_confidence(category, total_emails)
+        """Calculate confidence score for category using enhanced scorer."""
+        weights = ConfidenceWeights.from_thresholds(self.thresholds)
+        confidence, _ = calculate_confidence_enhanced(
+            category, total_emails, weights=weights
+        )
+        return confidence
 
     def generate_report(self, categories: list[Category]) -> str:
         """

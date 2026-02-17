@@ -117,8 +117,24 @@ def cmd_suggest(args: argparse.Namespace) -> int:
         analysis_data = load_json(analysis_path)
         results = AnalysisResults(**analysis_data)
 
+    except FileNotFoundError:
+        logger.error(
+            f"Analysis results file not found: {analysis_path}. "
+            f"Run 'analyze' first to generate analysis results, "
+            f"or specify a valid path with --analysis."
+        )
+        if getattr(args, 'json', False):
+            output_json({
+                "command": "suggest",
+                "status": "error",
+                "error": f"Analysis results file not found: {analysis_path}"
+            })
+        return 1
     except Exception as e:
-        logger.error(f"Failed to load analysis: {e}")
+        logger.error(
+            f"Failed to load analysis results from {analysis_path}: {e}. "
+            f"The file may be corrupted. Try re-running 'analyze' to regenerate it."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "suggest",
@@ -170,7 +186,12 @@ def cmd_suggest(args: argparse.Namespace) -> int:
         return 0
 
     except Exception as e:
-        logger.error(f"Suggestion generation failed: {e}", exc_info=True)
+        logger.error(
+            f"Suggestion generation failed using analysis from {analysis_path}: {e}. "
+            f"Output was targeted at {suggestions_path}. "
+            f"Use --verbose for full traceback.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "suggest",

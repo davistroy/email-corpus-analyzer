@@ -265,7 +265,13 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             cluster_viz=getattr(args, 'cluster_viz', False),
         )
     except Exception as e:
-        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        logger.error(
+            f"Pipeline failed during extract/analyze/suggest stages: {e}. "
+            f"Output directory: {output_dir}. "
+            f"You can re-run individual stages to isolate the failure. "
+            f"Use --verbose for full traceback.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "pipeline",

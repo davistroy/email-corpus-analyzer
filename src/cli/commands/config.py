@@ -250,7 +250,10 @@ def cmd_config_init(args: argparse.Namespace) -> int:
         logger.info(f"Created configuration file: {output_path}")
         return 0
     except OSError as e:
-        logger.error(f"Failed to write configuration file: {e}")
+        logger.error(
+            f"Failed to write configuration file to {output_path}: {e}. "
+            f"Check that the directory exists and is writable."
+        )
         return 1
 
 
@@ -270,7 +273,12 @@ def cmd_config_show(args: argparse.Namespace) -> int:
         print(output)
         return 0
     except ConfigLoadError as e:
-        logger.error(f"Failed to load configuration: {e}")
+        config_path_display = args.config or f"{get_global_config_path()} / {get_project_config_path()}"
+        logger.error(
+            f"Failed to load configuration from {config_path_display}: {e}. "
+            f"Run 'config validate' to check your config file, "
+            f"or 'config init' to generate a new template."
+        )
         return 1
 
 
@@ -287,7 +295,11 @@ def cmd_config_validate(args: argparse.Namespace) -> int:
     try:
         config = load_config(config_path=args.config)
     except ConfigLoadError as e:
-        logger.error(f"Failed to load configuration: {e}")
+        config_path_display = args.config or f"{get_global_config_path()} / {get_project_config_path()}"
+        logger.error(
+            f"Failed to load configuration from {config_path_display}: {e}. "
+            f"Run 'config init' to generate a valid config template."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "config validate",
