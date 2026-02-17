@@ -365,6 +365,105 @@ def _make_email(subject: str = "Test Subject", body_text: str = "Test body") -> 
     )
 
 
+class TestEmailLenientValidation:
+    """Test cases for lenient email address validation (Phase 6, Task 6.1)."""
+
+    def test_accepts_standard_email(self):
+        """Test that standard email addresses still work."""
+        email = _make_email()
+        assert email.sender_email == "sender@example.com"
+
+    def test_accepts_underscore_in_domain(self):
+        """Test that underscores in domain parts are accepted."""
+        email = Email(
+            id="t1",
+            sender_email="noreply@39._ecoenergi.online",
+            sender_name="",
+            sender_domain="39._ecoenergi.online",
+            subject="Test",
+            body_text="",
+            received_date=datetime(2024, 1, 1),
+            has_attachments=False,
+        )
+        assert email.sender_email == "noreply@39._ecoenergi.online"
+
+    def test_accepts_hyphens_and_dots_in_domain(self):
+        """Test that leading hyphens and consecutive dots in domain are accepted."""
+        email = Email(
+            id="t2",
+            sender_email="CloudNotify@---SyncServi...-MtO0.autoworkscoll.com",
+            sender_name="",
+            sender_domain="---SyncServi...-MtO0.autoworkscoll.com",
+            subject="Test",
+            body_text="",
+            received_date=datetime(2024, 1, 1),
+            has_attachments=False,
+        )
+        assert email.sender_email == "CloudNotify@---SyncServi...-MtO0.autoworkscoll.com"
+
+    def test_rejects_empty_sender_email(self):
+        """Test that empty sender_email is rejected."""
+        with pytest.raises(ValueError):
+            Email(
+                id="t3",
+                sender_email="",
+                sender_name="",
+                sender_domain="example.com",
+                subject="Test",
+                body_text="",
+                received_date=datetime(2024, 1, 1),
+                has_attachments=False,
+            )
+
+    def test_rejects_no_at_sign(self):
+        """Test that email without @ is rejected."""
+        with pytest.raises(ValueError):
+            Email(
+                id="t4",
+                sender_email="invalid-email-format",
+                sender_name="",
+                sender_domain="example.com",
+                subject="Test",
+                body_text="",
+                received_date=datetime(2024, 1, 1),
+                has_attachments=False,
+            )
+
+    def test_recipient_email_none_accepted(self):
+        """Test that None recipient_email is accepted."""
+        email = _make_email()
+        assert email.recipient_email is None
+
+    def test_recipient_email_with_at_accepted(self):
+        """Test that recipient_email with @ is accepted."""
+        email = Email(
+            id="t5",
+            sender_email="sender@example.com",
+            sender_name="",
+            sender_domain="example.com",
+            recipient_email="recipient@weird._domain.com",
+            subject="Test",
+            body_text="",
+            received_date=datetime(2024, 1, 1),
+            has_attachments=False,
+        )
+        assert email.recipient_email == "recipient@weird._domain.com"
+
+    def test_strips_whitespace(self):
+        """Test that whitespace is stripped from email addresses."""
+        email = Email(
+            id="t6",
+            sender_email="  sender@example.com  ",
+            sender_name="",
+            sender_domain="example.com",
+            subject="Test",
+            body_text="",
+            received_date=datetime(2024, 1, 1),
+            has_attachments=False,
+        )
+        assert email.sender_email == "sender@example.com"
+
+
 class TestEmailCombinedText:
     """Test cases for Email.combined_text and combined_text_with_limit."""
 

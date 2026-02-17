@@ -6,17 +6,35 @@ Phase 8 Track 8A.1: Added thread_id, in_reply_to, and references fields for thre
 """
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Email(BaseModel):
     """Individual email message with complete metadata and content."""
 
     id: str = Field(..., min_length=1, description="Unique M365 message ID")
-    sender_email: EmailStr
+    sender_email: str = Field(..., min_length=1)
     sender_name: str = ""
     sender_domain: str = Field(..., min_length=1)
-    recipient_email: EmailStr | None = None
+    recipient_email: str | None = None
+
+    @field_validator("sender_email", "recipient_email", mode="before")
+    @classmethod
+    def _lenient_email_check(cls, v: str | None) -> str | None:
+        """Accept any string containing @ as an email address.
+
+        Extracted data from APIs (Graph, Gmail) may contain technically-invalid
+        addresses (e.g. underscores in domains, leading hyphens). These must be
+        preserved so spam/automated senders can be classified.
+        """
+        if v is None:
+            return None
+        if not isinstance(v, str):
+            raise ValueError("Email must be a string")
+        v = v.strip()
+        if "@" not in v:
+            raise ValueError(f"Email must contain @: {v!r}")
+        return v
     recipient_name: str = ""
     subject: str
     body_text: str
