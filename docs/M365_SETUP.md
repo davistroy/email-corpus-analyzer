@@ -55,12 +55,7 @@ The default public client ID works for most cases. If you need a custom Azure ap
 5. API Permissions: Add **Mail.Read** (delegated) and **User.Read** (delegated)
 6. Note the Application (client) ID
 
-Then set the client ID in your config file:
-```yaml
-# ~/.email-analyzer/config.yaml
-extract:
-  client_id: "your-azure-app-client-id"
-```
+Custom client IDs are currently supported via the `GraphAPIClient` constructor when using the extraction API programmatically. For CLI usage, the default public client ID is sufficient for personal Microsoft accounts.
 
 ---
 
