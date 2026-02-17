@@ -436,7 +436,7 @@ class TestEmailExtractor:
     def test_process_email_handles_missing_sender(self, extractor, mock_email_data):
         """Test handling of email with missing sender info raises validation error."""
         mock_email_data["from"] = {}
-        # Email model requires valid sender_email (EmailStr), so this raises
+        # Empty dict causes KeyError from dict access before validation
         with pytest.raises((KeyError, ValueError, TypeError)):
             extractor._process_email(mock_email_data)
 
@@ -1215,9 +1215,43 @@ class TestEmailExtractorEdgeCases:
             "hasAttachments": False
         }
 
-        # This should raise due to invalid email format in Pydantic model
+        # Lenient validator still rejects strings without @ (ValueError)
         with pytest.raises((KeyError, ValueError, TypeError, IndexError)):
             extractor._process_email(email_data)
+
+    def test_process_email_accepts_technically_invalid_addresses(self, extractor):
+        """Test that technically-invalid but real-world email addresses are accepted.
+
+        Spam and automated senders often have addresses that violate RFC 5321
+        but must be preserved for classification and rule export.
+        """
+        test_cases = [
+            ("noreply@39._ecoenergi.online", "39._ecoenergi.online"),
+            ("CloudNotify@---SyncServi...-MtO0.autoworkscoll.com", "---SyncServi...-MtO0.autoworkscoll.com"),
+        ]
+
+        for address, expected_domain in test_cases:
+            email_data = {
+                "id": f"test_{address}",
+                "subject": "Spam Test",
+                "from": {
+                    "emailAddress": {
+                        "address": address,
+                        "name": "Spam Sender"
+                    }
+                },
+                "toRecipients": [
+                    {"emailAddress": {"address": "user@example.com", "name": "User"}}
+                ],
+                "body": {"content": "<p>Spam body</p>"},
+                "receivedDateTime": "2024-01-15T10:00:00Z",
+                "hasAttachments": False,
+            }
+
+            email = extractor._process_email(email_data)
+
+            assert email.sender_email == address
+            assert email.sender_domain == expected_domain
 
     def test_process_email_special_characters_in_body(self, extractor):
         """Test handling special characters in email body."""

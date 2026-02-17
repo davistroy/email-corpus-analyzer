@@ -15,9 +15,10 @@
 | 3 | Rich User Interface | ~90,000 | 2 tracks | ✅ Complete |
 | 4 | Advanced Features | ~85,000 | 2 tracks | ✅ Complete |
 | 5 | Extensibility & Polish | ~75,000 | 3 tracks | ✅ Complete |
+| 6 | Data Resilience | ~7,000 | 1 track | ✅ Complete |
 
-**Total Estimated**: ~425,000 tokens across 5 phases
-**Progress**: 5/5 phases complete (1144 tests, 84% coverage) 🎉
+**Total Estimated**: ~432,000 tokens across 6 phases
+**Progress**: 6/6 phases complete (1968+ tests, 86% coverage)
 
 ---
 
@@ -1182,6 +1183,73 @@ Phase 1                    Phase 2                Phase 3              Phase 4  
 
 ---
 
+## Phase 6: Data Resilience ✅ COMPLETE
+
+**Goal**: Accept technically-invalid email addresses from extracted data so spam/automated senders are preserved for classification and rule export.
+
+**Duration Estimate**: ~7,000 tokens
+
+**Status**: ✅ Completed on 2026-02-17
+
+### Track 6A: Lenient Email Validation (Sequential)
+
+#### Task 6.1: Lenient Email Validator in Email Model ✅
+**Effort**: ~3,000 tokens | **Dependencies**: None
+
+**Files modified**: `src/models/email.py`
+
+Changes:
+- Removed `EmailStr` import, added `field_validator` import
+- Changed `sender_email: EmailStr` → `sender_email: str = Field(..., min_length=1)`
+- Changed `recipient_email: EmailStr | None` → `recipient_email: str | None = None`
+- Added `@field_validator("sender_email", "recipient_email", mode="before")` that:
+  - Returns `None` for `None` input
+  - Requires non-empty string containing `@`
+  - Strips whitespace
+  - Raises `ValueError` for strings without `@`
+
+**Acceptance Criteria**:
+- [x] `noreply@39._ecoenergi.online` accepted
+- [x] `CloudNotify@---SyncServi...-MtO0.autoworkscoll.com` accepted
+- [x] `""` (empty string) rejected
+- [x] `"invalid-email-format"` (no @) rejected
+- [x] `None` accepted for recipient_email, rejected for sender_email
+
+#### Task 6.2: Lenient Email Validation in Sender Model ✅
+**Effort**: ~1,000 tokens | **Dependencies**: 6.1
+
+**Files modified**: `src/models/sender.py`
+
+Changes:
+- Removed `EmailStr` import
+- Changed `email: EmailStr` → `email: str = Field(..., min_length=1)`
+
+No validator needed — Sender objects are constructed from already-validated Email data.
+
+**Acceptance Criteria**:
+- [x] Sender model accepts any non-empty string
+- [x] All existing Sender construction in analyzers continues to work
+
+#### Task 6.3: Update Tests ✅
+**Effort**: ~3,000 tokens | **Dependencies**: 6.1, 6.2
+
+**Files modified**: `tests/unit/test_extractors.py`, `tests/unit/test_models.py`
+
+Test updates:
+1. Updated comment on `test_process_email_handles_missing_sender` to reflect lenient validator
+2. `test_process_email_no_at_in_sender` — still passes (lenient validator raises `ValueError` for no-`@`)
+3. Added `test_process_email_accepts_technically_invalid_addresses` — verifies real-world spam addresses produce valid Email objects
+4. Added `TestEmailLenientValidation` class in test_models.py with 8 tests covering acceptance, rejection, None, and whitespace stripping
+
+#### Task 6.4: Verification (No Changes Required) ✅
+**Files verified but NOT modified**:
+- `src/config/models.py` — `AppConfig.user_email: EmailStr | None` stays strict
+- `src/models/corpus.py` — `CorpusMetadata.user_email: EmailStr` stays strict
+- `tests/unit/test_cli.py` — CLI email validation tests unaffected
+- `tests/integration/test_config.py` — Config email validation unaffected
+
+---
+
 ## Success Metrics ✅
 
 All phases complete - metrics achieved:
@@ -1194,7 +1262,8 @@ All phases complete - metrics achieved:
 
 ---
 
-*Document Version: 2.0 - IMPLEMENTATION COMPLETE*
+*Document Version: 3.0 - Phase 6 Added*
 *Created: 2025-01-14*
-*Completed: 2025-01-14*
+*Phase 1-5 Completed: 2025-01-14*
+*Phase 6 Completed: 2026-02-17*
 *Related: IMPROVEMENT_RECOMMENDATIONS.md*

@@ -5,7 +5,7 @@ Per data-model.md lines 174-205.
 """
 from enum import Enum
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 
 class SenderType(str, Enum):
@@ -20,7 +20,7 @@ class SenderType(str, Enum):
 class Sender(BaseModel):
     """Aggregated sender information with classification."""
 
-    email: EmailStr
+    email: str = Field(..., min_length=1)
     name: str = ""
     domain: str
     type: SenderType
