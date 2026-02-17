@@ -6,6 +6,7 @@ Modal text input dialog for renaming a category with validation.
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
 
@@ -92,8 +93,8 @@ class RenameDialog(ModalScreen[str | None]):
         try:
             input_widget = self.query_one("#rename-input", Input)
             input_widget.focus()
-        except Exception:
-            pass
+        except NoMatches:
+            pass  # Input widget may not be mounted yet
 
     def validate_name(self, name: str) -> bool:
         """
@@ -137,16 +138,16 @@ class RenameDialog(ModalScreen[str | None]):
         try:
             error_widget = self.query_one("#validation-error", Static)
             error_widget.update(error)
-        except Exception:
-            pass
+        except NoMatches:
+            pass  # Validation error widget may not be mounted yet
 
     def _clear_validation_error(self) -> None:
         """Clear the validation error message."""
         try:
             error_widget = self.query_one("#validation-error", Static)
             error_widget.update("")
-        except Exception:
-            pass
+        except NoMatches:
+            pass  # Validation error widget may not be mounted yet
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""

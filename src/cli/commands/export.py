@@ -99,7 +99,11 @@ def cmd_export(args: argparse.Namespace) -> int:
         logger.info(f"Loaded {len(categories)} categories")
 
     except FileNotFoundError:
-        logger.error(f"Categories file not found: {input_path}")
+        logger.error(
+            f"Categories file not found: {input_path}. "
+            f"Run the full pipeline ('extract' -> 'analyze' -> 'suggest' -> 'review') first, "
+            f"or specify a valid input file with --input."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "export",
@@ -108,7 +112,11 @@ def cmd_export(args: argparse.Namespace) -> int:
             })
         return 1
     except Exception as e:
-        logger.error(f"Failed to load categories: {e}")
+        logger.error(
+            f"Failed to load categories from {input_path}: {e}. "
+            f"The file may be corrupted or contain invalid data. "
+            f"Try re-running 'review' to regenerate approved categories."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "export",
@@ -171,7 +179,13 @@ def cmd_export(args: argparse.Namespace) -> int:
         return 0
 
     except Exception as e:
-        logger.error(f"Export failed: {e}", exc_info=True)
+        logger.error(
+            f"Export to {args.format.upper()} failed. "
+            f"Input: {input_path}, Output: {output_path}. "
+            f"Error: {e}. "
+            f"Check that the output directory exists and is writable.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "export",

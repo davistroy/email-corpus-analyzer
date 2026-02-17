@@ -171,9 +171,19 @@ class TestCategoryGenerator:
     def test_generate_suggestions_filters_by_min_cluster_percentage(self):
         """Test that clusters below min percentage are filtered out."""
         clusters = [
-            create_sample_cluster(cluster_id=0, size=100, percentage=10.0),
+            create_sample_cluster(
+                cluster_id=0, size=100, percentage=10.0,
+                subjects=["Amazon order shipped", "Amazon delivery update"],
+                body_previews=["Your Amazon order has shipped via UPS", "Amazon package delivered today"],
+                email_ids=[f"amazon_{i}" for i in range(100)],
+            ),
             create_sample_cluster(cluster_id=1, size=30, percentage=3.0),  # Below default 5%
-            create_sample_cluster(cluster_id=2, size=50, percentage=5.0),  # At threshold
+            create_sample_cluster(
+                cluster_id=2, size=50, percentage=5.0,
+                subjects=["Netflix recommendation", "Netflix new release"],
+                body_previews=["New shows to watch on Netflix", "Netflix original series premiere"],
+                email_ids=[f"netflix_{i}" for i in range(50)],
+            ),  # At threshold
         ]
         analysis = create_sample_analysis_results(
             total_emails=1000,
@@ -656,6 +666,218 @@ class TestCategoryGenerator:
         score = generator.score_confidence(category, 1000)
 
         assert 0.0 <= score <= 1.0
+
+
+class TestMergeHighNameSimilarity:
+    """Test cases for the high-name-similarity merge path (>0.9 ratio).
+
+    When two categories have very similar names (>0.9 SequenceMatcher ratio),
+    merge uses email count ratio instead of example ID overlap, which is
+    noisy with the max-10 ID sample limit.
+    """
+
+    def test_high_name_similarity_merges_despite_low_example_overlap(self):
+        """Test 'Amazon Orders' and 'Amazon Order' (>0.9 similarity) merge
+        despite having no overlapping example email IDs."""
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Amazon Orders",
+                description="Amazon orders cluster",
+                confidence=0.8,
+                email_count=120,
+                percentage=12.0,
+                source=CategorySource.CONTENT_CLUSTER,
+                example_email_ids=["e1", "e2", "e3", "e4", "e5"],
+            ),
+            Category(
+                category_id="cat2",
+                category_name="Amazon Order",
+                description="Amazon order sender",
+                confidence=0.7,
+                email_count=100,
+                percentage=10.0,
+                source=CategorySource.SENDER,
+                # Completely disjoint IDs -- old logic would NOT merge
+                example_email_ids=["e10", "e11", "e12", "e13", "e14"],
+            ),
+        ]
+
+        generator = CategoryGenerator()
+        merged = generator._merge_similar(categories)
+
+        # Should merge: name ratio ~0.96, count ratio 100/120 = 0.83
+        assert len(merged) == 1
+        assert merged[0].confidence == 0.8  # Keeps highest confidence
+
+    def test_normal_similarity_still_requires_example_overlap(self):
+        """Test that names in the 0.8-0.9 range still require example overlap."""
+        # "Amazon Emails" vs "Amazon Emails Promo" has ratio ~0.81
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Amazon Emails",
+                description="Amazon emails",
+                confidence=0.8,
+                email_count=100,
+                percentage=10.0,
+                source=CategorySource.SENDER,
+                example_email_ids=["e1", "e2", "e3", "e4", "e5"],
+            ),
+            Category(
+                category_id="cat2",
+                category_name="Amazon Emails Promo",
+                description="Amazon promo",
+                confidence=0.6,
+                email_count=80,
+                percentage=8.0,
+                source=CategorySource.TEMPLATE,
+                # No overlapping IDs
+                example_email_ids=["e10", "e11", "e12", "e13", "e14"],
+            ),
+        ]
+
+        generator = CategoryGenerator()
+
+        # Verify names are similar at 0.8 threshold but below 0.9
+        from difflib import SequenceMatcher
+        ratio = SequenceMatcher(
+            None, "amazon emails", "amazon emails promo"
+        ).ratio()
+        assert 0.8 <= ratio <= 0.9, f"Expected ratio 0.8-0.9, got {ratio}"
+
+        merged = generator._merge_similar(categories)
+
+        # Should NOT merge: normal similarity path, no ID overlap
+        assert len(merged) == 2
+
+    def test_different_names_not_merged_despite_high_count_ratio(self):
+        """Test that dissimilar names are never merged even with matching volumes."""
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Amazon Emails",
+                description="Amazon",
+                confidence=0.8,
+                email_count=100,
+                percentage=10.0,
+                source=CategorySource.SENDER,
+                example_email_ids=["e1", "e2", "e3"],
+            ),
+            Category(
+                category_id="cat2",
+                category_name="Financial Updates",
+                description="Banking",
+                confidence=0.7,
+                email_count=100,  # Same count = perfect ratio
+                percentage=10.0,
+                source=CategorySource.TEMPLATE,
+                example_email_ids=["e1", "e2", "e3"],  # Same IDs too
+            ),
+        ]
+
+        generator = CategoryGenerator()
+        merged = generator._merge_similar(categories)
+
+        # Should NOT merge: names are completely different
+        assert len(merged) == 2
+
+    def test_high_similarity_zero_email_count_no_division_error(self):
+        """Test that zero email_count does not cause ZeroDivisionError."""
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Amazon Orders",
+                description="Amazon",
+                confidence=0.8,
+                email_count=0,
+                percentage=0.0,
+                source=CategorySource.CONTENT_CLUSTER,
+                example_email_ids=[],
+            ),
+            Category(
+                category_id="cat2",
+                category_name="Amazon Order",
+                description="Amazon",
+                confidence=0.6,
+                email_count=0,
+                percentage=0.0,
+                source=CategorySource.SENDER,
+                example_email_ids=[],
+            ),
+        ]
+
+        generator = CategoryGenerator()
+        # Should not raise -- count_ratio = 0.0 when max_count is 0
+        merged = generator._merge_similar(categories)
+
+        # Both have 0 emails, count_ratio = 0.0 which is NOT > 0.3,
+        # so they should NOT merge
+        assert len(merged) == 2
+
+    def test_high_similarity_none_email_count_no_error(self):
+        """Test that None email_count is handled safely (treated as 0)."""
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Amazon Orders",
+                description="Amazon",
+                confidence=0.8,
+                email_count=None,
+                percentage=0.0,
+                source=CategorySource.CONTENT_CLUSTER,
+                example_email_ids=[],
+            ),
+            Category(
+                category_id="cat2",
+                category_name="Amazon Order",
+                description="Amazon",
+                confidence=0.6,
+                email_count=50,
+                percentage=5.0,
+                source=CategorySource.SENDER,
+                example_email_ids=["e1", "e2"],
+            ),
+        ]
+
+        generator = CategoryGenerator()
+        # Should not raise -- None is treated as 0
+        merged = generator._merge_similar(categories)
+
+        # count_ratio = 0/50 = 0.0 which is NOT > 0.3, so no merge
+        assert len(merged) == 2
+
+    def test_high_similarity_low_count_ratio_no_merge(self):
+        """Test that high name similarity with very different volumes does NOT merge."""
+        categories = [
+            Category(
+                category_id="cat1",
+                category_name="Amazon Orders",
+                description="Amazon bulk orders",
+                confidence=0.9,
+                email_count=1000,
+                percentage=50.0,
+                source=CategorySource.CONTENT_CLUSTER,
+                example_email_ids=["e1", "e2", "e3"],
+            ),
+            Category(
+                category_id="cat2",
+                category_name="Amazon Order",
+                description="Amazon single order",
+                confidence=0.4,
+                email_count=5,
+                percentage=0.25,
+                source=CategorySource.SENDER,
+                example_email_ids=["e10", "e11"],
+            ),
+        ]
+
+        generator = CategoryGenerator()
+        merged = generator._merge_similar(categories)
+
+        # count_ratio = 5/1000 = 0.005, well below 0.3 threshold
+        # Should NOT merge despite high name similarity
+        assert len(merged) == 2
 
 
 class TestCategoryGeneratorReport:
@@ -2075,3 +2297,408 @@ class TestCategoryGeneratorLearning:
             categories = generator.generate_suggestions(analysis)
 
             assert isinstance(categories, list)
+
+
+# -----------------------------------------------------------------------------
+# Work Item 4.1: Enhanced Confidence Scoring Integration Tests
+# -----------------------------------------------------------------------------
+
+
+class TestEnhancedConfidenceIntegration:
+    """Test that generate_suggestions uses enhanced confidence scoring.
+
+    Work Item 4.1: Verify that the CategoryGenerator wires up
+    calculate_confidence_enhanced with configurable weights, overlap
+    scores, and stores the confidence breakdown on each Category.
+    """
+
+    def test_generated_categories_have_confidence_breakdown(self):
+        """Generated categories should have confidence_breakdown populated (not None)."""
+        clusters = [
+            create_sample_cluster(
+                cluster_id=0,
+                size=100,
+                percentage=10.0,
+                subjects=["Order shipped", "Delivery update"],
+                body_previews=["Your order has shipped", "Package delivery"],
+            ),
+        ]
+        senders = [
+            create_sample_sender(
+                email="notifications@amazon.com",
+                domain="amazon.com",
+                frequency_count=50,
+                email_ids=[f"amazon_{i}" for i in range(50)],
+            ),
+        ]
+        analysis = create_sample_analysis_results(
+            total_emails=1000,
+            senders=senders,
+            clusters=clusters,
+        )
+
+        generator = CategoryGenerator()
+        categories = generator.generate_suggestions(analysis, min_sender_count=10)
+
+        # Every category should have confidence_breakdown populated
+        for cat in categories:
+            assert cat.confidence_breakdown is not None, (
+                f"Category '{cat.category_name}' is missing confidence_breakdown"
+            )
+            # Breakdown should contain all 6 component keys
+            expected_keys = {"cohesion", "volume", "source", "percentage",
+                             "name_quality", "distinctiveness"}
+            assert set(cat.confidence_breakdown.keys()) == expected_keys, (
+                f"Category '{cat.category_name}' has wrong breakdown keys: "
+                f"{cat.confidence_breakdown.keys()}"
+            )
+            # All component scores should be in [0, 1]
+            for key, value in cat.confidence_breakdown.items():
+                assert 0.0 <= value <= 1.0, (
+                    f"Component '{key}' out of range: {value}"
+                )
+
+    def test_poor_name_quality_lowers_confidence(self):
+        """Categories with poor names (quality < 0.4) get measurably lower confidence.
+
+        This verifies the name_quality component in the enhanced scorer
+        actually impacts the final confidence score.
+        """
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        # Create two identical categories except for name quality
+        base_kwargs = dict(
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["f1", "f2", "f3"],
+            example_email_ids=[f"e_{i}" for i in range(10)],
+        )
+
+        good_name_cat = Category(
+            category_id="good_name",
+            category_name="Financial Statements",
+            name_quality_score=0.85,
+            **base_kwargs,
+        )
+
+        poor_name_cat = Category(
+            category_id="poor_name",
+            category_name="Xy",
+            name_quality_score=0.2,
+            **base_kwargs,
+        )
+
+        good_score, good_breakdown = calculate_confidence_enhanced(
+            good_name_cat, total_emails=1000
+        )
+        poor_score, poor_breakdown = calculate_confidence_enhanced(
+            poor_name_cat, total_emails=1000
+        )
+
+        # Good name should produce measurably higher confidence
+        assert good_score > poor_score, (
+            f"Good name score ({good_score:.3f}) should be > poor name score ({poor_score:.3f})"
+        )
+        # The name_quality breakdown should reflect the difference
+        assert good_breakdown["name_quality"] > poor_breakdown["name_quality"]
+        # Difference should be meaningful (not just rounding)
+        assert good_score - poor_score >= 0.05, (
+            f"Difference ({good_score - poor_score:.3f}) should be >= 0.05"
+        )
+
+    def test_configurable_weights_from_yaml_are_respected(self):
+        """Custom weights from GeneratorThresholds config produce different scores.
+
+        This verifies the wiring from YAML config -> GeneratorThresholds ->
+        ConfidenceWeights -> calculate_confidence_enhanced works end-to-end.
+        """
+        from src.config.models import GeneratorThresholds
+
+        clusters = [
+            create_sample_cluster(
+                cluster_id=0,
+                size=100,
+                percentage=10.0,
+                subjects=["Order confirmation", "Shipping update"],
+                body_previews=["Your order is confirmed", "Package shipped"],
+            ),
+        ]
+        analysis = create_sample_analysis_results(
+            total_emails=1000,
+            senders=[],
+            clusters=clusters,
+        )
+
+        # Default weights
+        default_thresholds = GeneratorThresholds()
+        default_gen = CategoryGenerator(thresholds=default_thresholds)
+        default_cats = default_gen.generate_suggestions(analysis)
+
+        # Volume-heavy custom weights (emphasize email count)
+        custom_thresholds = GeneratorThresholds(
+            confidence_weight_cohesion=0.05,
+            confidence_weight_volume=0.50,
+            confidence_weight_source=0.15,
+            confidence_weight_percentage=0.10,
+            confidence_weight_name_quality=0.05,
+            confidence_weight_distinctiveness=0.15,
+        )
+        custom_gen = CategoryGenerator(thresholds=custom_thresholds)
+        custom_cats = custom_gen.generate_suggestions(analysis)
+
+        # Find matching cluster categories by ID to compare
+        default_cluster_cats = {c.category_id: c for c in default_cats
+                                if c.source == CategorySource.CONTENT_CLUSTER}
+        custom_cluster_cats = {c.category_id: c for c in custom_cats
+                               if c.source == CategorySource.CONTENT_CLUSTER}
+
+        # At least one cluster category should have different confidence
+        for cat_id in default_cluster_cats:
+            if cat_id in custom_cluster_cats:
+                d_conf = default_cluster_cats[cat_id].confidence
+                c_conf = custom_cluster_cats[cat_id].confidence
+                # Scores should differ because weights are different
+                assert d_conf != c_conf, (
+                    f"Category '{cat_id}' should have different confidence with "
+                    f"different weights: default={d_conf:.3f}, custom={c_conf:.3f}"
+                )
+                break
+        else:
+            # If no matching IDs (unlikely), at least verify generators ran
+            assert len(default_cats) > 0
+            assert len(custom_cats) > 0
+
+    def test_category_with_no_distinguishing_features_low_cohesion(self):
+        """Category with no distinguishing features gets low cohesion score.
+
+        Edge case: a category with empty distinguishing_features, no name
+        quality score, and no overlap data should still produce valid results
+        with low cohesion.
+        """
+        from src.generators.confidence_scorer import calculate_confidence_enhanced
+
+        empty_category = Category(
+            category_id="empty_features",
+            category_name="Miscellaneous",
+            description="No features",
+            confidence=0.0,
+            email_count=5,
+            percentage=0.5,
+            source=CategorySource.CUSTOM,
+            distinguishing_features=[],
+            name_quality_score=None,  # No name quality score
+        )
+
+        score, breakdown = calculate_confidence_enhanced(
+            empty_category, total_emails=1000
+        )
+
+        # Score should be valid but low
+        assert 0.0 <= score <= 1.0
+        # Cohesion should be 0.0 (no features)
+        assert breakdown["cohesion"] == 0.0
+        # Name quality should default to 0.5 when None
+        assert abs(breakdown["name_quality"] - 0.5) < 0.001
+        # Distinctiveness defaults to 1.0 when no overlap
+        assert breakdown["distinctiveness"] == 1.0
+        # Source should reflect CUSTOM reliability (0.5)
+        assert abs(breakdown["source"] - 0.5) < 0.001
+
+    def test_existing_suggestions_produce_valid_results(self):
+        """End-to-end: full analysis produces valid categories with enhanced scoring.
+
+        Regression test ensuring the generate_suggestions path works with
+        enhanced scoring and produces categories with:
+        - Valid confidence scores (0-1)
+        - Populated breakdowns
+        - Correct sort order
+        """
+        senders = [
+            create_sample_sender(
+                email="news@newsletter.com",
+                domain="newsletter.com",
+                frequency_count=80,
+                sample_subjects=["Weekly newsletter", "Monthly digest"],
+                email_ids=[f"news_{i}" for i in range(80)],
+            ),
+            create_sample_sender(
+                email="orders@shopping.com",
+                domain="shopping.com",
+                frequency_count=40,
+                sample_subjects=["Order shipped", "Delivery update"],
+                email_ids=[f"shop_{i}" for i in range(40)],
+            ),
+        ]
+        clusters = [
+            create_sample_cluster(
+                cluster_id=0,
+                size=200,
+                percentage=20.0,
+                subjects=["Invoice attached", "Payment received"],
+                body_previews=["Invoice #12345", "Payment confirmation"],
+                email_ids=[f"fin_{i}" for i in range(200)],
+            ),
+            create_sample_cluster(
+                cluster_id=1,
+                size=100,
+                percentage=10.0,
+                subjects=["Flight confirmation", "Hotel booking"],
+                body_previews=["Your flight to NYC", "Hotel reservation"],
+                email_ids=[f"travel_{i}" for i in range(100)],
+            ),
+        ]
+        analysis = create_sample_analysis_results(
+            total_emails=1000,
+            senders=senders,
+            clusters=clusters,
+        )
+
+        generator = CategoryGenerator()
+        categories = generator.generate_suggestions(
+            analysis, min_sender_count=20, min_cluster_percentage=5.0
+        )
+
+        # Basic validity
+        assert len(categories) >= 2, "Should produce at least cluster + sender categories"
+
+        # All categories should have valid confidence and breakdown
+        for cat in categories:
+            assert 0.0 <= cat.confidence <= 1.0, (
+                f"Category '{cat.category_name}' has invalid confidence: {cat.confidence}"
+            )
+            assert cat.confidence_breakdown is not None
+
+        # Categories should be sorted by confidence descending
+        for i in range(len(categories) - 1):
+            assert categories[i].confidence >= categories[i + 1].confidence, (
+                f"Category order wrong: '{categories[i].category_name}' "
+                f"({categories[i].confidence:.3f}) before "
+                f"'{categories[i + 1].category_name}' "
+                f"({categories[i + 1].confidence:.3f})"
+            )
+
+    def test_enhanced_scoring_vs_simple_scoring_different(self):
+        """Enhanced scoring should produce different results than simple scoring.
+
+        Validates that the wiring change actually matters by comparing
+        enhanced scoring output against the simple scorer for the same
+        category.
+        """
+        from src.generators.confidence_scorer import (
+            calculate_confidence,
+            calculate_confidence_enhanced,
+        )
+
+        # Category with attributes that the enhanced scorer considers
+        # but the simple scorer ignores (features, name quality)
+        category = Category(
+            category_id="comparison",
+            category_name="Financial Reports",
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["invoice", "payment", "statement", "receipt", "billing"],
+            name_quality_score=0.9,
+        )
+
+        simple_score = calculate_confidence(category, total_emails=1000)
+        enhanced_score, breakdown = calculate_confidence_enhanced(
+            category, total_emails=1000
+        )
+
+        # They should not be identical because enhanced uses 6 weighted
+        # factors vs simple using 3 equal-weight factors
+        assert simple_score != enhanced_score, (
+            f"Simple ({simple_score:.4f}) and enhanced ({enhanced_score:.4f}) "
+            f"should differ for a category with features and name quality"
+        )
+
+        # Enhanced score should be valid
+        assert 0.0 <= enhanced_score <= 1.0
+
+    def test_hierarchical_categories_get_enhanced_confidence(self):
+        """Hierarchical categories should also use enhanced confidence scoring."""
+        from src.analyzers.hierarchical_analyzer import HierarchicalCluster
+        from src.models.content_cluster import RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Order shipped",
+            sender="orders@amazon.com",
+            body_preview="Your Amazon order shipped"
+        )
+
+        child = HierarchicalCluster(
+            cluster_id="cluster_0_0",
+            level=1,
+            parent_cluster_id="cluster_0",
+            size=30,
+            percentage=15.0,
+            representative_samples=[sample],
+            common_domains=[("amazon.com", 25)],
+            email_ids=[f"child_{i}" for i in range(30)],
+            subclusters=[],
+        )
+        parent = HierarchicalCluster(
+            cluster_id="cluster_0",
+            level=0,
+            parent_cluster_id=None,
+            size=60,
+            percentage=30.0,
+            representative_samples=[sample],
+            common_domains=[("amazon.com", 50)],
+            email_ids=[f"parent_{i}" for i in range(60)],
+            subclusters=[child],
+        )
+
+        generator = CategoryGenerator()
+        categories = generator.generate_hierarchical_suggestions(
+            [parent],
+            total_emails=200,
+        )
+
+        assert len(categories) >= 1
+
+        # Parent should have confidence_breakdown
+        parent_cat = categories[0]
+        assert parent_cat.confidence_breakdown is not None
+        assert "cohesion" in parent_cat.confidence_breakdown
+
+        # Children should also have confidence_breakdown
+        if parent_cat.has_children:
+            for subcat in parent_cat.subcategories:
+                assert subcat.confidence_breakdown is not None, (
+                    f"Subcategory '{subcat.category_name}' missing breakdown"
+                )
+
+    def test_score_confidence_uses_enhanced_scorer(self):
+        """The public score_confidence method should use enhanced scoring."""
+        from src.generators.confidence_scorer import calculate_confidence
+
+        category = Category(
+            category_id="test_public",
+            category_name="Test Category",
+            description="Test",
+            confidence=0.0,
+            email_count=50,
+            percentage=5.0,
+            source=CategorySource.CONTENT_CLUSTER,
+            distinguishing_features=["f1", "f2", "f3"],
+            name_quality_score=0.8,
+        )
+
+        generator = CategoryGenerator()
+        enhanced_score = generator.score_confidence(category, 1000)
+        simple_score = calculate_confidence(category, 1000)
+
+        # Public method should use enhanced scorer, not simple
+        assert 0.0 <= enhanced_score <= 1.0
+        # Enhanced considers more factors, so the score should differ
+        assert enhanced_score != simple_score, (
+            f"score_confidence ({enhanced_score:.4f}) should use enhanced scorer, "
+            f"not simple ({simple_score:.4f})"
+        )

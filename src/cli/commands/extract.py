@@ -165,7 +165,11 @@ def cmd_extract(args: argparse.Namespace) -> int:
             output_dir=output_dir,
         )
     except Exception as e:
-        logger.error(f"Failed to initialize extraction service: {e}", exc_info=True)
+        logger.error(
+            f"Failed to initialize extraction service for {source} source: {e}. "
+            f"Check your authentication credentials and network connection.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "extract",
@@ -193,7 +197,10 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 })
             return 1
         except Exception as e:
-            logger.error(f"Failed to load existing corpus: {e}")
+            logger.error(
+                f"Failed to load existing corpus from {corpus_path}: {e}. "
+                f"The file may be corrupted. Try running a full extraction without --since-last."
+            )
             if getattr(args, 'json', False):
                 output_json({
                     "command": "extract",
@@ -231,7 +238,13 @@ def cmd_extract(args: argparse.Namespace) -> int:
         return 0
 
     except Exception as e:
-        logger.error(f"Extraction failed: {e}", exc_info=True)
+        logger.error(
+            f"Extraction failed for {source} source (user: {args.user_email}): {e}. "
+            f"Output was targeted at {corpus_path}. "
+            f"Check your network connection and authentication, then retry. "
+            f"Use --verbose for full traceback.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "extract",

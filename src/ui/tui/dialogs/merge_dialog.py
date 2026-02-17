@@ -6,6 +6,7 @@ Modal dialog for selecting a category to merge into with preview.
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Static
@@ -189,8 +190,8 @@ class MergeDialog(ModalScreen[Category | None]):
                 preview_widget.update(self.get_merge_preview(selected))
             else:
                 preview_widget.update("No category selected")
-        except Exception:
-            pass
+        except NoMatches:
+            pass  # Preview widget may not be mounted yet
 
     def action_move_down(self) -> None:
         """Move selection down."""
@@ -199,8 +200,8 @@ class MergeDialog(ModalScreen[Category | None]):
             try:
                 table = self.query_one("#merge-table", DataTable)
                 table.move_cursor(row=self.selected_index)
-            except Exception:
-                pass
+            except NoMatches:
+                pass  # Table may not be mounted yet
             self._update_preview()
 
     def action_move_up(self) -> None:
@@ -210,8 +211,8 @@ class MergeDialog(ModalScreen[Category | None]):
             try:
                 table = self.query_one("#merge-table", DataTable)
                 table.move_cursor(row=self.selected_index)
-            except Exception:
-                pass
+            except NoMatches:
+                pass  # Table may not be mounted yet
             self._update_preview()
 
     def action_select_category(self) -> None:

@@ -178,8 +178,24 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         corpus = Corpus(**corpus_data)
         logger.info(f"Loaded {len(corpus.emails)} emails")
 
+    except FileNotFoundError:
+        logger.error(
+            f"Corpus file not found: {corpus_path}. "
+            f"Run 'extract' first to create the corpus file, "
+            f"or specify a valid path with --corpus."
+        )
+        if getattr(args, 'json', False):
+            output_json({
+                "command": "analyze",
+                "status": "error",
+                "error": f"Corpus file not found: {corpus_path}"
+            })
+        return 1
     except Exception as e:
-        logger.error(f"Failed to load corpus: {e}")
+        logger.error(
+            f"Failed to load corpus from {corpus_path}: {e}. "
+            f"The file may be corrupted. Try re-running 'extract' to regenerate it."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "analyze",
@@ -262,7 +278,12 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     except Exception as e:
         error_label = "Incremental analysis" if incremental else "Analysis"
-        logger.error(f"{error_label} failed: {e}", exc_info=True)
+        logger.error(
+            f"{error_label} failed on corpus {corpus_path}: {e}. "
+            f"Use --verbose for full traceback. "
+            f"Try adjusting --num-clusters or use --auto-clusters.",
+            exc_info=True,
+        )
         if getattr(args, 'json', False):
             json_output = {
                 "command": "analyze",

@@ -56,7 +56,11 @@ def cmd_info(args: argparse.Namespace) -> int:
     try:
         corpus_data = load_json(corpus_path)
     except FileNotFoundError:
-        logger.error(f"Corpus file not found: {corpus_path}")
+        logger.error(
+            f"Corpus file not found: {corpus_path}. "
+            f"Run 'extract' first to create the corpus file, "
+            f"or specify a valid path with --corpus."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "info",
@@ -65,7 +69,10 @@ def cmd_info(args: argparse.Namespace) -> int:
             })
         return 1
     except Exception as e:
-        logger.error(f"Failed to load corpus: {e}")
+        logger.error(
+            f"Failed to load corpus from {corpus_path}: {e}. "
+            f"The file may be corrupted. Try re-running 'extract' to regenerate it."
+        )
         if getattr(args, 'json', False):
             output_json({
                 "command": "info",
@@ -115,7 +122,8 @@ def cmd_info(args: argparse.Namespace) -> int:
         file_size = corpus_path.stat().st_size
         file_size_mb = file_size / (1024 * 1024)
         file_size_str = f"{file_size_mb:.1f} MB"
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Could not determine file size for {corpus_path}: {e}")
         file_size = 0
         file_size_str = "Unknown"
 
@@ -132,15 +140,21 @@ def cmd_info(args: argparse.Namespace) -> int:
         try:
             suggestions_data = load_json(suggestions_path)
             suggestions_count = len(suggestions_data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"Could not load suggestions from {suggestions_path}: {e}. "
+                f"Suggestions count will show as 0."
+            )
 
     if approved_path and approved_path.exists():
         try:
             approved_data = load_json(approved_path)
             approved_count = len(approved_data)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"Could not load approved categories from {approved_path}: {e}. "
+                f"Approved count will show as 0."
+            )
 
     if getattr(args, 'json', False):
         output_json({

@@ -7,6 +7,7 @@ approving, and modifying suggested email categories.
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Static
@@ -263,7 +264,7 @@ class ReviewApp(App):
             panel = self.query_one("#detail-panel", DetailPanel)
             category = self.get_selected_category()
             panel.update_category(category)
-        except Exception:
+        except NoMatches:
             pass  # Panel may not be mounted yet
 
     def _update_action_bar(self) -> None:
@@ -271,7 +272,7 @@ class ReviewApp(App):
         try:
             bar = self.query_one("#action-bar", ActionBar)
             bar.set_merge_enabled(len(self.approved_categories) > 0)
-        except Exception:
+        except NoMatches:
             pass  # Bar may not be mounted yet
 
     def _update_table(self) -> None:
@@ -280,8 +281,8 @@ class ReviewApp(App):
             table = self.query_one("#category-table", CategoryTable)
             table.categories = self.categories
             table.refresh_display()
-        except Exception:
-            pass
+        except NoMatches:
+            pass  # Table may not be mounted yet
 
     def _remove_current_category(self) -> Category | None:
         """Remove and return the current category from the list."""
@@ -369,8 +370,8 @@ class ReviewApp(App):
             try:
                 table = self.query_one("#category-table", CategoryTable)
                 table.move_down()
-            except Exception:
-                pass
+            except NoMatches:
+                pass  # Table may not be mounted yet
 
     def action_move_up(self) -> None:
         """Move selection up."""
@@ -380,8 +381,8 @@ class ReviewApp(App):
             try:
                 table = self.query_one("#category-table", CategoryTable)
                 table.move_up()
-            except Exception:
-                pass
+            except NoMatches:
+                pass  # Table may not be mounted yet
 
     def action_help(self) -> None:
         """Show help screen."""
