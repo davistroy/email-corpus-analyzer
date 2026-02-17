@@ -32,6 +32,11 @@ def setup_logger(
     if logger.handlers:
         return logger
 
+    # Prevent propagation to parent loggers that may also have handlers.
+    # Without this, src.cli.commands.pipeline propagates to src.cli,
+    # both of which have StreamHandlers, producing duplicate output.
+    logger.propagate = False
+
     # Console handler with INFO level for user-facing output
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)

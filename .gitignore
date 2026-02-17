@@ -68,5 +68,9 @@ NUL
 .env
 .env.*
 
+# Node.js (not part of this project)
+node_modules/
+package-lock.json
+
 # Mock artifacts
 MagicMock/

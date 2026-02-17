@@ -104,11 +104,11 @@ Screen {
 }
 
 .confidence-low {
-    color: $danger;
+    color: $error;
 }
 
 .selected {
-    background: $highlight;
+    background: $accent;
 }
 
 .header {
@@ -121,7 +121,7 @@ Screen {
 }
 
 DataTable > .datatable--cursor {
-    background: $highlight;
+    background: $accent;
 }
 
 DataTable > .datatable--header {
