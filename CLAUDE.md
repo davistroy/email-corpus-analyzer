@@ -9,8 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 pip install -e ".[dev]"  # Install with dev dependencies
 
-# Run tests (1968 tests, 86% coverage)
-pytest                                  # All 1968 tests with coverage
+# Run tests (1977 tests, 86% coverage)
+pytest                                  # All 1977 tests with coverage
 pytest tests/unit/                      # Unit tests only
 pytest tests/contract/                  # Contract tests only
 pytest tests/unit/test_html_parser.py   # Single test file
@@ -80,7 +80,11 @@ Extract → Analyze → Suggest → Review → Export
 
 - **`src/ui/`** - User interface components:
   - `category_review.py` - CLI review with learning support
-  - `tui/` - Textual-based TUI for interactive review with bulk operations and search/filter
+  - `tui/app.py` - Main ReviewApp (Textual-based TUI)
+  - `tui/commands.py` - Command definitions and key bindings
+  - `tui/theme.py` - Theme colors, confidence colors, APP_CSS
+  - `tui/widgets/` - CategoryTable, DetailPanel, ActionBar, SearchInput, StatsPanel, ProgressBar
+  - `tui/dialogs/` - BulkActionDialog, MergeDialog, RenameDialog
 
 - **`src/services/`** - Service layer (CLI-agnostic orchestration):
   - `extraction_service.py` - Multi-source extraction (hotmail/gmail/both) with corpus merge
@@ -107,6 +111,15 @@ Extract → Analyze → Suggest → Review → Export
   - `loader.py` - YAML config loading with precedence
 
 - **`src/preview/`** - Dry-run estimators for all commands
+
+- **`src/utils/`** - Shared utilities:
+  - `logger.py` - Debug-level logging with console + file handlers
+  - `file_manager.py` - File I/O with secure permissions
+  - `paths.py` - Centralized PathConfig for output directory resolution
+  - `constants.py` - Named constants (extraction, scoring parameters)
+  - `progress.py` - Progress tracking with tqdm integration
+  - `text.py` - Centralized word lists (stop words, generic/action words)
+  - `validators.py` - Cross-entity validation (Corpus, Email, Category)
 
 ### Data Models
 

@@ -580,6 +580,14 @@ class TestCacheVersioning:
         # The old .npz should be deleted
         assert not cache_path.exists()
 
+    def _caplog_for_cache(self, caplog):
+        """Add caplog handler to the cache logger (propagate=False prevents root capture)."""
+        import logging
+        cache_logger = logging.getLogger("src.cache.embedding_cache")
+        cache_logger.addHandler(caplog.handler)
+        caplog.handler.setLevel(logging.WARNING)
+        return cache_logger
+
     def test_old_cache_without_metadata_logs_warning(self, tmp_path, caplog):
         """Old cache without metadata should emit a warning."""
         cache_path = tmp_path / "old_cache.npz"
@@ -589,9 +597,11 @@ class TestCacheVersioning:
             email_ids=np.array(["e1"], dtype=object),
         )
 
-        import logging
-        with caplog.at_level(logging.WARNING):
+        cache_logger = self._caplog_for_cache(caplog)
+        try:
             EmbeddingCache(cache_path=cache_path)
+        finally:
+            cache_logger.removeHandler(caplog.handler)
 
         assert any("metadata sidecar" in msg for msg in caplog.messages)
 
@@ -605,9 +615,11 @@ class TestCacheVersioning:
             model_name="old-model"
         )
 
-        import logging
-        with caplog.at_level(logging.WARNING):
+        cache_logger = self._caplog_for_cache(caplog)
+        try:
             EmbeddingCache(cache_path=cache_path, model_name="new-model")
+        finally:
+            cache_logger.removeHandler(caplog.handler)
 
         assert any("Embedding model changed" in msg for msg in caplog.messages)
 
@@ -619,9 +631,11 @@ class TestCacheVersioning:
             max_text_length=1500
         )
 
-        import logging
-        with caplog.at_level(logging.WARNING):
+        cache_logger = self._caplog_for_cache(caplog)
+        try:
             EmbeddingCache(cache_path=cache_path, max_text_length=2000)
+        finally:
+            cache_logger.removeHandler(caplog.handler)
 
         assert any("Max text length changed" in msg for msg in caplog.messages)
 
@@ -633,9 +647,11 @@ class TestCacheVersioning:
             embedding_dim=384
         )
 
-        import logging
-        with caplog.at_level(logging.WARNING):
+        cache_logger = self._caplog_for_cache(caplog)
+        try:
             EmbeddingCache(cache_path=cache_path, embedding_dim=768)
+        finally:
+            cache_logger.removeHandler(caplog.handler)
 
         assert any("Embedding dimension changed" in msg for msg in caplog.messages)
 
