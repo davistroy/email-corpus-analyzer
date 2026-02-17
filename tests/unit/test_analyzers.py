@@ -22,14 +22,13 @@ from src.analyzers.volume_analyzer import VolumeAnalyzer
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
 
 
 def create_email(
-    id: str,
+    email_id: str,
     sender_email: str,
     sender_domain: str,
     subject: str = "Test Subject",
@@ -44,7 +43,7 @@ def create_email(
     if received_date is None:
         received_date = datetime(2024, 1, 15, 10, 0)
     return Email(
-        id=id,
+        id=email_id,
         sender_email=sender_email,
         sender_name=sender_name,
         sender_domain=sender_domain,
@@ -93,7 +92,7 @@ class TestVolumeAnalyzer:
         """Test analyzing corpus with a single email."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Test",
@@ -118,7 +117,7 @@ class TestVolumeAnalyzer:
         """Test analyzing corpus with multiple emails from same sender."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
@@ -140,17 +139,17 @@ class TestVolumeAnalyzer:
         """Test analyzing corpus with multiple unique senders."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="alice@example.com",
                 sender_domain="example.com"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="bob@example.com",
                 sender_domain="example.com"
             ),
             create_email(
-                id="3",
+                email_id="3",
                 sender_email="charlie@other.com",
                 sender_domain="other.com"
             )
@@ -166,13 +165,13 @@ class TestVolumeAnalyzer:
         """Test date range is calculated correctly."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 1, 10, 0)
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 31, 10, 0)
@@ -191,7 +190,7 @@ class TestVolumeAnalyzer:
         # 10 emails over 10 days = 1 email per day
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 1, 10, 0) + timedelta(days=i)
@@ -209,25 +208,25 @@ class TestVolumeAnalyzer:
         """Test attachment percentage calculation."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 has_attachments=True
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 has_attachments=False
             ),
             create_email(
-                id="3",
+                email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 has_attachments=True
             ),
             create_email(
-                id="4",
+                email_id="4",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 has_attachments=False
@@ -244,13 +243,13 @@ class TestVolumeAnalyzer:
         """Test average body length calculation."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 body_text="Short"  # 5 chars
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 body_text="This is a longer body"  # 21 chars
@@ -267,7 +266,7 @@ class TestVolumeAnalyzer:
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -291,12 +290,12 @@ class TestVolumeAnalyzer:
         """Test that sender emails are normalized to lowercase."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="Sender@Example.COM",
                 sender_domain="example.com"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -386,7 +385,7 @@ class TestTemporalAnalyzer:
         """Test analyzing corpus with single sender, one email."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 15)
@@ -408,7 +407,7 @@ class TestTemporalAnalyzer:
 
         # One-time sender
         emails.append(create_email(
-            id="onetime_1",
+            email_id="onetime_1",
             sender_email="onetime@example.com",
             sender_domain="example.com",
             received_date=base_date
@@ -417,7 +416,7 @@ class TestTemporalAnalyzer:
         # Daily sender (10 emails, 1 day apart)
         for i in range(10):
             emails.append(create_email(
-                id=f"daily_{i}",
+                email_id=f"daily_{i}",
                 sender_email="daily@example.com",
                 sender_domain="example.com",
                 received_date=base_date + timedelta(days=i)
@@ -435,19 +434,19 @@ class TestTemporalAnalyzer:
         """Test that first and last dates are recorded correctly."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 1, 10, 0)
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 15, 10, 0)
             ),
             create_email(
-                id="3",
+                email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 10, 10, 0)
@@ -465,7 +464,7 @@ class TestTemporalAnalyzer:
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i}@example.com",
                 sender_domain="example.com"
             )
@@ -508,7 +507,7 @@ class TestSubjectAnalyzer:
         """Test analyzing corpus with single email."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Test Subject Line"
@@ -527,19 +526,19 @@ class TestSubjectAnalyzer:
         """Test extraction of RE: prefix."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Re: Meeting Tomorrow"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="RE: Follow Up"
             ),
             create_email(
-                id="3",
+                email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="re: another reply"
@@ -557,13 +556,13 @@ class TestSubjectAnalyzer:
         """Test extraction of FWD: prefix."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Fwd: Important Document"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="FWD: Check This Out"
@@ -580,19 +579,19 @@ class TestSubjectAnalyzer:
         """Test extraction of numbered patterns like 'Invoice #12345'."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Invoice #12345"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Order #9876"
             ),
             create_email(
-                id="3",
+                email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Invoice #67890"
@@ -611,19 +610,19 @@ class TestSubjectAnalyzer:
         """Test extraction of bracket tags like [URGENT]."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="[URGENT] Please Review"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="(Action Required) Update Needed"
             ),
             create_email(
-                id="3",
+                email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="[URGENT] Another Urgent Matter"
@@ -644,7 +643,7 @@ class TestSubjectAnalyzer:
         """Test that stop words are filtered from keywords."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="This is the test meeting for project"
@@ -670,7 +669,7 @@ class TestSubjectAnalyzer:
         """Test that prefixes are removed before extracting keywords."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Re: Important Meeting"
@@ -690,7 +689,7 @@ class TestSubjectAnalyzer:
         subjects = [f"UniqueWord{i} Another{i}" for i in range(100)]
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=subjects[i]
@@ -707,7 +706,7 @@ class TestSubjectAnalyzer:
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}"
@@ -1012,7 +1011,7 @@ class TestSemanticAnalyzer:
         """Test that invalid num_clusters raises ValueError."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -1032,7 +1031,7 @@ class TestSemanticAnalyzer:
         # Create small corpus
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
@@ -1059,7 +1058,7 @@ class TestSemanticAnalyzer:
         """Test that analyze creates ContentCluster objects."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i % 2}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
@@ -1090,7 +1089,7 @@ class TestSemanticAnalyzer:
         """Test that cluster percentages sum to approximately 100%."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -1113,7 +1112,7 @@ class TestSemanticAnalyzer:
         """Test analyzing single email creates single cluster."""
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Test Subject",
@@ -1138,7 +1137,7 @@ class TestSemanticAnalyzer:
         """Test that common domains are extracted for each cluster."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i % 3}@domain{i % 2}.com",
                 sender_domain=f"domain{i % 2}.com",
                 subject=f"Subject {i}"
@@ -1165,7 +1164,7 @@ class TestSemanticAnalyzer:
         """Test that representative samples are created correctly."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
@@ -1196,7 +1195,7 @@ class TestSemanticAnalyzer:
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -1260,7 +1259,7 @@ class TestSemanticAnalyzer:
         long_body = "z" * 1000
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Subj",
@@ -1310,7 +1309,7 @@ class TestRunFullAnalysis:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i % 3}@example.com",
                 sender_domain="example.com",
                 subject=f"Test Subject {i}",
@@ -1351,7 +1350,7 @@ class TestRunFullAnalysis:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=f"Test Subject {i}",
@@ -1376,7 +1375,7 @@ class TestRunFullAnalysis:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -1392,15 +1391,16 @@ class TestRunFullAnalysis:
         run_full_analysis(corpus, progress_callback=progress_callback)
 
         # Verify callback was called with different analyzer names
-        analyzer_names = set(name for name, _, _ in callback_data)
+        analyzer_names = {name for name, _, _ in callback_data}
         assert "sender" in analyzer_names or len(callback_data) > 0
 
     @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
     def test_with_embedding_cache_returns_incremental_stats(self, mock_st_class):
         """Test that providing embedding_cache triggers incremental mode and returns stats."""
-        from src.cache.embedding_cache import EmbeddingCache
-        import tempfile
         import os
+        import tempfile
+
+        from src.cache.embedding_cache import EmbeddingCache
 
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(5, 1024)
@@ -1408,7 +1408,7 @@ class TestRunFullAnalysis:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i}@example.com",
                 sender_domain="example.com",
                 subject=f"Test Subject {i}",
@@ -1449,7 +1449,7 @@ class TestEdgeCases:
         analyzer = VolumeAnalyzer()
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 15, i, 0)  # Same day, different hours
@@ -1472,7 +1472,7 @@ class TestEdgeCases:
         # 15 emails with different hours creates avg interval < 2 days, so "daily"
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 received_date=datetime(2024, 1, 15, i % 24, 0)
@@ -1492,13 +1492,13 @@ class TestEdgeCases:
         analyzer = SubjectAnalyzer()
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=""
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=""
@@ -1516,7 +1516,7 @@ class TestEdgeCases:
         analyzer = SubjectAnalyzer()
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="[Test] Invoice #123 - $500.00 @work"
@@ -1536,7 +1536,7 @@ class TestEdgeCases:
         analyzer = VolumeAnalyzer()
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 body_text=""
@@ -1573,13 +1573,13 @@ class TestEdgeCases:
         analyzer = SubjectAnalyzer()
         emails = [
             create_email(
-                id="1",
+                email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Meeting about cafe resume"
             ),
             create_email(
-                id="2",
+                email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Test unicode characters"
@@ -1596,7 +1596,7 @@ class TestEdgeCases:
         analyzer = VolumeAnalyzer()
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i % 100}@domain{i % 10}.com",
                 sender_domain=f"domain{i % 10}.com",
                 body_text="x" * (i % 1000),
@@ -1722,7 +1722,7 @@ class TestClusterQualityMetrics:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"sender{i % 2}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
@@ -1759,7 +1759,7 @@ class TestClusterQualityMetrics:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )
@@ -1788,7 +1788,7 @@ class TestClusterQualityMetrics:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com"
             )

@@ -7,9 +7,10 @@ Tests cover:
 Following TDD: these tests were written BEFORE implementation.
 """
 import os
-import pytest
 from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import mock_open, patch
+
+import pytest
 
 
 class TestGetGlobalConfigPath:
@@ -83,9 +84,11 @@ verbose: true
 extract:
   batch_size: 300
 """
-        with patch("builtins.open", mock_open(read_data=yaml_content)):
-            with patch("pathlib.Path.exists", return_value=True):
-                result = load_yaml_file(Path("/config.yaml"))
+        with (
+            patch("builtins.open", mock_open(read_data=yaml_content)),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            result = load_yaml_file(Path("/config.yaml"))
 
         assert isinstance(result, dict)
         assert result["output_dir"] == "/custom/output"
@@ -106,35 +109,41 @@ extract:
         """Test loading empty file returns empty dictionary."""
         from src.config.loader import load_yaml_file
 
-        with patch("builtins.open", mock_open(read_data="")):
-            with patch("pathlib.Path.exists", return_value=True):
-                result = load_yaml_file(Path("/empty.yaml"))
+        with (
+            patch("builtins.open", mock_open(read_data="")),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            result = load_yaml_file(Path("/empty.yaml"))
 
         assert result == {}
 
     def test_load_yaml_file_invalid_yaml_raises_error(self):
         """Test loading invalid YAML raises ConfigLoadError."""
-        from src.config.loader import load_yaml_file, ConfigLoadError
+        from src.config.loader import ConfigLoadError, load_yaml_file
 
         invalid_yaml = """
 output_dir: /path
   bad_indent: value
 """
-        with patch("builtins.open", mock_open(read_data=invalid_yaml)):
-            with patch("pathlib.Path.exists", return_value=True):
-                with pytest.raises(ConfigLoadError) as exc_info:
-                    load_yaml_file(Path("/invalid.yaml"))
+        with (
+            patch("builtins.open", mock_open(read_data=invalid_yaml)),
+            patch("pathlib.Path.exists", return_value=True),
+            pytest.raises(ConfigLoadError) as exc_info,
+        ):
+            load_yaml_file(Path("/invalid.yaml"))
 
         assert "invalid.yaml" in str(exc_info.value)
 
     def test_load_yaml_file_permission_error(self):
         """Test loading file with permission error raises ConfigLoadError."""
-        from src.config.loader import load_yaml_file, ConfigLoadError
+        from src.config.loader import ConfigLoadError, load_yaml_file
 
-        with patch("pathlib.Path.exists", return_value=True):
-            with patch("builtins.open", side_effect=PermissionError("Access denied")):
-                with pytest.raises(ConfigLoadError) as exc_info:
-                    load_yaml_file(Path("/protected.yaml"))
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("builtins.open", side_effect=PermissionError("Access denied")),
+            pytest.raises(ConfigLoadError) as exc_info,
+        ):
+            load_yaml_file(Path("/protected.yaml"))
 
         assert "permission" in str(exc_info.value).lower() or "Access denied" in str(exc_info.value)
 
@@ -266,29 +275,33 @@ class TestLoadConfig:
 
     def test_load_config_invalid_values_raises_error(self):
         """Test load_config raises error for invalid config values."""
-        from src.config.loader import load_config, ConfigLoadError
+        from src.config.loader import ConfigLoadError, load_config
 
         invalid_yaml = {
             "extract": {"batch_size": -1}  # Invalid: must be positive
         }
 
-        with patch("src.config.loader.load_yaml_file", return_value=invalid_yaml):
-            with pytest.raises(ConfigLoadError) as exc_info:
-                load_config()
+        with (
+            patch("src.config.loader.load_yaml_file", return_value=invalid_yaml),
+            pytest.raises(ConfigLoadError) as exc_info,
+        ):
+            load_config()
 
         assert "batch_size" in str(exc_info.value).lower() or "validation" in str(exc_info.value).lower()
 
     def test_load_config_invalid_email_raises_error(self):
         """Test load_config raises error for invalid email format."""
-        from src.config.loader import load_config, ConfigLoadError
+        from src.config.loader import ConfigLoadError, load_config
 
         invalid_yaml = {
             "user_email": "not-an-email"
         }
 
-        with patch("src.config.loader.load_yaml_file", return_value=invalid_yaml):
-            with pytest.raises(ConfigLoadError) as exc_info:
-                load_config()
+        with (
+            patch("src.config.loader.load_yaml_file", return_value=invalid_yaml),
+            pytest.raises(ConfigLoadError) as exc_info,
+        ):
+            load_config()
 
         assert "email" in str(exc_info.value).lower() or "validation" in str(exc_info.value).lower()
 
@@ -371,8 +384,9 @@ class TestGenerateTemplate:
 
     def test_generate_template_is_valid_yaml(self):
         """Test generated template is valid YAML."""
-        from src.config.loader import generate_template
         import yaml
+
+        from src.config.loader import generate_template
 
         template = generate_template()
 
@@ -419,9 +433,10 @@ class TestShowResolvedConfig:
 
     def test_show_resolved_config_yaml_format(self):
         """Test output is valid YAML format."""
+        import yaml
+
         from src.config.loader import show_resolved_config
         from src.config.models import AppConfig
-        import yaml
 
         config = AppConfig()
         output = show_resolved_config(config)
@@ -436,8 +451,9 @@ class TestIntegration:
 
     def test_full_config_loading_workflow(self, tmp_path):
         """Test complete config loading with actual files."""
-        from src.config.loader import load_config, load_yaml_file
         import yaml
+
+        from src.config.loader import load_yaml_file
 
         # Create a temporary config file
         config_file = tmp_path / "config.yaml"

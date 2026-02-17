@@ -15,20 +15,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.utils.paths import PathConfig, get_output_dir, set_output_dir, ensure_output_dir
 from src.utils.file_manager import (
     atomic_write,
     atomic_write_text,
-    save_json,
     load_json,
+    save_json,
+)
+from src.utils.file_manager import (
     ensure_output_dir as fm_ensure_output_dir,
 )
+from src.utils.logger import get_logger, log_extraction_error, setup_logger
+from src.utils.paths import PathConfig, ensure_output_dir, get_output_dir, set_output_dir
 from src.utils.progress import (
     ProgressTracker,
     create_progress_callback,
     wrap_with_progress,
 )
-from src.utils.logger import setup_logger, get_logger, log_extraction_error
 
 
 class TestPathConfig:
@@ -565,9 +567,11 @@ class TestAtomicWrite:
 
         # Force a failure during the write by making the tmp directory read-only
         # Actually, we'll simulate by patching os.replace to fail
-        with patch("src.utils.file_manager.os.replace", side_effect=OSError("Simulated disk error")):
-            with pytest.raises(OSError, match="Simulated disk error"):
-                atomic_write(file_path, '{"corrupted": "data that should not appear"}')
+        with (
+            patch("src.utils.file_manager.os.replace", side_effect=OSError("Simulated disk error")),
+            pytest.raises(OSError, match="Simulated disk error"),
+        ):
+            atomic_write(file_path, '{"corrupted": "data that should not appear"}')
 
         # Original file must be unchanged
         assert file_path.read_text(encoding="utf-8") == original_content
@@ -577,9 +581,11 @@ class TestAtomicWrite:
         file_path = tmp_path / "test.json"
         tmp_file = file_path.with_suffix(".json.tmp")
 
-        with patch("src.utils.file_manager.os.replace", side_effect=OSError("fail")):
-            with pytest.raises(OSError):
-                atomic_write(file_path, "content")
+        with (
+            patch("src.utils.file_manager.os.replace", side_effect=OSError("fail")),
+            pytest.raises(OSError),
+        ):
+            atomic_write(file_path, "content")
 
         assert not tmp_file.exists()
 
@@ -659,9 +665,11 @@ class TestAtomicWriteText:
         original = '{"important": "data"}'
         file_path.write_text(original, encoding="utf-8")
 
-        with patch("src.utils.file_manager.os.replace", side_effect=OSError("disk full")):
-            with pytest.raises(OSError):
-                atomic_write_text(file_path, '{"bad": "data"}')
+        with (
+            patch("src.utils.file_manager.os.replace", side_effect=OSError("disk full")),
+            pytest.raises(OSError),
+        ):
+            atomic_write_text(file_path, '{"bad": "data"}')
 
         assert file_path.read_text(encoding="utf-8") == original
 
@@ -683,9 +691,11 @@ class TestSaveJsonAtomic:
         assert load_json(file_path) == original_data
 
         # Now force a failure during the atomic replace
-        with patch("src.utils.file_manager.os.replace", side_effect=OSError("disk error")):
-            with pytest.raises(OSError):
-                save_json({"version": 2, "data": "should not appear"}, file_path)
+        with (
+            patch("src.utils.file_manager.os.replace", side_effect=OSError("disk error")),
+            pytest.raises(OSError),
+        ):
+            save_json({"version": 2, "data": "should not appear"}, file_path)
 
         # Original must survive
         assert load_json(file_path) == original_data
@@ -704,9 +714,11 @@ class TestSaveJsonAtomic:
         file_path = tmp_path / "fail.json"
         tmp_file = file_path.with_suffix(".json.tmp")
 
-        with patch("src.utils.file_manager.os.replace", side_effect=OSError("fail")):
-            with pytest.raises(OSError):
-                save_json({"data": "test"}, file_path)
+        with (
+            patch("src.utils.file_manager.os.replace", side_effect=OSError("fail")),
+            pytest.raises(OSError),
+        ):
+            save_json({"data": "test"}, file_path)
 
         assert not tmp_file.exists()
 
@@ -1512,7 +1524,7 @@ class TestStripDomainSuffix:
         from src.utils.text import strip_domain_suffix
         assert strip_domain_suffix("mail.google.com") == "mail.google"
 
-    def test_subdomain_with_ccSLD(self):
+    def test_subdomain_with_cc_sld(self):
         """Subdomain with country-code second-level TLD preserved correctly."""
         from src.utils.text import strip_domain_suffix
         assert strip_domain_suffix("shop.amazon.co.uk") == "shop.amazon"

@@ -9,8 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 pip install -e ".[dev]"  # Install with dev dependencies
 
-# Run tests (1835 tests, 86% coverage)
-pytest                                  # All tests with coverage
+# Run tests (1968 tests, 86% coverage)
+pytest                                  # All 1968 tests with coverage
 pytest tests/unit/                      # Unit tests only
 pytest tests/contract/                  # Contract tests only
 pytest tests/unit/test_html_parser.py   # Single test file

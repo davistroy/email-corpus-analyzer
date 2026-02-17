@@ -5,9 +5,7 @@ Tests the --no-tui flag, --headless flag, and TUI fallback behavior (Task 3B.4).
 """
 import argparse
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from src.models.category import Category, CategorySource
 
@@ -98,7 +96,7 @@ class TestTUILaunch:
         categories = [create_test_category()]
         mock_run_tui.return_value = categories
 
-        result = review_categories_with_ui(categories, use_tui=True)
+        review_categories_with_ui(categories, use_tui=True)
 
         mock_run_tui.assert_called_once()
 
@@ -115,7 +113,7 @@ class TestTUILaunch:
         categories = [create_test_category()]
         mock_review.return_value = categories
 
-        result = review_categories_with_ui(categories, use_tui=False)
+        review_categories_with_ui(categories, use_tui=False)
 
         mock_review.assert_called_once()
 
@@ -177,7 +175,7 @@ class TestTUIFallback:
         categories = [create_test_category()]
         mock_review.return_value = categories
 
-        result = review_categories_with_ui(categories, use_tui=True)
+        review_categories_with_ui(categories, use_tui=True)
 
         # Should fall back to legacy when TUI not supported
         mock_review.assert_called_once()
@@ -234,8 +232,9 @@ class TestReviewCategoriesWithUIFunction:
 
     def test_function_signature(self):
         """Test that function has correct signature."""
-        from src.ui.category_review import review_categories_with_ui
         import inspect
+
+        from src.ui.category_review import review_categories_with_ui
 
         sig = inspect.signature(review_categories_with_ui)
         params = list(sig.parameters.keys())
@@ -246,8 +245,9 @@ class TestReviewCategoriesWithUIFunction:
 
     def test_function_defaults_to_tui(self):
         """Test that function defaults to using TUI."""
-        from src.ui.category_review import review_categories_with_ui
         import inspect
+
+        from src.ui.category_review import review_categories_with_ui
 
         sig = inspect.signature(review_categories_with_ui)
         use_tui_param = sig.parameters.get("use_tui")
@@ -292,7 +292,7 @@ class TestGracefulDegradation:
         categories = [create_test_category()]
         mock_review.return_value = categories
 
-        result = review_categories_with_ui(categories, use_tui=True)
+        review_categories_with_ui(categories, use_tui=True)
 
         # Should use legacy review when TUI not supported
         mock_review.assert_called_once()

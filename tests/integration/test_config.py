@@ -7,14 +7,12 @@ Per Phase 7, Track 7C specification.
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-import json
 
 import pytest
 import yaml
 
 from src.config.loader import load_config
 from src.config.models import AppConfig
-
 
 # =============================================================================
 # Test Fixtures

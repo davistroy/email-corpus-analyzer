@@ -14,14 +14,13 @@ from scipy.cluster.hierarchy import linkage
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 
-
 # -----------------------------------------------------------------------------
 # Test Fixtures
 # -----------------------------------------------------------------------------
 
 
 def create_email(
-    id: str,
+    email_id: str,
     sender_email: str = "sender@example.com",
     sender_domain: str = "example.com",
     subject: str = "Test Subject",
@@ -32,7 +31,7 @@ def create_email(
     if received_date is None:
         received_date = datetime(2024, 1, 15, 10, 0)
     return Email(
-        id=id,
+        id=email_id,
         sender_email=sender_email,
         sender_name="Test Sender",
         sender_domain=sender_domain,
@@ -127,7 +126,7 @@ class TestHierarchicalAnalyzerValidation:
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
         analyzer = HierarchicalAnalyzer()
-        emails = [create_email(id="1")]
+        emails = [create_email(email_id="1")]
         corpus = create_corpus(emails)
 
         with patch.object(analyzer, "_ensure_model_loaded"):
@@ -157,10 +156,10 @@ class TestHierarchicalClustering:
 
         # Create emails with distinct patterns for clear clustering
         emails = [
-            create_email(id=f"shopping_{i}", subject=f"Amazon order {i}", body_text="Order shipped")
+            create_email(email_id=f"shopping_{i}", subject=f"Amazon order {i}", body_text="Order shipped")
             for i in range(10)
         ] + [
-            create_email(id=f"finance_{i}", subject=f"Bank statement {i}", body_text="Account balance")
+            create_email(email_id=f"finance_{i}", subject=f"Bank statement {i}", body_text="Account balance")
             for i in range(10)
         ]
         corpus = create_corpus(emails)
@@ -192,7 +191,7 @@ class TestHierarchicalClustering:
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
         # Create enough emails for clustering
-        emails = [create_email(id=str(i)) for i in range(50)]
+        emails = [create_email(email_id=str(i)) for i in range(50)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -217,7 +216,7 @@ class TestHierarchicalClustering:
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
         # Create structured data that would produce subclusters
-        emails = [create_email(id=str(i)) for i in range(100)]
+        emails = [create_email(email_id=str(i)) for i in range(100)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -253,7 +252,7 @@ class TestClusterStructure:
         """Test that clusters have all required fields."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(20)]
+        emails = [create_email(email_id=str(i)) for i in range(20)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -283,7 +282,7 @@ class TestClusterStructure:
         """Test that top-level clusters have no parent."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(20)]
+        emails = [create_email(email_id=str(i)) for i in range(20)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -306,7 +305,7 @@ class TestClusterStructure:
         """Test that subclusters reference valid parent clusters."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(50)]
+        emails = [create_email(email_id=str(i)) for i in range(50)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -336,7 +335,7 @@ class TestClusterStructure:
         """Test that top-level cluster percentages sum to ~100%."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(30)]
+        emails = [create_email(email_id=str(i)) for i in range(30)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -369,7 +368,7 @@ class TestFallbackBehavior:
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
         # Very small corpus
-        emails = [create_email(id=str(i)) for i in range(3)]
+        emails = [create_email(email_id=str(i)) for i in range(3)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -394,7 +393,7 @@ class TestFallbackBehavior:
         """Test get_flat_clusters returns flat list without hierarchy."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(20)]
+        emails = [create_email(email_id=str(i)) for i in range(20)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -407,7 +406,7 @@ class TestFallbackBehavior:
         analyzer = HierarchicalAnalyzer()
 
         # First analyze to populate internal state
-        hierarchical_result = analyzer.analyze(corpus)
+        analyzer.analyze(corpus)
 
         # Then get flat version
         flat_result = analyzer.get_flat_clusters()
@@ -436,10 +435,10 @@ class TestOptimalCutPoint:
         # Linkage matrix format: [idx1, idx2, distance, count]
         np.random.seed(42)
         data = np.random.rand(10, 5)
-        Z = linkage(data, method="ward")
+        z = linkage(data, method="ward")
 
         # The method should select a reasonable cut point
-        cut_distance = analyzer._select_optimal_cut_point(Z, target_clusters=3)
+        cut_distance = analyzer._select_optimal_cut_point(z, target_clusters=3)
 
         assert cut_distance > 0
         # Should produce reasonable number of clusters when used
@@ -452,10 +451,10 @@ class TestOptimalCutPoint:
 
         np.random.seed(42)
         data = np.random.rand(50, 10)
-        Z = linkage(data, method="ward")
+        z = linkage(data, method="ward")
 
         cut_distance = analyzer._select_optimal_cut_point(
-            Z, target_clusters=7  # Within range
+            z, target_clusters=7  # Within range
         )
 
         assert cut_distance > 0
@@ -476,7 +475,7 @@ class TestRepresentativeSamples:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 subject=f"Subject {i}",
                 body_text=f"Body text {i}",
             )
@@ -504,7 +503,7 @@ class TestRepresentativeSamples:
         """Test that representative samples have required fields."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(20)]
+        emails = [create_email(email_id=str(i)) for i in range(20)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -538,7 +537,7 @@ class TestProgressCallback:
         """Test that progress callback is called during analysis."""
         from src.analyzers.hierarchical_analyzer import HierarchicalAnalyzer
 
-        emails = [create_email(id=str(i)) for i in range(20)]
+        emails = [create_email(email_id=str(i)) for i in range(20)]
         corpus = create_corpus(emails)
 
         np.random.seed(42)
@@ -576,7 +575,7 @@ class TestCommonDomains:
 
         emails = [
             create_email(
-                id=str(i),
+                email_id=str(i),
                 sender_email=f"user{i % 3}@domain{i % 2}.com",
                 sender_domain=f"domain{i % 2}.com",
             )
@@ -609,8 +608,8 @@ class TestHierarchicalClusterModel:
 
     def test_hierarchical_cluster_creation(self):
         """Test creating HierarchicalCluster object."""
-        from src.models.content_cluster import RepresentativeSample
         from src.analyzers.hierarchical_analyzer import HierarchicalCluster
+        from src.models.content_cluster import RepresentativeSample
 
         sample = RepresentativeSample(
             subject="Test Subject",
@@ -637,8 +636,8 @@ class TestHierarchicalClusterModel:
 
     def test_hierarchical_cluster_with_subclusters(self):
         """Test HierarchicalCluster with subclusters."""
-        from src.models.content_cluster import RepresentativeSample
         from src.analyzers.hierarchical_analyzer import HierarchicalCluster
+        from src.models.content_cluster import RepresentativeSample
 
         sample = RepresentativeSample(
             subject="Test",
@@ -676,8 +675,8 @@ class TestHierarchicalClusterModel:
 
     def test_hierarchical_cluster_is_top_level(self):
         """Test is_top_level property."""
-        from src.models.content_cluster import RepresentativeSample
         from src.analyzers.hierarchical_analyzer import HierarchicalCluster
+        from src.models.content_cluster import RepresentativeSample
 
         sample = RepresentativeSample(
             subject="Test",

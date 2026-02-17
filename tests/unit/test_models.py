@@ -10,7 +10,6 @@ import pytest
 from src.models.category import Category, CategorySource
 from src.models.email import Email
 
-
 # -----------------------------------------------------------------------------
 # Test Fixtures - Sample Data Builders
 # -----------------------------------------------------------------------------

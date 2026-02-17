@@ -38,26 +38,26 @@ class TestExtractorInheritanceContract:
     def test_implements_get_source_name(self, extractor_cls):
         """_get_source_name must be defined on the concrete class (not just ABC)."""
         # Verify the method is not abstract on the subclass
-        method = getattr(extractor_cls, "_get_source_name")
+        method = extractor_cls._get_source_name
         assert callable(method)
         # Verify it's overridden (not the abstract stub)
         assert not getattr(method, "__isabstractmethod__", False)
 
     def test_implements_get_checkpoint_source(self, extractor_cls):
         """_get_checkpoint_source must be defined on the concrete class."""
-        method = getattr(extractor_cls, "_get_checkpoint_source")
+        method = extractor_cls._get_checkpoint_source
         assert callable(method)
         assert not getattr(method, "__isabstractmethod__", False)
 
     def test_implements_fetch_batch(self, extractor_cls):
         """_fetch_batch must be implemented."""
-        method = getattr(extractor_cls, "_fetch_batch")
+        method = extractor_cls._fetch_batch
         assert callable(method)
         assert not getattr(method, "__isabstractmethod__", False)
 
     def test_implements_process_email(self, extractor_cls):
         """_process_email must be implemented."""
-        method = getattr(extractor_cls, "_process_email")
+        method = extractor_cls._process_email
         assert callable(method)
         assert not getattr(method, "__isabstractmethod__", False)
 
@@ -80,12 +80,12 @@ class TestExtractorInheritanceContract:
     def test_has_extract_all_method(self, extractor_cls):
         """extract_all should be inherited from BaseExtractor."""
         assert hasattr(extractor_cls, "extract_all")
-        assert callable(getattr(extractor_cls, "extract_all"))
+        assert callable(extractor_cls.extract_all)
 
     def test_has_extract_incremental_method(self, extractor_cls):
         """extract_incremental should be inherited from BaseExtractor."""
         assert hasattr(extractor_cls, "extract_incremental")
-        assert callable(getattr(extractor_cls, "extract_incremental"))
+        assert callable(extractor_cls.extract_incremental)
 
     def test_constructor_requires_user_email(self, extractor_cls):
         """Constructor must accept user_email as first positional arg."""

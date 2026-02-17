@@ -6,8 +6,9 @@ Tests cover:
 
 Following TDD: these tests were written BEFORE implementation.
 """
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestExtractConfig:
@@ -39,8 +40,9 @@ class TestExtractConfig:
 
     def test_extract_config_batch_size_must_be_positive(self):
         """Test batch_size must be greater than 0."""
-        from src.config.models import ExtractConfig
         from pydantic import ValidationError
+
+        from src.config.models import ExtractConfig
 
         with pytest.raises(ValidationError) as exc_info:
             ExtractConfig(batch_size=0)
@@ -49,16 +51,18 @@ class TestExtractConfig:
 
     def test_extract_config_batch_size_must_not_be_negative(self):
         """Test batch_size cannot be negative."""
-        from src.config.models import ExtractConfig
         from pydantic import ValidationError
+
+        from src.config.models import ExtractConfig
 
         with pytest.raises(ValidationError):
             ExtractConfig(batch_size=-1)
 
     def test_extract_config_checkpoint_interval_must_be_positive(self):
         """Test checkpoint_interval must be greater than 0."""
-        from src.config.models import ExtractConfig
         from pydantic import ValidationError
+
+        from src.config.models import ExtractConfig
 
         with pytest.raises(ValidationError) as exc_info:
             ExtractConfig(checkpoint_interval=0)
@@ -67,16 +71,18 @@ class TestExtractConfig:
 
     def test_extract_config_batch_size_max_limit(self):
         """Test batch_size has a reasonable upper limit."""
-        from src.config.models import ExtractConfig
         from pydantic import ValidationError
+
+        from src.config.models import ExtractConfig
 
         with pytest.raises(ValidationError):
             ExtractConfig(batch_size=100001)
 
     def test_extract_config_checkpoint_interval_max_limit(self):
         """Test checkpoint_interval has a reasonable upper limit."""
-        from src.config.models import ExtractConfig
         from pydantic import ValidationError
+
+        from src.config.models import ExtractConfig
 
         with pytest.raises(ValidationError):
             ExtractConfig(checkpoint_interval=10001)
@@ -116,8 +122,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_num_clusters_must_be_positive(self):
         """Test num_clusters must be at least 1."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         with pytest.raises(ValidationError) as exc_info:
             AnalyzeConfig(num_clusters=0)
@@ -126,8 +133,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_num_clusters_max_limit(self):
         """Test num_clusters has a reasonable upper limit."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         with pytest.raises(ValidationError):
             AnalyzeConfig(num_clusters=1001)
@@ -148,8 +156,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_max_embedding_text_length_min_boundary(self):
         """Test max_embedding_text_length must be at least 200."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         # Exactly 200 should work
         config = AnalyzeConfig(max_embedding_text_length=200)
@@ -162,8 +171,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_max_embedding_text_length_max_boundary(self):
         """Test max_embedding_text_length must not exceed 5000."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         # Exactly 5000 should work
         config = AnalyzeConfig(max_embedding_text_length=5000)
@@ -198,8 +208,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_auto_cluster_min_gt_max_raises(self):
         """Test that auto_cluster_min > auto_cluster_max raises ValidationError."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         with pytest.raises(ValidationError) as exc_info:
             AnalyzeConfig(auto_cluster_min=30, auto_cluster_max=10)
@@ -207,8 +218,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_auto_cluster_min_boundary(self):
         """Test auto_cluster_min must be >= 2."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         config = AnalyzeConfig(auto_cluster_min=2)
         assert config.auto_cluster_min == 2
@@ -218,8 +230,9 @@ class TestAnalyzeConfig:
 
     def test_analyze_config_auto_cluster_max_boundary(self):
         """Test auto_cluster_max must be >= 3 and <= 100."""
-        from src.config.models import AnalyzeConfig
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzeConfig
 
         config = AnalyzeConfig(auto_cluster_max=100)
         assert config.auto_cluster_max == 100
@@ -263,8 +276,9 @@ class TestSuggestConfig:
 
     def test_suggest_config_min_cluster_percentage_must_be_non_negative(self):
         """Test min_cluster_percentage cannot be negative."""
-        from src.config.models import SuggestConfig
         from pydantic import ValidationError
+
+        from src.config.models import SuggestConfig
 
         with pytest.raises(ValidationError) as exc_info:
             SuggestConfig(min_cluster_percentage=-1.0)
@@ -273,16 +287,18 @@ class TestSuggestConfig:
 
     def test_suggest_config_min_cluster_percentage_max_100(self):
         """Test min_cluster_percentage cannot exceed 100."""
-        from src.config.models import SuggestConfig
         from pydantic import ValidationError
+
+        from src.config.models import SuggestConfig
 
         with pytest.raises(ValidationError):
             SuggestConfig(min_cluster_percentage=101.0)
 
     def test_suggest_config_min_sender_count_must_be_positive(self):
         """Test min_sender_count must be at least 1."""
-        from src.config.models import SuggestConfig
         from pydantic import ValidationError
+
+        from src.config.models import SuggestConfig
 
         with pytest.raises(ValidationError) as exc_info:
             SuggestConfig(min_sender_count=0)
@@ -397,7 +413,7 @@ class TestAppConfig:
 
     def test_app_config_nested_analyze_config(self):
         """Test AppConfig can set nested AnalyzeConfig values."""
-        from src.config.models import AppConfig, AnalyzeConfig
+        from src.config.models import AnalyzeConfig, AppConfig
 
         config = AppConfig(analyze=AnalyzeConfig(num_clusters=20))
 
@@ -461,8 +477,9 @@ class TestAppConfig:
 
     def test_app_config_user_email_validation(self):
         """Test user_email must be valid email format when provided."""
-        from src.config.models import AppConfig
         from pydantic import ValidationError
+
+        from src.config.models import AppConfig
 
         with pytest.raises(ValidationError) as exc_info:
             AppConfig(user_email="not-an-email")
@@ -471,8 +488,9 @@ class TestAppConfig:
 
     def test_app_config_invalid_nested_config(self):
         """Test AppConfig rejects invalid nested config values."""
-        from src.config.models import AppConfig
         from pydantic import ValidationError
+
+        from src.config.models import AppConfig
 
         with pytest.raises(ValidationError):
             AppConfig(extract={"batch_size": -1})
@@ -524,7 +542,7 @@ class TestConfigMerging:
 
     def test_merge_configs_partial_nested_override(self):
         """Test partial override of nested config."""
-        from src.config.models import AppConfig, AnalyzeConfig, SuggestConfig, merge_configs
+        from src.config.models import AnalyzeConfig, AppConfig, SuggestConfig, merge_configs
 
         base = AppConfig(
             analyze=AnalyzeConfig(num_clusters=10),
@@ -639,72 +657,81 @@ class TestAnalyzerThresholds:
 
     def test_analyzer_thresholds_validation_top_senders_min(self):
         """Test top_senders must be >= 1."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(top_senders=0)
 
     def test_analyzer_thresholds_validation_top_senders_max(self):
         """Test top_senders must be <= 1000."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(top_senders=1001)
 
     def test_analyzer_thresholds_validation_top_domains_min(self):
         """Test top_domains must be >= 1."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(top_domains=0)
 
     def test_analyzer_thresholds_validation_max_auto_clusters_min(self):
         """Test max_auto_clusters must be >= 2."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(max_auto_clusters=1)
 
     def test_analyzer_thresholds_validation_representative_samples_min(self):
         """Test representative_samples must be >= 1."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(representative_samples=0)
 
     def test_analyzer_thresholds_validation_random_state_min(self):
         """Test random_state must be >= 0."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(random_state=-1)
 
     def test_analyzer_thresholds_validation_daily_threshold_positive(self):
         """Test frequency_daily_threshold_days must be > 0."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(frequency_daily_threshold_days=0)
 
     def test_analyzer_thresholds_validation_weekly_threshold_max(self):
         """Test frequency_weekly_threshold_days must be <= 365."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(frequency_weekly_threshold_days=366)
 
     def test_analyzer_thresholds_validation_min_emails_for_frequency_min(self):
         """Test min_emails_for_frequency must be >= 2."""
-        from src.config.models import AnalyzerThresholds
         from pydantic import ValidationError
+
+        from src.config.models import AnalyzerThresholds
 
         with pytest.raises(ValidationError):
             AnalyzerThresholds(min_emails_for_frequency=1)
@@ -778,16 +805,18 @@ class TestGeneratorThresholds:
 
     def test_generator_thresholds_validation_max_senders_min(self):
         """Test max_senders_for_categories must be >= 1."""
-        from src.config.models import GeneratorThresholds
         from pydantic import ValidationError
+
+        from src.config.models import GeneratorThresholds
 
         with pytest.raises(ValidationError):
             GeneratorThresholds(max_senders_for_categories=0)
 
     def test_generator_thresholds_validation_merge_name_similarity_range(self):
         """Test merge_name_similarity must be between 0.0 and 1.0."""
-        from src.config.models import GeneratorThresholds
         from pydantic import ValidationError
+
+        from src.config.models import GeneratorThresholds
 
         # Valid boundary values
         GeneratorThresholds(merge_name_similarity=0.0)
@@ -802,8 +831,9 @@ class TestGeneratorThresholds:
 
     def test_generator_thresholds_validation_merge_email_overlap_range(self):
         """Test merge_email_overlap must be between 0.0 and 1.0."""
-        from src.config.models import GeneratorThresholds
         from pydantic import ValidationError
+
+        from src.config.models import GeneratorThresholds
 
         # Valid boundary values
         GeneratorThresholds(merge_email_overlap=0.0)
@@ -818,7 +848,7 @@ class TestGeneratorThresholds:
 
     def test_suggest_config_has_thresholds_default(self):
         """Test SuggestConfig includes GeneratorThresholds with defaults."""
-        from src.config.models import SuggestConfig, GeneratorThresholds
+        from src.config.models import GeneratorThresholds, SuggestConfig
 
         config = SuggestConfig()
         assert isinstance(config.thresholds, GeneratorThresholds)
@@ -826,7 +856,7 @@ class TestGeneratorThresholds:
 
     def test_suggest_config_custom_thresholds(self):
         """Test SuggestConfig accepts custom thresholds."""
-        from src.config.models import SuggestConfig, GeneratorThresholds
+        from src.config.models import GeneratorThresholds, SuggestConfig
 
         thresholds = GeneratorThresholds(max_senders_for_categories=30)
         config = SuggestConfig(thresholds=thresholds)
@@ -901,7 +931,7 @@ class TestConfigMergePrecedence:
         When a user explicitly sets a value that happens to match the default,
         the merge should still honor it over the base config.
         """
-        from src.config.models import AppConfig, AnalyzeConfig, merge_configs
+        from src.config.models import AnalyzeConfig, AppConfig, merge_configs
 
         global_config = AppConfig(analyze=AnalyzeConfig(num_clusters=15))
         project_config = AppConfig(analyze=AnalyzeConfig(num_clusters=10))
@@ -917,7 +947,7 @@ class TestConfigMergePrecedence:
         This ensures we don't accidentally break the other direction:
         fields NOT present in override should leave base values intact.
         """
-        from src.config.models import AppConfig, AnalyzeConfig, merge_configs
+        from src.config.models import AnalyzeConfig, AppConfig, merge_configs
 
         global_config = AppConfig(
             verbose=True,
@@ -967,7 +997,7 @@ class TestConfigMergePrecedence:
         defaults (num_clusters=10) -> global (num_clusters=15) -> project (num_clusters=10)
         The final result should be 10, because project explicitly set it.
         """
-        from src.config.models import AppConfig, AnalyzeConfig, merge_configs
+        from src.config.models import AnalyzeConfig, AppConfig, merge_configs
 
         defaults = AppConfig()
         global_config = AppConfig(analyze=AnalyzeConfig(num_clusters=15))
@@ -985,8 +1015,9 @@ class TestConfigMergePrecedence:
         This ensures that optional fields left as None in the override
         don't wipe out base config values.
         """
-        from src.config.models import AppConfig, merge_configs
         from pathlib import Path
+
+        from src.config.models import AppConfig, merge_configs
 
         base = AppConfig(
             output_dir=Path("/base/output"),

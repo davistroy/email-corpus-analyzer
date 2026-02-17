@@ -4,27 +4,25 @@ Unit tests for category generator modules.
 Tests CategoryGenerator class and TemplateMatcher functions for
 generating category suggestions from analysis results.
 """
-import pytest
 
 from src.generators.category_generator import CategoryGenerator
 from src.generators.template_matcher import (
-    match_templates,
-    _match_by_keywords,
     _match_by_domains,
+    _match_by_keywords,
+    match_templates,
 )
 from src.models.analysis_results import (
     AnalysisResults,
+    DomainCount,
     SenderAnalysis,
     SubjectPatterns,
     TemporalPatterns,
     VolumeStats,
-    DomainCount,
 )
 from src.models.category import Category, CategorySource
 from src.models.category_template import CategoryTemplate
 from src.models.content_cluster import ContentCluster, RepresentativeSample
 from src.models.sender import Sender, SenderType
-
 
 # -----------------------------------------------------------------------------
 # Test Fixtures - Sample Data Builders
@@ -69,7 +67,7 @@ def create_sample_cluster(
             sender="sender@test.com",
             body_preview=body,
         )
-        for subj, body in zip(subjects, body_previews)
+        for subj, body in zip(subjects, body_previews, strict=True)
     ]
 
     return ContentCluster(
@@ -275,7 +273,7 @@ class TestCategoryGenerator:
             body_previews=["Here is your weekly update", "Weekly news"],
             common_domains=[("newsletter.com", 80)],
         )
-        analysis = create_sample_analysis_results(clusters=[cluster], senders=[])
+        create_sample_analysis_results(clusters=[cluster], senders=[])
 
         generator = CategoryGenerator()
         category = generator._category_from_cluster(cluster, 1000)
@@ -380,7 +378,7 @@ class TestCategoryGenerator:
         ]
 
         generator = CategoryGenerator()
-        merged = generator._merge_similar(categories)
+        generator._merge_similar(categories)
 
         # Should not merge because overlap is 66% (below 70% threshold)
         # Let's create categories that will merge
@@ -2099,6 +2097,7 @@ class TestCategoryGeneratorLearning:
         """Test that generator accepts decision logger."""
         import tempfile
         from pathlib import Path
+
         from src.learning.decision_logger import DecisionLogger
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2115,6 +2114,7 @@ class TestCategoryGeneratorLearning:
         """Test that learned rename patterns are applied to categories."""
         import tempfile
         from pathlib import Path
+
         from src.learning.decision_logger import DecisionAction, DecisionLogger
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2284,6 +2284,7 @@ class TestCategoryGeneratorLearning:
         """Test handling of no learned patterns."""
         import tempfile
         from pathlib import Path
+
         from src.learning.decision_logger import DecisionLogger
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2367,15 +2368,15 @@ class TestEnhancedConfidenceIntegration:
         from src.generators.confidence_scorer import calculate_confidence_enhanced
 
         # Create two identical categories except for name quality
-        base_kwargs = dict(
-            description="Test",
-            confidence=0.0,
-            email_count=50,
-            percentage=5.0,
-            source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=["f1", "f2", "f3"],
-            example_email_ids=[f"e_{i}" for i in range(10)],
-        )
+        base_kwargs = {
+            "description": "Test",
+            "confidence": 0.0,
+            "email_count": 50,
+            "percentage": 5.0,
+            "source": CategorySource.CONTENT_CLUSTER,
+            "distinguishing_features": ["f1", "f2", "f3"],
+            "example_email_ids": [f"e_{i}" for i in range(10)],
+        }
 
         good_name_cat = Category(
             category_id="good_name",

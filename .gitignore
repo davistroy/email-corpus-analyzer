@@ -58,5 +58,15 @@ desktop.ini
 nul
 NUL
 
+# Temp files
+*.bak
+*.tmp
+*.temp
+*.orig
+
+# Environment / secrets
+.env
+.env.*
+
 # Mock artifacts
 MagicMock/

@@ -40,8 +40,8 @@ To force re-authentication:
 # Delete the token cache
 rm ~/.email-analyzer/ms_token_cache.json
 
-# Or use the standalone script with --force-auth
-python scripts/fetch_emails_cli.py --force-auth --count 5
+# Then re-run the extract command
+python -m src.cli extract --user-email your.email@hotmail.com
 ```
 
 ### Custom Azure App (Optional)
@@ -55,11 +55,7 @@ The default public client ID works for most cases. If you need a custom Azure ap
 5. API Permissions: Add **Mail.Read** (delegated) and **User.Read** (delegated)
 6. Note the Application (client) ID
 
-Then pass it when extracting:
-```bash
-# The --client-id flag is available on the standalone script
-python scripts/fetch_emails_cli.py --count 500 --output ~/data/outputs/email_corpus.json
-```
+Custom client IDs are currently supported via the `GraphAPIClient` constructor when using the extraction API programmatically. For CLI usage, the default public client ID is sufficient for personal Microsoft accounts.
 
 ---
 

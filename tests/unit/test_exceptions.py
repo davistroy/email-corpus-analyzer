@@ -169,7 +169,7 @@ class TestConfigurationExceptions:
 
     def test_config_validation_error(self):
         """Test ConfigValidationError with field information."""
-        from src.exceptions import ConfigValidationError, ConfigurationError
+        from src.exceptions import ConfigurationError, ConfigValidationError
 
         error = ConfigValidationError(
             field="output_dir",
@@ -224,7 +224,7 @@ class TestAnalysisExceptions:
 
     def test_clustering_error(self):
         """Test ClusteringError with default recovery hint."""
-        from src.exceptions import ClusteringError, AnalysisError
+        from src.exceptions import AnalysisError, ClusteringError
 
         error = ClusteringError("Too few samples for clustering")
 
@@ -249,7 +249,7 @@ class TestExtractionExceptions:
 
     def test_extraction_error(self):
         """Test ExtractionError with message."""
-        from src.exceptions import ExtractionError, EmailAnalyzerError
+        from src.exceptions import EmailAnalyzerError, ExtractionError
 
         error = ExtractionError("Failed to extract emails")
 
@@ -270,7 +270,7 @@ class TestExtractionExceptions:
 
     def test_m365_auth_error(self):
         """Test M365AuthError with authentication-specific hint."""
-        from src.exceptions import M365AuthError, ExtractionError
+        from src.exceptions import ExtractionError, M365AuthError
 
         error = M365AuthError("Authentication failed")
 
@@ -298,13 +298,13 @@ class TestExceptionHierarchy:
     def test_all_exceptions_inherit_from_base(self):
         """Test all custom exceptions inherit from EmailAnalyzerError."""
         from src.exceptions import (
-            EmailAnalyzerError,
-            CorpusNotFoundError,
-            CorpusParseError,
-            ConfigurationError,
-            ConfigValidationError,
             AnalysisError,
             ClusteringError,
+            ConfigurationError,
+            ConfigValidationError,
+            CorpusNotFoundError,
+            CorpusParseError,
+            EmailAnalyzerError,
             ExtractionError,
             M365AuthError,
         )
@@ -339,10 +339,10 @@ class TestExceptionHierarchy:
     def test_can_catch_base_exception(self):
         """Test catching base exception catches all derived exceptions."""
         from src.exceptions import (
-            EmailAnalyzerError,
-            CorpusNotFoundError,
-            ConfigurationError,
             AnalysisError,
+            ConfigurationError,
+            CorpusNotFoundError,
+            EmailAnalyzerError,
             ExtractionError,
         )
 

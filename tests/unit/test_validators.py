@@ -610,29 +610,25 @@ class TestValidationIntegration:
         )
 
         # Clusters that don't sum to 100%
-        clusters = [
-            ContentCluster(
-                cluster_id=0,
-                size=1,
-                percentage=10.0,  # Too low
-                representative_samples=[],
-                common_keywords=[],
-                common_domains=[],
-                email_ids=[]
-            )
-        ]
+        ContentCluster(
+            cluster_id=0,
+            size=1,
+            percentage=10.0,  # Too low
+            representative_samples=[],
+            common_keywords=[],
+            common_domains=[],
+            email_ids=[]
+        )
 
         # Category referencing non-existent email
-        categories = [
-            Category(
-                category_id="cat_1",
-                category_name="Bad Category",
-                description="Test",
-                confidence=0.8,
-                source=CategorySource.TEMPLATE,
-                example_email_ids=["non_existent_id"]
-            )
-        ]
+        Category(
+            category_id="cat_1",
+            category_name="Bad Category",
+            description="Test",
+            confidence=0.8,
+            source=CategorySource.TEMPLATE,
+            example_email_ids=["non_existent_id"]
+        )
 
         # Multiple validations should raise errors
         # First one will raise - testing that it does raise

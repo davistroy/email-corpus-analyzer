@@ -13,10 +13,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from src.config.models import AnalyzeConfig, AppConfig, SuggestConfig
+from src.config.models import AnalyzeConfig, SuggestConfig
 from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
-
 
 # =============================================================================
 # Test Fixtures
@@ -317,7 +316,7 @@ class TestDataPersistence:
         assert loaded_corpus.extraction_metadata.total_emails == sample_corpus.extraction_metadata.total_emails
         assert len(loaded_corpus.emails) == len(sample_corpus.emails)
 
-        for orig, loaded in zip(sample_corpus.emails, loaded_corpus.emails):
+        for orig, loaded in zip(sample_corpus.emails, loaded_corpus.emails, strict=True):
             assert orig.id == loaded.id
             assert orig.sender_email == loaded.sender_email
             assert orig.subject == loaded.subject

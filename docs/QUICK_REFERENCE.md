@@ -1,4 +1,4 @@
-# Email Processor - Quick Reference
+# Email Corpus Analyzer - Quick Reference
 
 ## Setup
 

@@ -25,15 +25,15 @@ from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 
 
-def create_test_email(id: str, subject: str = "Test") -> Email:
+def create_test_email(email_id: str, subject: str = "Test") -> Email:
     """Factory function to create test Email objects."""
     return Email(
-        id=id,
-        sender_email=f"sender_{id}@example.com",
+        id=email_id,
+        sender_email=f"sender_{email_id}@example.com",
         sender_name="Sender",
         sender_domain="example.com",
         subject=subject,
-        body_text=f"Body for {id}",
+        body_text=f"Body for {email_id}",
         received_date=datetime(2024, 1, 15),
         has_attachments=False
     )

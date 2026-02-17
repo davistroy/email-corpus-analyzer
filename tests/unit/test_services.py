@@ -7,11 +7,11 @@ Tests the service layer components:
 - SuggestionService
 - PipelineService
 """
+import json
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import json
-import tempfile
 
 import pytest
 
@@ -20,7 +20,6 @@ from src.config.models import (
     AnalyzerThresholds,
     AppConfig,
     ExtractConfig,
-    PipelineConfig,
     SuggestConfig,
 )
 from src.models.analysis_results import (
@@ -37,14 +36,13 @@ from src.models.corpus import Corpus, CorpusMetadata
 from src.models.email import Email
 from src.models.sender import Sender, SenderType
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
 
 
 def create_test_email(
-    id: str = "test_001",
+    email_id: str = "test_001",
     sender_email: str = "sender@example.com",
     sender_domain: str = "example.com",
     subject: str = "Test Subject",
@@ -55,7 +53,7 @@ def create_test_email(
     if received_date is None:
         received_date = datetime(2024, 1, 15, 10, 0)
     return Email(
-        id=id,
+        id=email_id,
         sender_email=sender_email,
         sender_name="Test Sender",
         sender_domain=sender_domain,
@@ -69,7 +67,7 @@ def create_test_email(
 def create_test_corpus(emails: list[Email] | None = None) -> Corpus:
     """Factory function to create Corpus objects for testing."""
     if emails is None:
-        emails = [create_test_email(id=f"email_{i}") for i in range(10)]
+        emails = [create_test_email(email_id=f"email_{i}") for i in range(10)]
     return Corpus(
         extraction_metadata=CorpusMetadata(
             extraction_date=datetime.now(),
@@ -292,7 +290,7 @@ class TestAnalysisServiceAnalyzers:
 
     def test_all_analyzers_have_result_field_mapping(self):
         """Test that every analyzer in the list has a result field mapping."""
-        from src.services.analysis_service import AnalysisService, _ANALYZER_RESULT_FIELDS
+        from src.services.analysis_service import _ANALYZER_RESULT_FIELDS, AnalysisService
 
         config = AnalyzeConfig()
         service = AnalysisService(config)
@@ -985,8 +983,8 @@ class TestExtractionServiceBoth:
         service = ExtractionService(config, user_email="user@hotmail.com")
 
         # Create distinct corpora for each source
-        m365_emails = [create_test_email(id=f"m365_{i}") for i in range(5)]
-        gmail_emails = [create_test_email(id=f"gmail_{i}") for i in range(3)]
+        m365_emails = [create_test_email(email_id=f"m365_{i}") for i in range(5)]
+        gmail_emails = [create_test_email(email_id=f"gmail_{i}") for i in range(3)]
 
         m365_corpus = create_test_corpus(emails=m365_emails)
         gmail_corpus = create_test_corpus(emails=gmail_emails)
@@ -1027,9 +1025,9 @@ class TestExtractionServiceBoth:
         service = ExtractionService(config, user_email="user@hotmail.com")
 
         # Create overlapping emails (same IDs in both sources)
-        shared_emails = [create_test_email(id=f"shared_{i}") for i in range(2)]
-        m365_only = [create_test_email(id=f"m365_{i}") for i in range(3)]
-        gmail_only = [create_test_email(id=f"gmail_{i}") for i in range(2)]
+        shared_emails = [create_test_email(email_id=f"shared_{i}") for i in range(2)]
+        m365_only = [create_test_email(email_id=f"m365_{i}") for i in range(3)]
+        gmail_only = [create_test_email(email_id=f"gmail_{i}") for i in range(2)]
 
         m365_corpus = create_test_corpus(emails=m365_only + shared_emails)
         gmail_corpus = create_test_corpus(emails=gmail_only + shared_emails)
@@ -1072,8 +1070,8 @@ class TestExtractionServiceBoth:
         config = ExtractConfig(source="both", gmail_email="user@gmail.com")
         service = ExtractionService(config, user_email="user@hotmail.com")
 
-        m365_corpus = create_test_corpus(emails=[create_test_email(id="m365_1")])
-        gmail_corpus = create_test_corpus(emails=[create_test_email(id="gmail_1")])
+        m365_corpus = create_test_corpus(emails=[create_test_email(email_id="m365_1")])
+        gmail_corpus = create_test_corpus(emails=[create_test_email(email_id="gmail_1")])
 
         m365_result = ExtractionResult(
             corpus=m365_corpus, failed_emails=[],
@@ -1103,8 +1101,8 @@ class TestExtractionServiceBoth:
         config = ExtractConfig(source="both", gmail_email="user@gmail.com")
         service = ExtractionService(config, user_email="user@hotmail.com")
 
-        m365_corpus = create_test_corpus(emails=[create_test_email(id="m365_1")])
-        gmail_corpus = create_test_corpus(emails=[create_test_email(id="gmail_1")])
+        m365_corpus = create_test_corpus(emails=[create_test_email(email_id="m365_1")])
+        gmail_corpus = create_test_corpus(emails=[create_test_email(email_id="gmail_1")])
 
         m365_result = ExtractionResult(
             corpus=m365_corpus, failed_emails=[],
@@ -1121,7 +1119,7 @@ class TestExtractionServiceBoth:
         service._gmail_extractor.extract_all.return_value = gmail_result
 
         callback_calls = []
-        result = service.run(progress_callback=lambda m: callback_calls.append(m))
+        service.run(progress_callback=lambda m: callback_calls.append(m))
 
         # Should have calls for: starting, both-mode, m365, gmail, merged
         assert len(callback_calls) >= 4
@@ -1153,8 +1151,7 @@ class TestExtractionServiceSourceRegistry:
 
     def test_all_three_modes_dispatch_correctly(self):
         """Test that hotmail, gmail, and both modes all dispatch via the registry."""
-        from src.extractors.m365_extractor import ExtractionResult
-        from src.services.extraction_service import ExtractionService, _SOURCE_REGISTRY
+        from src.services.extraction_service import _SOURCE_REGISTRY
 
         # Verify registry has all three modes
         assert "hotmail" in _SOURCE_REGISTRY
@@ -1219,8 +1216,8 @@ class TestExtractionServiceSourceRegistry:
         config = ExtractConfig(source="both", gmail_email="user@gmail.com")
         service = ExtractionService(config, user_email="user@hotmail.com")
 
-        m365_emails = [create_test_email(id="m365_1")]
-        gmail_emails = [create_test_email(id="gmail_1")]
+        m365_emails = [create_test_email(email_id="m365_1")]
+        gmail_emails = [create_test_email(email_id="gmail_1")]
 
         m365_corpus = create_test_corpus(emails=m365_emails)
         gmail_corpus = create_test_corpus(emails=gmail_emails)
@@ -1274,7 +1271,7 @@ class TestMergeCorpora:
         """Test merging a single corpus returns same emails."""
         from src.services.extraction_service import ExtractionService
 
-        emails = [create_test_email(id=f"e_{i}") for i in range(3)]
+        emails = [create_test_email(email_id=f"e_{i}") for i in range(3)]
         c1 = create_test_corpus(emails=emails)
 
         merged = ExtractionService._merge_corpora(
@@ -1325,7 +1322,6 @@ class TestPipelineServiceRun:
         self, mock_st, mock_suggest, mock_analyze, mock_extract
     ):
         """Test that run returns PipelineResult."""
-        import numpy as np
 
         from src.services.pipeline_service import PipelineResult, PipelineService
 
@@ -1730,7 +1726,7 @@ class TestExtractionServiceErrorPropagation:
         service = ExtractionService(config, user_email="user@hotmail.com")
 
         # M365 succeeds, Gmail fails
-        m365_corpus = create_test_corpus(emails=[create_test_email(id="m365_1")])
+        m365_corpus = create_test_corpus(emails=[create_test_email(email_id="m365_1")])
         m365_result = ExtractionResult(
             corpus=m365_corpus, failed_emails=[],
             success_count=1, failure_count=0, total_attempted=1,
@@ -1792,7 +1788,7 @@ class TestExtractionServiceSaveCorpus:
         config = ExtractConfig()
         service = ExtractionService(config, user_email="test@example.com")
 
-        emails = [create_test_email(id=f"e_{i}") for i in range(3)]
+        emails = [create_test_email(email_id=f"e_{i}") for i in range(3)]
         corpus = create_test_corpus(emails=emails)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1872,8 +1868,8 @@ class TestMergeCorporaEdgeCases:
         """Test that merge preserves order: first corpus emails before second."""
         from src.services.extraction_service import ExtractionService
 
-        emails_a = [create_test_email(id=f"a_{i}") for i in range(3)]
-        emails_b = [create_test_email(id=f"b_{i}") for i in range(2)]
+        emails_a = [create_test_email(email_id=f"a_{i}") for i in range(3)]
+        emails_b = [create_test_email(email_id=f"b_{i}") for i in range(2)]
 
         c1 = create_test_corpus(emails=emails_a)
         c2 = create_test_corpus(emails=emails_b)
@@ -1892,7 +1888,7 @@ class TestMergeCorporaEdgeCases:
 
         from src.services.extraction_service import ExtractionService
 
-        emails = [create_test_email(id=f"e_{i}") for i in range(3)]
+        emails = [create_test_email(email_id=f"e_{i}") for i in range(3)]
         c1 = create_test_corpus(emails=emails)
 
         merged = ExtractionService._merge_corpora(
@@ -1925,8 +1921,8 @@ class TestMergeCorporaEdgeCases:
         """Test that merged metadata includes source labels in extraction_params."""
         from src.services.extraction_service import ExtractionService
 
-        c1 = create_test_corpus(emails=[create_test_email(id="e1")])
-        c2 = create_test_corpus(emails=[create_test_email(id="e2")])
+        c1 = create_test_corpus(emails=[create_test_email(email_id="e1")])
+        c2 = create_test_corpus(emails=[create_test_email(email_id="e2")])
 
         merged = ExtractionService._merge_corpora(
             [c1, c2], user_email="test@example.com",
@@ -1941,7 +1937,7 @@ class TestMergeCorporaEdgeCases:
         """Test that merged metadata has the correct user_email."""
         from src.services.extraction_service import ExtractionService
 
-        c1 = create_test_corpus(emails=[create_test_email(id="e1")])
+        c1 = create_test_corpus(emails=[create_test_email(email_id="e1")])
 
         merged = ExtractionService._merge_corpora(
             [c1], user_email="merged@example.com",
@@ -2106,18 +2102,20 @@ class TestAnalysisServiceGenerateViz:
                 mock_kmeans = MagicMock()
                 mock_kmeans.fit_predict.return_value = mock_labels
 
-                with patch("sklearn.cluster.KMeans", return_value=mock_kmeans):
-                    with patch("src.utils.paths.PathConfig.get_output_dir") as mock_outdir:
-                        mock_outdir.return_value = Path("/tmp/test_output")
+                with (
+                    patch("sklearn.cluster.KMeans", return_value=mock_kmeans),
+                    patch("src.utils.paths.PathConfig.get_output_dir") as mock_outdir,
+                ):
+                    mock_outdir.return_value = Path("/tmp/test_output")
 
-                        service._generate_viz(corpus, results)
+                    service._generate_viz(corpus, results)
 
-                        # Verify generate_cluster_visualization was called
-                        mock_gen_viz.assert_called_once()
-                        call_kwargs = mock_gen_viz.call_args[1]
-                        assert call_kwargs["output_path"] == Path("/tmp/test_output/cluster_visualization.png")
-                        # Verify silhouette scores were passed
-                        assert call_kwargs["cluster_silhouette_scores"] is not None
+                    # Verify generate_cluster_visualization was called
+                    mock_gen_viz.assert_called_once()
+                    call_kwargs = mock_gen_viz.call_args[1]
+                    assert call_kwargs["output_path"] == Path("/tmp/test_output/cluster_visualization.png")
+                    # Verify silhouette scores were passed
+                    assert call_kwargs["cluster_silhouette_scores"] is not None
 
     def test_generate_viz_silhouette_map_excludes_none_scores(self):
         """Test that silhouette map only includes clusters with non-None scores."""
@@ -2167,16 +2165,18 @@ class TestAnalysisServiceGenerateViz:
                 mock_kmeans = MagicMock()
                 mock_kmeans.fit_predict.return_value = mock_labels
 
-                with patch("sklearn.cluster.KMeans", return_value=mock_kmeans):
-                    with patch("src.utils.paths.PathConfig.get_output_dir") as mock_outdir:
-                        mock_outdir.return_value = Path("/tmp/test_output")
+                with (
+                    patch("sklearn.cluster.KMeans", return_value=mock_kmeans),
+                    patch("src.utils.paths.PathConfig.get_output_dir") as mock_outdir,
+                ):
+                    mock_outdir.return_value = Path("/tmp/test_output")
 
-                        service._generate_viz(corpus, results)
+                    service._generate_viz(corpus, results)
 
-                        # With all silhouette scores None, silhouette_map is empty
-                        # so `silhouette_map or None` evaluates to None
-                        call_kwargs = mock_gen_viz.call_args[1]
-                        assert call_kwargs["cluster_silhouette_scores"] is None
+                    # With all silhouette scores None, silhouette_map is empty
+                    # so `silhouette_map or None` evaluates to None
+                    call_kwargs = mock_gen_viz.call_args[1]
+                    assert call_kwargs["cluster_silhouette_scores"] is None
 
 
 # =============================================================================
@@ -2276,13 +2276,15 @@ class TestPipelineServiceSkipExtraction:
         config = AppConfig(user_email="test@example.com")
         service = PipelineService(config)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValueError, match="existing_corpus required"):
-                service.run(
-                    output_dir=Path(tmpdir),
-                    skip_extraction=True,
-                    existing_corpus=None,
-                )
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValueError, match="existing_corpus required"),
+        ):
+            service.run(
+                output_dir=Path(tmpdir),
+                skip_extraction=True,
+                existing_corpus=None,
+            )
 
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
@@ -2334,9 +2336,11 @@ class TestPipelineServiceErrors:
         config = AppConfig(user_email="test@example.com")
         service = PipelineService(config)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ConnectionError, match="No network"):
-                service.run(output_dir=Path(tmpdir))
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ConnectionError, match="No network"),
+        ):
+            service.run(output_dir=Path(tmpdir))
 
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
@@ -2351,9 +2355,11 @@ class TestPipelineServiceErrors:
         config = AppConfig(user_email="test@example.com")
         service = PipelineService(config)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValueError, match="Empty corpus"):
-                service.run(output_dir=Path(tmpdir))
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValueError, match="Empty corpus"),
+        ):
+            service.run(output_dir=Path(tmpdir))
 
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
@@ -2374,9 +2380,11 @@ class TestPipelineServiceErrors:
         config = AppConfig(user_email="test@example.com")
         service = PipelineService(config)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(RuntimeError, match="Generator broke"):
-                service.run(output_dir=Path(tmpdir))
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(RuntimeError, match="Generator broke"),
+        ):
+            service.run(output_dir=Path(tmpdir))
 
 
 # =============================================================================
@@ -2540,7 +2548,7 @@ class TestPipelineServiceOutputFiles:
         service = PipelineService(config)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = service.run(output_dir=Path(tmpdir))
+            service.run(output_dir=Path(tmpdir))
 
             analysis_path = Path(tmpdir) / "corpus_analysis_results.json"
             assert analysis_path.exists()
@@ -2566,7 +2574,7 @@ class TestPipelineServiceOutputFiles:
         service = PipelineService(config)
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = service.run(output_dir=Path(tmpdir))
+            service.run(output_dir=Path(tmpdir))
 
             suggestions_path = Path(tmpdir) / "category_suggestions.json"
             assert suggestions_path.exists()
@@ -2731,8 +2739,8 @@ class TestExtractionServiceProgressDetails:
         config = ExtractConfig(source="both", gmail_email="user@gmail.com")
         service = ExtractionService(config, user_email="user@hotmail.com")
 
-        m365_corpus = create_test_corpus(emails=[create_test_email(id="m365_1")])
-        gmail_corpus = create_test_corpus(emails=[create_test_email(id="gmail_1")])
+        m365_corpus = create_test_corpus(emails=[create_test_email(email_id="m365_1")])
+        gmail_corpus = create_test_corpus(emails=[create_test_email(email_id="gmail_1")])
 
         m365_result = ExtractionResult(
             corpus=m365_corpus, failed_emails=[],
@@ -2763,8 +2771,8 @@ class TestExtractionServiceProgressDetails:
         config = ExtractConfig(source="both", gmail_email="user@gmail.com")
         service = ExtractionService(config, user_email="user@hotmail.com")
 
-        m365_emails = [create_test_email(id=f"m365_{i}") for i in range(5)]
-        gmail_emails = [create_test_email(id=f"gmail_{i}") for i in range(3)]
+        m365_emails = [create_test_email(email_id=f"m365_{i}") for i in range(5)]
+        gmail_emails = [create_test_email(email_id=f"gmail_{i}") for i in range(3)]
 
         m365_corpus = create_test_corpus(emails=m365_emails)
         gmail_corpus = create_test_corpus(emails=gmail_emails)

@@ -1,13 +1,11 @@
 """Tests for GraphAPIClient - Microsoft Graph API integration."""
-import json
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.exceptions import RateLimitError
-from src.extractors.graph_api_client import GraphAPIClient, DEFAULT_CLIENT_ID
+from src.extractors.graph_api_client import DEFAULT_CLIENT_ID, GraphAPIClient
 
 
 @pytest.fixture
