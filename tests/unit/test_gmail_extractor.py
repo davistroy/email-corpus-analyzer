@@ -617,3 +617,91 @@ class TestGmailExtractorComputeHash:
         h1 = GmailExtractor._compute_email_ids_hash(emails)
         h2 = GmailExtractor._compute_email_ids_hash(list(reversed(emails)))
         assert h1 == h2  # Order-independent
+
+
+class TestGmailRecipientParsing:
+    """Test safe recipient parsing for Gmail extractor (Work Item 1.1)."""
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create GmailExtractor with mocked GmailClient."""
+        mock_client = MagicMock()
+        with patch("src.extractors.gmail_client.GmailClient", return_value=mock_client):
+            ext = GmailExtractor(
+                user_email="test@gmail.com",
+                checkpoint_dir=str(tmp_path),
+            )
+        ext.gmail_client = mock_client
+        return ext
+
+    @pytest.fixture
+    def base_email_data(self):
+        """Base normalized Gmail email data without toRecipients."""
+        return {
+            "id": "gmail_recipient_test",
+            "subject": "Recipient Test",
+            "from": {
+                "emailAddress": {
+                    "address": "sender@example.com",
+                    "name": "Sender",
+                }
+            },
+            "body": {"content": "<p>Body</p>"},
+            "receivedDateTime": "2025-01-15T10:30:00Z",
+            "hasAttachments": False,
+            "_gmail_thread_id": "thread_test",
+            "_in_reply_to": None,
+            "_references": [],
+        }
+
+    def test_empty_to_recipients_list(self, extractor, base_email_data):
+        """Emails with toRecipients=[] produce recipient_email=None."""
+        base_email_data["toRecipients"] = []
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_none_to_recipients(self, extractor, base_email_data):
+        """Emails with toRecipients=None produce recipient_email=None."""
+        base_email_data["toRecipients"] = None
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_missing_to_recipients_key(self, extractor, base_email_data):
+        """Emails with no toRecipients key produce recipient_email=None."""
+        base_email_data.pop("toRecipients", None)
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_valid_to_recipients(self, extractor, base_email_data):
+        """Emails with valid toRecipients extract correctly."""
+        base_email_data["toRecipients"] = [
+            {
+                "emailAddress": {
+                    "address": "recipient@gmail.com",
+                    "name": "Gmail User",
+                }
+            }
+        ]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email == "recipient@gmail.com"
+        assert email.recipient_name == "Gmail User"
+
+    def test_multiple_to_recipients_takes_first(self, extractor, base_email_data):
+        """When multiple recipients exist, the first is used."""
+        base_email_data["toRecipients"] = [
+            {"emailAddress": {"address": "first@gmail.com", "name": "First"}},
+            {"emailAddress": {"address": "second@gmail.com", "name": "Second"}},
+        ]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email == "first@gmail.com"
+        assert email.recipient_name == "First"
+
+    def test_to_recipients_with_empty_email_address_dict(self, extractor, base_email_data):
+        """When toRecipients has entry with empty emailAddress, returns None/empty."""
+        base_email_data["toRecipients"] = [{"emailAddress": {}}]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""

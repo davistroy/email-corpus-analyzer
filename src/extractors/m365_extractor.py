@@ -131,14 +131,24 @@ class EmailExtractor(BaseExtractor):
             self.logger.warning(f"HTML parsing failed for email {email_data.get('id')}: {e}")
             body_text = html_body  # Fallback to raw HTML
 
+        # Safe recipient extraction: handle missing, None, or empty toRecipients
+        to_recipients = email_data.get("toRecipients") or []
+        if to_recipients:
+            first_recipient = to_recipients[0]
+            recipient_email = first_recipient.get("emailAddress", {}).get("address")
+            recipient_name = first_recipient.get("emailAddress", {}).get("name", "")
+        else:
+            recipient_email = None
+            recipient_name = ""
+
         # Create Email object
         return Email(
             id=email_data.get("id", ""),
             sender_email=sender_email,
             sender_name=email_data.get("from", {}).get("emailAddress", {}).get("name", ""),
             sender_domain=sender_domain,
-            recipient_email=email_data.get("toRecipients", [{}])[0].get("emailAddress", {}).get("address"),
-            recipient_name=email_data.get("toRecipients", [{}])[0].get("emailAddress", {}).get("name", ""),
+            recipient_email=recipient_email,
+            recipient_name=recipient_name,
             subject=email_data.get("subject", ""),
             body_text=body_text,
             received_date=datetime.fromisoformat(email_data.get("receivedDateTime", "").replace("Z", "+00:00")),

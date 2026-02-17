@@ -238,7 +238,12 @@ class BaseExtractor(ABC):
         if existing_ids is None:
             try:
                 total_emails = self._get_total_email_count()
-                self.logger.info(f"Found {total_emails} total emails to process")
+                if total_emails == EMAIL_COUNT_SENTINEL:
+                    self.logger.info(
+                        "Fetching emails (total count unknown, will paginate until complete)"
+                    )
+                else:
+                    self.logger.info(f"Found {total_emails:,} emails to process")
             except Exception as e:
                 source_name = self._get_source_name()
                 self.logger.error(f"Failed to get email count: {e}")

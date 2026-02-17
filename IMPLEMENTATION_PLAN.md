@@ -33,7 +33,7 @@ All four recommendations are scoped to a single phase. The fixes are independent
 
 ### Work Items
 
-#### 1.1 Fix toRecipients IndexError in Both Extractors
+#### 1.1 Fix toRecipients IndexError in Both Extractors -- COMPLETE (2026-02-17)
 **Recommendation Ref:** D1
 **Files Affected:**
 - `src/extractors/m365_extractor.py` (lines 140-141)
@@ -104,7 +104,7 @@ The `ExtractionService._run_single_extractor()` currently calls `extractor.extra
 
 ---
 
-#### 1.3 Suppress Sentinel Value from User-Facing Output
+#### 1.3 Suppress Sentinel Value from User-Facing Output -- COMPLETE (2026-02-17)
 **Recommendation Ref:** U1
 **Files Affected:**
 - `src/extractors/base_extractor.py` (lines 237-241)

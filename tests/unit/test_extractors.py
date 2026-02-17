@@ -463,11 +463,11 @@ class TestEmailExtractor:
         assert email.body_text == ""
 
     def test_process_email_missing_recipients(self, extractor, mock_email_data):
-        """Test handling of email with no recipients raises IndexError."""
+        """Test handling of email with empty toRecipients list."""
         mock_email_data["toRecipients"] = []
-        # Current implementation doesn't handle empty recipients gracefully
-        with pytest.raises(IndexError):
-            extractor._process_email(mock_email_data)
+        email = extractor._process_email(mock_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
 
     def test_process_email_parses_date(self, extractor, mock_email_data):
         """Test that received date is properly parsed."""
@@ -931,6 +931,112 @@ class TestEmailExtractorRetryLogic:
                 extractor._get_total_email_count()
 
 
+class TestSentinelValueSuppression:
+    """Test cases for work item 1.3: Suppress sentinel value from user-facing output.
+
+    Patches the extractor's logger.info to inspect log messages directly,
+    since the logger uses propagate=False and holds a pre-captured sys.stdout
+    reference that defeats both caplog and capsys.
+    """
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create EmailExtractor for sentinel tests."""
+        return EmailExtractor(
+            user_email="sentinel@example.com",
+            checkpoint_dir=str(tmp_path)
+        )
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_sentinel_value_suppressed_in_log(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Test that sentinel value 999999 does not appear in any log message."""
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
+        mock_fetch_batch.return_value = []
+
+        logged_messages = []
+        original_info = extractor.logger.info
+        extractor.logger.info = lambda msg, *a, **kw: logged_messages.append(msg)
+
+        try:
+            extractor.extract_all()
+        finally:
+            extractor.logger.info = original_info
+
+        for msg in logged_messages:
+            assert "999999" not in msg, (
+                f"Sentinel value leaked into log: {msg}"
+            )
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_sentinel_shows_unknown_count_message(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Test that sentinel triggers 'total count unknown' message."""
+        mock_get_count.return_value = EMAIL_COUNT_SENTINEL
+        mock_fetch_batch.return_value = []
+
+        logged_messages = []
+        original_info = extractor.logger.info
+        extractor.logger.info = lambda msg, *a, **kw: logged_messages.append(msg)
+
+        try:
+            extractor.extract_all()
+        finally:
+            extractor.logger.info = original_info
+
+        assert any(
+            "total count unknown" in msg for msg in logged_messages
+        ), f"Expected 'total count unknown' message, got: {logged_messages}"
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_real_count_shows_formatted_number(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Test that a real email count displays with comma formatting."""
+        mock_get_count.return_value = 1500
+        mock_fetch_batch.return_value = []
+
+        logged_messages = []
+        original_info = extractor.logger.info
+        extractor.logger.info = lambda msg, *a, **kw: logged_messages.append(msg)
+
+        try:
+            extractor.extract_all()
+        finally:
+            extractor.logger.info = original_info
+
+        assert any(
+            "Found 1,500 emails to process" in msg for msg in logged_messages
+        ), f"Expected formatted count '1,500', got: {logged_messages}"
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_small_real_count_shows_number(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Test that a small real email count displays without commas."""
+        mock_get_count.return_value = 42
+        mock_fetch_batch.return_value = []
+
+        logged_messages = []
+        original_info = extractor.logger.info
+        extractor.logger.info = lambda msg, *a, **kw: logged_messages.append(msg)
+
+        try:
+            extractor.extract_all()
+        finally:
+            extractor.logger.info = original_info
+
+        assert any(
+            "Found 42 emails to process" in msg for msg in logged_messages
+        ), f"Expected 'Found 42 emails to process', got: {logged_messages}"
+
+
 class TestIncrementalExtraction:
     """Test cases for Task 4B.2: Incremental extraction functionality."""
 
@@ -1187,6 +1293,88 @@ class TestIncrementalExtraction:
             assert result.total_count == 2  # Still just the 2 original
 
 
+class TestM365RecipientParsing:
+    """Test safe recipient parsing for M365 extractor (Work Item 1.1)."""
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create EmailExtractor with temp directory."""
+        return EmailExtractor(
+            user_email="test@example.com",
+            checkpoint_dir=str(tmp_path),
+        )
+
+    @pytest.fixture
+    def base_email_data(self):
+        """Base M365 email data without toRecipients (to be set per test)."""
+        return {
+            "id": "msg_recipient_test",
+            "subject": "Recipient Test",
+            "from": {
+                "emailAddress": {
+                    "address": "sender@example.com",
+                    "name": "Sender",
+                }
+            },
+            "body": {"content": "<p>Body</p>"},
+            "receivedDateTime": "2024-01-15T10:30:00Z",
+            "hasAttachments": False,
+        }
+
+    def test_empty_to_recipients_list(self, extractor, base_email_data):
+        """Emails with toRecipients=[] produce recipient_email=None."""
+        base_email_data["toRecipients"] = []
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_none_to_recipients(self, extractor, base_email_data):
+        """Emails with toRecipients=None produce recipient_email=None."""
+        base_email_data["toRecipients"] = None
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_missing_to_recipients_key(self, extractor, base_email_data):
+        """Emails with no toRecipients key produce recipient_email=None."""
+        # Ensure key is not present
+        base_email_data.pop("toRecipients", None)
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_valid_to_recipients(self, extractor, base_email_data):
+        """Emails with valid toRecipients extract correctly."""
+        base_email_data["toRecipients"] = [
+            {
+                "emailAddress": {
+                    "address": "recipient@example.com",
+                    "name": "Test Recipient",
+                }
+            }
+        ]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email == "recipient@example.com"
+        assert email.recipient_name == "Test Recipient"
+
+    def test_multiple_to_recipients_takes_first(self, extractor, base_email_data):
+        """When multiple recipients exist, the first is used."""
+        base_email_data["toRecipients"] = [
+            {"emailAddress": {"address": "first@example.com", "name": "First"}},
+            {"emailAddress": {"address": "second@example.com", "name": "Second"}},
+        ]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email == "first@example.com"
+        assert email.recipient_name == "First"
+
+    def test_to_recipients_with_empty_email_address_dict(self, extractor, base_email_data):
+        """When toRecipients has entry with empty emailAddress, returns None/empty."""
+        base_email_data["toRecipients"] = [{"emailAddress": {}}]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+
 class TestEmailExtractorEdgeCases:
     """Test edge cases for EmailExtractor."""
 
@@ -1216,7 +1404,7 @@ class TestEmailExtractorEdgeCases:
         }
 
         # Lenient validator still rejects strings without @ (ValueError)
-        with pytest.raises((KeyError, ValueError, TypeError, IndexError)):
+        with pytest.raises((KeyError, ValueError, TypeError)):
             extractor._process_email(email_data)
 
     def test_process_email_accepts_technically_invalid_addresses(self, extractor):
