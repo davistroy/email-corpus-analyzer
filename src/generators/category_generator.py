@@ -10,6 +10,7 @@ Task 2.2: Externalized magic numbers to GeneratorThresholds config.
 """
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 from typing import TYPE_CHECKING
 
 from src.generators.confidence_scorer import (
@@ -107,6 +108,10 @@ class CategoryGenerator:
         all_categories.extend(template_categories)
         logger.debug(f"Created {len(template_categories)} template-based categories")
 
+        # FR-027: Merge similar categories (before scoring so we only score final set)
+        logger.debug("Merging similar categories")
+        all_categories = self._merge_similar(all_categories)
+
         # FR-025: Calculate enhanced confidence scores with configurable weights
         logger.debug("Calculating enhanced confidence scores")
         weights = ConfidenceWeights.from_thresholds(self.thresholds)
@@ -121,10 +126,6 @@ class CategoryGenerator:
             )
             category.confidence = confidence
             category.confidence_breakdown = breakdown
-
-        # FR-027: Merge similar categories
-        logger.debug("Merging similar categories")
-        all_categories = self._merge_similar(all_categories)
 
         # FR-028: Sort by confidence
         all_categories.sort(key=lambda c: c.confidence, reverse=True)
@@ -287,8 +288,6 @@ class CategoryGenerator:
         - Normal similarity (>threshold): requires both name similarity AND
           example email ID overlap above threshold.
         """
-        from difflib import SequenceMatcher
-
         merged = []
         merged_indices = set()
 
@@ -303,9 +302,9 @@ class CategoryGenerator:
                     continue
 
                 # Calculate name similarity ratio
-                n1 = cat1.category_name.lower()
-                n2 = cat2.category_name.lower()
-                name_ratio = 1.0 if n1 == n2 else SequenceMatcher(None, n1, n2).ratio()
+                name_ratio = self._name_similarity_ratio(
+                    cat1.category_name, cat2.category_name
+                )
 
                 if name_ratio > 0.9:
                     # Very high name similarity: use count ratio instead of
@@ -313,10 +312,7 @@ class CategoryGenerator:
                     count1 = cat1.email_count or 0
                     count2 = cat2.email_count or 0
                     max_count = max(count1, count2)
-                    if max_count > 0:
-                        count_ratio = min(count1, count2) / max_count
-                    else:
-                        count_ratio = 0.0
+                    count_ratio = min(count1, count2) / max_count if max_count > 0 else 0.0
                     if count_ratio > 0.3:
                         similar.append(cat2)
                         merged_indices.add(j)
@@ -345,6 +341,14 @@ class CategoryGenerator:
         logger.debug(f"Merged {len(categories)} → {len(merged)} categories")
         return merged
 
+    @staticmethod
+    def _name_similarity_ratio(name1: str, name2: str) -> float:
+        """Return similarity ratio (0.0-1.0) between two category names."""
+        n1, n2 = name1.lower(), name2.lower()
+        if n1 == n2:
+            return 1.0
+        return SequenceMatcher(None, n1, n2).ratio()
+
     def _names_similar(
         self,
         name1: str,
@@ -368,18 +372,7 @@ class CategoryGenerator:
         Returns:
             True if names are similar (ratio >= threshold), False otherwise
         """
-        from difflib import SequenceMatcher
-
-        n1, n2 = name1.lower(), name2.lower()
-
-        # Exact match is always similar
-        if n1 == n2:
-            return True
-
-        # Use SequenceMatcher for similarity ratio
-        ratio = SequenceMatcher(None, n1, n2).ratio()
-
-        return ratio >= threshold
+        return self._name_similarity_ratio(name1, name2) >= threshold
 
     def _calculate_overlap(self, set1: set, set2: set) -> float:
         """Calculate overlap percentage between two email ID sets."""
