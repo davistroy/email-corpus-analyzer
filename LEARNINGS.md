@@ -9,3 +9,4 @@
 ## 2026-02-28
 
 - Minor lint issues (unused imports) in test files; fixed by running `ruff check --fix`
+- All three parallel items (1.2, 1.3, 1.5) integrated cleanly with no merge conflicts. 2230 total tests passing.

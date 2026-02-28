@@ -2,7 +2,10 @@
 Merge selection dialog for the TUI application.
 
 Modal dialog for selecting a category to merge into with preview.
+Error handling improved per Phase 2 Item 1.6.
 """
+
+import logging
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -14,6 +17,8 @@ from textual.widgets import DataTable, Static
 
 from src.models.category import Category
 from src.ui.tui.utils import MAX_NAME_DISPLAY
+
+logger = logging.getLogger(__name__)
 
 
 class MergeDialog(ModalScreen[Category | None]):
@@ -39,7 +44,9 @@ class MergeDialog(ModalScreen[Category | None]):
     CSS = """
     #merge-dialog {
         align: center middle;
-        width: 80;
+        width: 80%;
+        min-width: 60;
+        max-width: 100;
         height: auto;
         max-height: 80%;
         border: thick $primary;
@@ -184,7 +191,7 @@ class MergeDialog(ModalScreen[Category | None]):
             else:
                 preview_widget.update("No category selected")
         except NoMatches:
-            pass  # Preview widget may not be mounted yet
+            logger.debug("Merge preview widget not mounted yet, skipping update")
 
     def action_move_down(self) -> None:
         """Move selection down."""
@@ -194,7 +201,7 @@ class MergeDialog(ModalScreen[Category | None]):
                 table = self.query_one("#merge-table", DataTable)
                 table.move_cursor(row=self.selected_index)
             except NoMatches:
-                pass  # Table may not be mounted yet
+                logger.debug("Merge table not mounted yet, cannot move cursor down")
             self._update_preview()
 
     def action_move_up(self) -> None:
@@ -205,7 +212,7 @@ class MergeDialog(ModalScreen[Category | None]):
                 table = self.query_one("#merge-table", DataTable)
                 table.move_cursor(row=self.selected_index)
             except NoMatches:
-                pass  # Table may not be mounted yet
+                logger.debug("Merge table not mounted yet, cannot move cursor up")
             self._update_preview()
 
     def action_select_category(self) -> None:

@@ -54,13 +54,20 @@ Screen {
 }
 
 #category-list {
-    width: 60%;
+    width: 3fr;
+    min-width: 30;
     border: solid $primary;
     border-title-color: $primary;
+    overflow-y: auto;
+}
+
+#detail-container {
+    width: 2fr;
+    min-width: 25;
+    overflow-y: auto;
 }
 
 #detail-panel {
-    width: 40%;
     border: solid $secondary;
     border-title-color: $secondary;
 }
@@ -104,5 +111,21 @@ DataTable > .datatable--cursor {
 DataTable > .datatable--header {
     text-style: bold;
     background: $surface;
+}
+
+#stats-panel {
+    height: auto;
+    max-height: 14;
+    padding: 0 1;
+    border-top: solid $border;
+}
+
+#too-small-message {
+    align: center middle;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    color: $warning;
+    text-style: bold;
 }
 """

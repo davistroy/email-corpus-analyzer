@@ -54,7 +54,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 1.2 Wire StatsPanel into Layout
+#### 1.2 Wire StatsPanel into Layout — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/app.py`
@@ -74,7 +74,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 1.3 Wire SearchInput and Filter System
+#### 1.3 Wire SearchInput and Filter System — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/app.py`
@@ -118,7 +118,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 1.5 Responsive Layout
+#### 1.5 Responsive Layout — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/theme.py` (APP_CSS)
@@ -139,7 +139,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 1.6 Error Handling & User Feedback
+#### 1.6 Error Handling & User Feedback — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/app.py`

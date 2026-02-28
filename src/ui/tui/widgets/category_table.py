@@ -18,6 +18,45 @@ from src.ui.tui.utils import MAX_NAME_DISPLAY, format_confidence_bar
 # Table column definitions
 TABLE_COLUMNS = ["#", "Name", "Confidence", "Emails", "Source"]
 
+# Fixed column widths (these don't change with terminal size)
+FIXED_COL_INDEX_WIDTH = 4
+FIXED_COL_CONFIDENCE_WIDTH = 18
+FIXED_COL_EMAILS_WIDTH = 8
+FIXED_COL_SOURCE_WIDTH = 10
+
+# Sum of fixed columns (excluding Name which is dynamic)
+_FIXED_WIDTH_TOTAL = (
+    FIXED_COL_INDEX_WIDTH
+    + FIXED_COL_CONFIDENCE_WIDTH
+    + FIXED_COL_EMAILS_WIDTH
+    + FIXED_COL_SOURCE_WIDTH
+)
+
+# Minimum name column width to keep text readable
+MIN_NAME_COLUMN_WIDTH = 15
+
+
+def calculate_name_column_width(terminal_width: int) -> int:
+    """
+    Calculate the name column width based on available terminal width.
+
+    The name column gets whatever space remains after fixed-width columns
+    (index, confidence, emails, source) and estimated borders/padding.
+    The result is clamped to a minimum of MIN_NAME_COLUMN_WIDTH.
+
+    Args:
+        terminal_width: Total terminal width in columns.
+
+    Returns:
+        Width in characters for the Name column.
+    """
+    # The category list pane gets ~60% of terminal width
+    # (3fr out of 5fr total), minus borders (~4 chars)
+    pane_width = int(terminal_width * 3 / 5) - 4
+    available = pane_width - _FIXED_WIDTH_TOTAL
+    return max(MIN_NAME_COLUMN_WIDTH, available)
+
+
 # Hierarchy indicators
 EXPAND_INDICATOR = "+"
 COLLAPSE_INDICATOR = "-"
@@ -309,6 +348,30 @@ class CategoryTable(DataTable):
         """Refresh the table display."""
         self._populate_rows()
 
+    def update_column_widths(self, terminal_width: int) -> None:
+        """
+        Recalculate column widths based on terminal width (Phase 2 Item 1.5).
+
+        Updates the Name column to use available space while keeping
+        fixed-width columns unchanged. Repopulates rows to apply
+        new truncation lengths.
+
+        Args:
+            terminal_width: Current terminal width in columns.
+        """
+        new_name_width = calculate_name_column_width(terminal_width)
+        # Update the column width in the DataTable if columns exist
+        if self._table_initialized and self.columns:
+            try:
+                name_col = self.columns.get("name")
+                if name_col is not None:
+                    name_col.width = new_name_width
+            except (KeyError, AttributeError):
+                pass  # Column may not exist yet
+        # Re-populate rows so name truncation uses the new width
+        if self._table_initialized:
+            self._populate_rows()
+
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row highlight event."""
         if event.cursor_row is not None:
@@ -520,8 +583,17 @@ class CategoryTable(DataTable):
                     break
 
         self._filtered_categories = filtered
+        self._clamp_selected_row()
         if self._table_initialized:
             self._populate_rows()
+
+    def _clamp_selected_row(self) -> None:
+        """Clamp selected_row to valid range for currently visible categories."""
+        visible = self.get_visible_categories()
+        if not visible:
+            self.selected_row = 0
+        elif self.selected_row >= len(visible):
+            self.selected_row = len(visible) - 1
 
     def _matches_filter(self, category: Category, query: str) -> bool:
         """
@@ -550,8 +622,10 @@ class CategoryTable(DataTable):
                 return category.confidence > threshold
             return category.confidence < threshold
 
-        # Default: fuzzy match on name (case insensitive)
-        return query_lower in category.category_name.lower()
+        # Default: fuzzy match on name or description (case insensitive)
+        return query_lower in category.category_name.lower() or (
+            bool(category.description) and query_lower in category.description.lower()
+        )
 
     def clear_filter(self) -> None:
         """Clear the current filter."""

@@ -37,3 +37,18 @@
 - Status: Complete
 - Files changed: src/ui/tui/state.py (created), src/ui/tui/app.py, src/ui/tui/__init__.py, tests/unit/test_review_state.py (created), tests/unit/test_review_state_app_integration.py (created)
 - Summary: Created `ReviewState` dataclass holding all mutable state, replaced scattered state across app and widgets with single centralized instance, added state change notifications and invalid state transition guards
+
+### Item 1.2: Wire StatsPanel into Layout
+- Status: Complete
+- Files changed: src/ui/tui/widgets/stats_panel.py, src/ui/tui/app.py, src/ui/tui/theme.py, tests/unit/test_stats_panel_wiring.py (created)
+- Summary: Wired StatsPanel into TUI layout with live counters and session timer. 39 new tests.
+
+### Item 1.3: Wire SearchInput and Filter System
+- Status: Complete
+- Files changed: src/ui/tui/widgets/search_input.py, src/ui/tui/widgets/category_table.py, src/ui/tui/app.py, tests/unit/test_search_filter_integration.py (created)
+- Summary: Wired SearchInput into TUI with vim-style `/` activation, filter-as-you-type against category table, and filter status indicator. 30 new tests.
+
+### Item 1.5: Responsive Layout
+- Status: Complete
+- Files changed: src/ui/tui/theme.py, src/ui/tui/app.py, src/ui/tui/widgets/category_table.py, src/ui/tui/dialogs/merge_dialog.py, src/ui/tui/dialogs/rename_dialog.py, tests/unit/test_tui_responsive.py (created)
+- Summary: Replaced hardcoded layout splits with CSS fr units, scaled column widths, added minimum terminal size check, percentage-based modal widths, and terminal resize handling. 33 new tests.

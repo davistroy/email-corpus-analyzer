@@ -5,12 +5,18 @@ Provides an interactive terminal-based interface for reviewing,
 approving, and modifying suggested email categories.
 
 State is centralized in ReviewState (state.py) per Phase 2 Item 1.4.
+Responsive layout per Phase 2 Item 1.5.
+Search/filter system per Phase 2 Item 1.3.
+Error handling & user feedback per Phase 2 Item 1.6.
 """
+
+import logging
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
+from textual.events import Resize
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Static
@@ -21,6 +27,49 @@ from src.ui.tui.theme import APP_CSS
 from src.ui.tui.widgets.action_bar import ActionBar, HelpOverlay
 from src.ui.tui.widgets.category_table import CategoryTable
 from src.ui.tui.widgets.detail_panel import DetailPanel
+from src.ui.tui.widgets.search_input import SearchInput
+from src.ui.tui.widgets.stats_panel import StatsPanel
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Minimum terminal size constants (Phase 2 Item 1.5)
+# ---------------------------------------------------------------------------
+
+MIN_TERMINAL_COLS: int = 80
+"""Minimum terminal width (columns) required for the TUI."""
+
+MIN_TERMINAL_ROWS: int = 24
+"""Minimum terminal height (rows) required for the TUI."""
+
+
+def check_terminal_size(cols: int, rows: int) -> tuple[bool, str | None]:
+    """
+    Check whether the terminal meets minimum size requirements.
+
+    Args:
+        cols: Current terminal width in columns.
+        rows: Current terminal height in rows.
+
+    Returns:
+        Tuple of (ok, message). ok is True if size is sufficient.
+        message is None when ok, or a user-friendly explanation when not.
+    """
+    if cols >= MIN_TERMINAL_COLS and rows >= MIN_TERMINAL_ROWS:
+        return True, None
+
+    parts = []
+    if cols < MIN_TERMINAL_COLS:
+        parts.append(f"width {cols} < {MIN_TERMINAL_COLS}")
+    if rows < MIN_TERMINAL_ROWS:
+        parts.append(f"height {rows} < {MIN_TERMINAL_ROWS}")
+
+    detail = " and ".join(parts)
+    msg = (
+        f"Terminal too small ({detail}). "
+        f"Please resize to at least {MIN_TERMINAL_COLS}x{MIN_TERMINAL_ROWS}."
+    )
+    return False, msg
 
 
 class RenameModal(ModalScreen[str | None]):
@@ -147,6 +196,7 @@ class ReviewApp(App):
     - Viewing suggested categories in a scrollable table
     - Seeing detailed information about each category
     - Accepting, renaming, merging, deleting, or skipping categories
+    - Filtering categories with vim-style '/' search (Phase 2 Item 1.3)
     """
 
     TITLE = "Category Review"
@@ -159,6 +209,7 @@ class ReviewApp(App):
         Binding("ctrl+c", "quit_confirm", "Quit"),
         Binding("?", "help", "Help"),
         Binding("f1", "help", "Help"),
+        Binding("slash", "activate_search", "Search"),
         Binding("a", "accept", "Accept"),
         Binding("r", "rename", "Rename"),
         Binding("m", "merge", "Merge"),
@@ -270,10 +321,12 @@ class ReviewApp(App):
         yield Header()
         yield Horizontal(
             Vertical(
+                SearchInput(id="search-input"),
                 CategoryTable(
                     categories=self.categories,
                     id="category-table",
                 ),
+                StatsPanel(id="stats-panel"),
                 id="category-list",
             ),
             Vertical(
@@ -291,8 +344,94 @@ class ReviewApp(App):
 
     def on_mount(self) -> None:
         """Handle app mount event."""
+        self._check_size_and_warn(self.size.width, self.size.height)
         self._update_detail_panel()
         self._update_action_bar()
+        self._update_stats_panel()
+
+    def on_resize(self, event: Resize) -> None:
+        """Handle terminal resize events (Phase 2 Item 1.5).
+
+        Recalculates column widths and updates the category table
+        truncation so names use available space. Also re-checks
+        minimum terminal size and shows a warning if too small.
+        """
+        self._check_size_and_warn(event.size.width, event.size.height)
+
+    def _check_size_and_warn(self, cols: int, rows: int) -> None:
+        """Show or hide a warning if terminal is below minimum size."""
+        ok, msg = check_terminal_size(cols, rows)
+        if not ok:
+            self.notify(msg or "Terminal too small", severity="warning", timeout=5)
+
+    # -------------------------------------------------------------------------
+    # Search / Filter (Phase 2 Item 1.3)
+    # -------------------------------------------------------------------------
+
+    def action_activate_search(self) -> None:
+        """Activate the search input (vim-style '/' key)."""
+        try:
+            search = self.query_one("#search-input", SearchInput)
+            search.focus()
+        except NoMatches:
+            logger.debug("Search input widget not mounted yet, cannot activate search")
+
+    def _on_search_input_changed(self, event: Input.Changed) -> None:
+        """Handle changes in the SearchInput widget.
+
+        Wires SearchInput.on_input_changed to CategoryTable.apply_filter()
+        and updates ReviewState.filter_text.
+
+        Only responds to events from the search-input widget (not rename
+        or other Input widgets).
+        """
+        if event.input.id != "search-input":
+            return
+        self._apply_filter(event.value)
+
+    def _apply_filter(self, query: str) -> None:
+        """Apply the given filter query to the category table and state.
+
+        Args:
+            query: Filter query string (may be empty to clear the filter).
+        """
+        self.state.filter_text = query
+
+        try:
+            table = self.query_one("#category-table", CategoryTable)
+            table.apply_filter(query)
+            self._update_filter_indicator()
+        except NoMatches:
+            logger.debug("Category table not mounted yet, cannot apply filter")
+
+    def _update_filter_indicator(self) -> None:
+        """Update the filter indicator in the search input."""
+        try:
+            table = self.query_one("#category-table", CategoryTable)
+            search = self.query_one("#search-input", SearchInput)
+            visible_count = len(table.get_visible_categories())
+            total_count = len(table.categories)
+            indicator = search.get_filter_indicator(visible_count, total_count)
+            if indicator:
+                search.placeholder = indicator
+            else:
+                search.placeholder = "Search (/ to activate, Esc to clear)"
+        except NoMatches:
+            logger.debug("Table or search widgets not mounted yet, cannot update filter indicator")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle input submission in SearchInput.
+
+        When the user presses Enter in the search input, return focus
+        to the category table so they can act on the filtered results.
+        """
+        if event.input.id != "search-input":
+            return
+        try:
+            table = self.query_one("#category-table", CategoryTable)
+            table.focus()
+        except NoMatches:
+            logger.debug("Category table not mounted yet, cannot focus after search submit")
 
     # -------------------------------------------------------------------------
     # Public query methods
@@ -346,7 +485,7 @@ class ReviewApp(App):
             category = self.get_selected_category()
             panel.update_category(category)
         except NoMatches:
-            pass  # Panel may not be mounted yet
+            logger.debug("Detail panel not mounted yet, skipping update")
 
     def _update_action_bar(self) -> None:
         """Update action bar based on current state."""
@@ -354,7 +493,7 @@ class ReviewApp(App):
             bar = self.query_one("#action-bar", ActionBar)
             bar.set_merge_enabled(len(self.approved_categories) > 0)
         except NoMatches:
-            pass  # Bar may not be mounted yet
+            logger.debug("Action bar not mounted yet, skipping update")
 
     def _update_table(self) -> None:
         """Update the category table."""
@@ -363,13 +502,23 @@ class ReviewApp(App):
             table.categories = self.categories
             table.refresh_display()
         except NoMatches:
-            pass  # Table may not be mounted yet
+            logger.debug("Category table not mounted yet, skipping update")
+
+    def _update_stats_panel(self) -> None:
+        """Update the stats panel from current ReviewState."""
+        try:
+            panel = self.query_one("#stats-panel", StatsPanel)
+            panel.update_from_state(self.state)
+        except NoMatches:
+            logger.debug("Stats panel not mounted yet, skipping update")
 
     def _refresh_all_widgets(self) -> None:
         """Refresh all widgets after a state change."""
         self._update_table()
         self._update_detail_panel()
         self._update_action_bar()
+        self._update_stats_panel()
+        self._update_subtitle()
 
     def _remove_current_category(self) -> Category | None:
         """Remove and return the current category from the list.
@@ -389,15 +538,42 @@ class ReviewApp(App):
         return category
 
     # -------------------------------------------------------------------------
+    # Unsaved changes indicator (Phase 2 Item 1.6)
+    # -------------------------------------------------------------------------
+
+    def _get_subtitle_text(self) -> str:
+        """Get the subtitle text, including unsaved changes indicator if needed.
+
+        Returns:
+            Subtitle string, with '[Unsaved Changes]' appended when dirty.
+        """
+        base = "Email Corpus Analyzer"
+        if self.state.has_unsaved_changes:
+            return f"{base} [Unsaved Changes]"
+        return base
+
+    def _update_subtitle(self) -> None:
+        """Update the app subtitle to reflect unsaved changes state."""
+        self.sub_title = self._get_subtitle_text()
+
+    # -------------------------------------------------------------------------
     # Action methods (delegate to state, update widgets)
+    # Phase 2 Item 1.6: Added failure notifications and state validation.
     # -------------------------------------------------------------------------
 
     def action_accept(self) -> None:
         """Accept the current category."""
         category = self.get_selected_category()
-        if category and self.state.accept(category.category_id):
+        if not category:
+            return
+        if self.state.accept(category.category_id):
             self._refresh_all_widgets()
             self.notify(f"Accepted: {category.category_name}")
+        else:
+            self.notify(
+                f"Accept failed: '{category.category_name}' is no longer pending",
+                severity="warning",
+            )
 
     def action_rename(self) -> None:
         """Rename the current category."""
@@ -413,6 +589,11 @@ class ReviewApp(App):
                 if self.state.rename(cat_id, new_name):
                     self._refresh_all_widgets()
                     self.notify(f"Renamed: {old_name} -> {new_name}")
+                else:
+                    self.notify(
+                        f"Rename failed: '{old_name}' is no longer pending",
+                        severity="warning",
+                    )
 
         self.push_screen(RenameModal(category.category_name), handle_rename)
 
@@ -429,25 +610,57 @@ class ReviewApp(App):
         source_id = category.category_id
 
         def handle_merge(target: Category | None) -> None:
-            if target and self.state.merge(source_id, target.category_id):
-                self._refresh_all_widgets()
-                self.notify(f"Merged into: {target.category_name}")
+            if target:
+                self._handle_merge_result(source_id, target)
 
         self.push_screen(MergeModal(self.approved_categories), handle_merge)
+
+    def _handle_merge_result(self, source_id: str, target: Category) -> None:
+        """Handle the result of a merge operation.
+
+        Centralizes merge success/failure feedback. Called from the merge
+        modal callback.
+
+        Args:
+            source_id: ID of the source (pending) category being merged.
+            target: The approved Category the source is merging into.
+        """
+        if self.state.merge(source_id, target.category_id):
+            self._refresh_all_widgets()
+            self.notify(f"Merged into: {target.category_name}")
+        else:
+            self.notify(
+                f"Merge failed: target '{target.category_name}' no longer exists",
+                severity="warning",
+            )
 
     def action_delete(self) -> None:
         """Delete the current category."""
         category = self.get_selected_category()
-        if category and self.state.delete(category.category_id):
+        if not category:
+            return
+        if self.state.delete(category.category_id):
             self._refresh_all_widgets()
             self.notify(f"Deleted: {category.category_name}")
+        else:
+            self.notify(
+                f"Delete failed: '{category.category_name}' is no longer pending",
+                severity="warning",
+            )
 
     def action_skip(self) -> None:
         """Skip the current category for later review."""
         category = self.get_selected_category()
-        if category and self.state.skip(category.category_id):
+        if not category:
+            return
+        if self.state.skip(category.category_id):
             self._refresh_all_widgets()
             self.notify(f"Skipped: {category.category_name}")
+        else:
+            self.notify(
+                f"Skip failed: '{category.category_name}' is no longer pending",
+                severity="warning",
+            )
 
     def action_move_down(self) -> None:
         """Move selection down."""
@@ -458,7 +671,7 @@ class ReviewApp(App):
                 table = self.query_one("#category-table", CategoryTable)
                 table.move_down()
             except NoMatches:
-                pass  # Table may not be mounted yet
+                logger.debug("Category table not mounted yet, cannot move selection down")
 
     def action_move_up(self) -> None:
         """Move selection up."""
@@ -469,7 +682,7 @@ class ReviewApp(App):
                 table = self.query_one("#category-table", CategoryTable)
                 table.move_up()
             except NoMatches:
-                pass  # Table may not be mounted yet
+                logger.debug("Category table not mounted yet, cannot move selection up")
 
     def action_help(self) -> None:
         """Show help screen."""
