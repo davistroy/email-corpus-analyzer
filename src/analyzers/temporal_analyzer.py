@@ -41,7 +41,7 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
         """Return human-readable analyzer name."""
         return "Temporal Analyzer"
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> TemporalPatterns:
         """

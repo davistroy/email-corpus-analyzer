@@ -10,7 +10,7 @@ import argparse
 import contextlib
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import ANY, MagicMock, mock_open, patch
 
 import pytest
 
@@ -358,7 +358,7 @@ class TestCmdExtract:
         assert result == 0
         mock_save_json.assert_called_once()
         mock_extractor.extract_all.assert_called_once_with(
-            max_batch_size=500, checkpoint_interval=100
+            max_batch_size=500, checkpoint_interval=100, progress_callback=ANY
         )
 
     @patch("src.cli.commands.extract.save_json")

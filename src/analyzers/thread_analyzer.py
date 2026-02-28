@@ -121,7 +121,7 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
         """Thread analyzer does not support incremental analysis."""
         return False
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> ThreadAnalysisResult:
         """

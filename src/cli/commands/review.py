@@ -74,7 +74,7 @@ Note: --headless and --no-tui are mutually exclusive in practice.
         help="Disable feedback learning (don't log decisions or apply learned patterns)",
     )
 
-    return review_parser
+    return review_parser  # type: ignore[no-any-return]
 
 
 def cmd_review(args: argparse.Namespace) -> int:

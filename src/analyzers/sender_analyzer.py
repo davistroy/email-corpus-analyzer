@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from ..models.analysis_results import SenderAnalysis
+from ..models.analysis_results import DomainCount, SenderAnalysis
 from ..models.corpus import Corpus
 from ..models.sender import Sender, SenderType
 from .base import BaseAnalyzer
@@ -42,7 +42,7 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
         """Return human-readable analyzer name."""
         return "Sender Analyzer"
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> SenderAnalysis:
         """
@@ -64,11 +64,11 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
         logger.debug(f"Starting sender analysis on {len(corpus.emails)} emails")
 
         # Count emails per sender
-        sender_counts = Counter()
+        sender_counts: Counter[str] = Counter()
         sender_names = {}
-        sender_subjects = defaultdict(list)
+        sender_subjects: dict[str, list[str]] = defaultdict(list)
         sender_email_ids = defaultdict(list)
-        domain_counts = Counter()
+        domain_counts: Counter[str] = Counter()
 
         total_emails = len(corpus.emails)
         for idx, email in enumerate(corpus.emails):
@@ -123,7 +123,7 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
 
         # Extract top N domains by frequency
         top_domains = [
-            {"domain": domain, "count": count}
+            DomainCount(domain=domain, count=count)
             for domain, count in domain_counts.most_common(self.thresholds.top_domains)
         ]
 

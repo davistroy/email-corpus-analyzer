@@ -58,7 +58,7 @@ Import Instructions:
         "--input", type=Path, help="Input categories file (default: approved_categories.json)"
     )
 
-    return export_parser
+    return export_parser  # type: ignore[no-any-return]
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -144,11 +144,11 @@ def cmd_export(args: argparse.Namespace) -> int:
         elif args.format == "html":
             result_path = export_categories_to_html(categories, output_path)
         elif args.format == "outlook-rules":
-            exporter = OutlookRuleExporter()
-            result_path = exporter.export_to_file(categories, output_path)
+            outlook_exporter = OutlookRuleExporter()
+            result_path = outlook_exporter.export_to_file(categories, output_path)
         else:  # gmail-filters
-            exporter = GmailFilterExporter()
-            result_path = exporter.export_to_file(categories, output_path)
+            gmail_exporter = GmailFilterExporter()
+            result_path = gmail_exporter.export_to_file(categories, output_path)
 
         duration = time.time() - start_time
 

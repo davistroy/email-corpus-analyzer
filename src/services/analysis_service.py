@@ -180,6 +180,7 @@ class AnalysisService:
                 email.combined_text_with_limit(self.config.max_embedding_text_length)
                 for email in corpus.emails
             ]
+            assert analyzer.model is not None
             embeddings = analyzer.model.encode(
                 texts, show_progress_bar=False, convert_to_numpy=True
             )

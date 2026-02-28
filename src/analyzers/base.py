@@ -6,10 +6,7 @@ Provides a consistent interface for all analyzer implementations.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Generic, TypeVar
-
-if TYPE_CHECKING:
-    from src.models.email import Email
+from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -32,12 +29,12 @@ class BaseAnalyzer(ABC, Generic[T]):
     """
 
     @abstractmethod
-    def analyze(self, emails: "list[Email]", **kwargs) -> T:
+    def analyze(self, data: Any, **kwargs: Any) -> T:
         """
         Analyze emails and return typed results.
 
         Args:
-            emails: List of Email objects to analyze
+            data: Input data (Corpus, list of emails, or embeddings depending on analyzer)
             **kwargs: Additional analyzer-specific parameters
 
         Returns:
@@ -70,7 +67,7 @@ class BaseAnalyzer(ABC, Generic[T]):
         """
         return False
 
-    def validate_input(self, emails: "list[Email]") -> None:
+    def validate_input(self, emails: Any) -> None:
         """
         Validate input before analysis.
 

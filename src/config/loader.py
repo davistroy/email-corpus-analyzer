@@ -81,7 +81,8 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
             # Handle empty files or files with only comments
             if content is None:
                 return {}
-            return content
+            result: dict[str, Any] = content
+            return result
     except yaml.YAMLError as e:
         raise ConfigLoadError(f"Invalid YAML in {path}: {e}") from e
     except PermissionError as e:

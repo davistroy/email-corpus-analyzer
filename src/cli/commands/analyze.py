@@ -101,7 +101,7 @@ Note: --auto-clusters and --num-clusters are mutually exclusive.
         help="Generate cluster visualization PNG (requires matplotlib)",
     )
 
-    return analyze_parser
+    return analyze_parser  # type: ignore[no-any-return]
 
 
 def _build_analyze_config(args: argparse.Namespace) -> AnalyzeConfig:
@@ -258,10 +258,9 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             }
             if incremental and incremental_stats:
                 json_output["incremental"] = True
-                json_output["stats"]["cached_embeddings"] = incremental_stats.get("cached_count", 0)
-                json_output["stats"]["generated_embeddings"] = incremental_stats.get(
-                    "generated_count", 0
-                )
+                stats_dict: dict = json_output["stats"]  # type: ignore[assignment]
+                stats_dict["cached_embeddings"] = incremental_stats.get("cached_count", 0)
+                stats_dict["generated_embeddings"] = incremental_stats.get("generated_count", 0)
             output_json(json_output)
         else:
             if incremental and incremental_stats:

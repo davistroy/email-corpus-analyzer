@@ -141,7 +141,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         self.max_k = max_k
         logger.debug(f"ElbowOptimizer initialized with max_k={max_k}")
 
-    def analyze(self, emails, **kwargs) -> ClusterOptimizationResult:
+    def analyze(self, data, **kwargs) -> ClusterOptimizationResult:
         """
         Analyze embeddings to find optimal cluster count.
 
@@ -155,7 +155,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         Returns:
             ClusterOptimizationResult with optimal k and confidence
         """
-        embeddings = emails  # For optimizers, we accept embeddings directly
+        embeddings = data  # For optimizers, we accept embeddings directly
         progress_callback = kwargs.get("progress_callback")
         return self.find_optimal_k(embeddings, progress_callback)
 
@@ -431,21 +431,21 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         self.max_k = max_k
         logger.debug(f"SilhouetteOptimizer initialized with max_k={max_k}")
 
-    def analyze(self, emails, **kwargs) -> ClusterOptimizationResult:
+    def analyze(self, data, **kwargs) -> ClusterOptimizationResult:
         """
         Analyze embeddings to find optimal cluster count.
 
         This method wraps find_optimal_k for BaseAnalyzer compatibility.
-        The 'emails' parameter should be embeddings (numpy array) in this case.
+        The 'data' parameter should be embeddings (numpy array) in this case.
 
         Args:
-            emails: Embeddings array (not email list for this optimizer)
+            data: Embeddings array (not email list for this optimizer)
             **kwargs: Additional arguments including progress_callback
 
         Returns:
             ClusterOptimizationResult with optimal k and confidence
         """
-        embeddings = emails  # For optimizers, we accept embeddings directly
+        embeddings = data  # For optimizers, we accept embeddings directly
         progress_callback = kwargs.get("progress_callback")
         return self.find_optimal_k(embeddings, progress_callback)
 
@@ -508,7 +508,7 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
                 logger.debug(f"k={k}, silhouette_score={score:.4f}")
 
         # Find optimal k (highest silhouette score)
-        optimal_k = max(k_scores, key=k_scores.get)
+        optimal_k = max(k_scores, key=lambda k: k_scores[k])
         max_score = k_scores[optimal_k]
 
         # Calculate per-cluster silhouette scores for the optimal k

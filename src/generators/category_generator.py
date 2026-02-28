@@ -174,7 +174,7 @@ class CategoryGenerator:
                 new_name = pattern.parameters.get("new_name")
                 if category.category_name == old_name:
                     logger.debug(f"Applying learned rename: '{old_name}' -> '{new_name}'")
-                    category.category_name = new_name
+                    category.category_name = str(new_name or "")
                     category.user_modified = True
                     break
 

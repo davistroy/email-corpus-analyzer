@@ -67,7 +67,7 @@ Examples:
         help="Show what would be done without actually executing",
     )
 
-    return suggest_parser
+    return suggest_parser  # type: ignore[no-any-return]
 
 
 def cmd_suggest(args: argparse.Namespace) -> int:

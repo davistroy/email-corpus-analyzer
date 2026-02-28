@@ -63,7 +63,7 @@ class CategoryReview:
     def __init__(
         self,
         categories: list[Category],
-        email_lookup: dict[str, Email] = None,
+        email_lookup: dict[str, Email] | None = None,
         decision_logger: DecisionLogger | None = None,
         enable_learning: bool = True,
     ):
@@ -108,7 +108,7 @@ class CategoryReview:
         if not patterns:
             return self.categories, []
 
-        auto_applied = []
+        auto_applied: list[dict[str, object]] = []
         categories_to_review = []
 
         for category in self.categories:
@@ -132,7 +132,7 @@ class CategoryReview:
                 elif pattern.pattern_type == PatternType.RENAME:
                     # Auto-rename categories matching old name
                     if category.category_name == pattern.parameters.get("old_name"):
-                        new_name = pattern.parameters.get("new_name")
+                        new_name: str = str(pattern.parameters.get("new_name", ""))
                         old_name = category.category_name
                         category.category_name = new_name
                         category.user_modified = True
@@ -363,7 +363,7 @@ class CategoryReview:
                         # Merge email IDs and update counts
                         all_ids = set(target.example_email_ids) | set(category.example_email_ids)
                         target.example_email_ids = list(all_ids)[:10]
-                        target.email_count += category.email_count
+                        target.email_count = (target.email_count or 0) + (category.email_count or 0)
                         target.user_modified = True
                         self.merged_count += 1
                         print(f"✓ Merged into '{target.category_name}'")

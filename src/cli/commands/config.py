@@ -62,7 +62,7 @@ def build_config_parser(subparsers) -> argparse.ArgumentParser:
         description="Check all configuration values and runtime conditions.",
     )
 
-    return config_parser
+    return config_parser  # type: ignore[no-any-return]
 
 
 def validate_config(config) -> list[dict]:

@@ -88,7 +88,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             self.model = SentenceTransformer(self.model_name)
             logger.info(f"Model loaded successfully: {self.model_name}")
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self,
         corpus: Corpus,
         num_clusters: int = 10,
@@ -151,6 +151,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             progress_callback(0, total_emails)
 
         # Generate embeddings with progress bar (FR-016)
+        assert self.model is not None
         embeddings = self.model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
 
         if progress_callback:
@@ -167,6 +168,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 f"(max_k={max_k}, corpus_size={total_emails})..."
             )
 
+            optimizer: ElbowOptimizer | SilhouetteOptimizer
             if cluster_method == "elbow":
                 optimizer = ElbowOptimizer(max_k=max_k)
             else:  # silhouette (default)
@@ -366,6 +368,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             if progress_callback:
                 progress_callback(0, len(uncached_texts))
 
+            assert self.model is not None
             new_embeddings = self.model.encode(
                 uncached_texts, show_progress_bar=True, convert_to_numpy=True
             )
@@ -391,6 +394,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 text = id_to_email[email_id].combined_text_with_limit(
                     self.max_embedding_text_length
                 )
+                assert self.model is not None
                 embedding = self.model.encode([text], convert_to_numpy=True)[0]
                 embeddings_list.append(embedding)
 
@@ -440,6 +444,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 f"(max_k={max_k}, corpus_size={total_emails})..."
             )
 
+            optimizer: ElbowOptimizer | SilhouetteOptimizer
             if cluster_method == "elbow":
                 optimizer = ElbowOptimizer(max_k=max_k)
             else:
@@ -610,7 +615,7 @@ def generate_cluster_visualization(
     ax_scatter.legend(fontsize=7, loc="best", ncol=2)
 
     # --- Panel 2: Silhouette bar chart ---
-    if has_silhouette:
+    if has_silhouette and cluster_silhouette_scores is not None:
         ax_bar = axes[1]
         sorted_ids = sorted(cluster_silhouette_scores.keys())
         scores = [cluster_silhouette_scores[cid] for cid in sorted_ids]

@@ -146,10 +146,10 @@ class EmbeddingCache:
         Returns:
             Embedding vector or None if not found
         """
-        if email_id in self._id_to_index:
+        if email_id in self._id_to_index and self._embeddings is not None:
             self._hits += 1
             idx = self._id_to_index[email_id]
-            return self._embeddings[idx].copy()
+            return self._embeddings[idx].copy()  # type: ignore[no-any-return]
         self._misses += 1
         return None
 
@@ -167,7 +167,7 @@ class EmbeddingCache:
         missing_ids = []
 
         for email_id in email_ids:
-            if email_id in self._id_to_index:
+            if email_id in self._id_to_index and self._embeddings is not None:
                 self._hits += 1
                 idx = self._id_to_index[email_id]
                 found_embeddings.append(self._embeddings[idx])
@@ -317,7 +317,8 @@ class EmbeddingCache:
         if not self.metadata_path.exists():
             return None
         try:
-            return json.loads(self.metadata_path.read_text(encoding="utf-8"))
+            result: dict[str, Any] = json.loads(self.metadata_path.read_text(encoding="utf-8"))
+            return result
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Failed to read cache metadata: {e}")
             return None

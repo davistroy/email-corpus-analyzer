@@ -37,7 +37,7 @@ Examples:
         help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)",
     )
 
-    return info_parser
+    return info_parser  # type: ignore[no-any-return]
 
 
 def cmd_info(args: argparse.Namespace) -> int:

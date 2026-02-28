@@ -88,7 +88,7 @@ Examples:
         help="Incremental extraction: only fetch emails since last extraction (Task 4B.2)",
     )
 
-    return extract_parser
+    return extract_parser  # type: ignore[no-any-return]
 
 
 def cmd_extract(args: argparse.Namespace) -> int:

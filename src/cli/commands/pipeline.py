@@ -128,7 +128,7 @@ The pipeline runs these stages in order:
         help="Disable feedback learning (don't log decisions or apply learned patterns)",
     )
 
-    return pipeline_parser
+    return pipeline_parser  # type: ignore[no-any-return]
 
 
 def _build_app_config(args: argparse.Namespace) -> AppConfig:
@@ -148,11 +148,10 @@ def _build_app_config(args: argparse.Namespace) -> AppConfig:
     gmail_email = getattr(args, "gmail_email", None)
 
     # Build extract config - only set gmail_email if source requires it
-    extract_kwargs = {"source": source}
     if source in ("gmail", "both"):
-        extract_kwargs["gmail_email"] = gmail_email or args.user_email
-
-    extract_config = ExtractConfig(**extract_kwargs)
+        extract_config = ExtractConfig(source=source, gmail_email=gmail_email or args.user_email)
+    else:
+        extract_config = ExtractConfig(source=source)
 
     analyze_config = AnalyzeConfig(
         num_clusters=args.num_clusters,

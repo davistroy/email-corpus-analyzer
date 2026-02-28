@@ -357,7 +357,8 @@ class AppConfig(BaseModel):
             return None
         if isinstance(v, str):
             return Path(v)
-        return v
+        result: Path | None = v
+        return result
 
 
 def _merge_nested_config(

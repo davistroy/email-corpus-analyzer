@@ -24,7 +24,7 @@ class VolumeAnalyzer(BaseAnalyzer[VolumeStats]):
         """Return human-readable analyzer name."""
         return "Volume Analyzer"
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> VolumeStats:
         """

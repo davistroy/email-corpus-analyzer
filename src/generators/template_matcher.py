@@ -45,7 +45,7 @@ def _domain_matches(sender_domain: str, template_domain: str) -> bool:
 
 
 def match_templates(
-    analysis_results: AnalysisResults, templates: list[CategoryTemplate] = None
+    analysis_results: AnalysisResults, templates: list[CategoryTemplate] | None = None
 ) -> list[Category]:
     """
     Apply predefined category templates to analysis results.

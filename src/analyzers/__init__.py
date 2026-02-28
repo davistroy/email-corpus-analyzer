@@ -120,6 +120,7 @@ def run_full_analysis(
 
     if incremental:
         logger.info("Running incremental semantic analysis...")
+        assert embedding_cache is not None
         incremental_result = semantic_analyzer.analyze_incremental(
             corpus,
             embedding_cache=embedding_cache,

@@ -40,6 +40,7 @@ def _show_cluster_analysis(corpus, args) -> int:
     analyzer._ensure_model_loaded()
 
     texts = [email.combined_text_with_limit() for email in corpus.emails]
+    assert analyzer.model is not None
     embeddings = analyzer.model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
 
     # Run both optimization methods
@@ -227,6 +228,7 @@ def _generate_cluster_viz(corpus, results) -> Path | None:
     analyzer._ensure_model_loaded()
 
     texts = [email.combined_text_with_limit() for email in corpus.emails]
+    assert analyzer.model is not None
     embeddings = analyzer.model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
 
     # Run KMeans with the same cluster count used in analysis

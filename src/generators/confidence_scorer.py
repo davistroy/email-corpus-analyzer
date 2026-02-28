@@ -286,7 +286,7 @@ def find_merge_candidates(
     candidates = []
 
     # Track pairs we've already added (avoid duplicates)
-    seen_pairs: set[tuple[str, str]] = set()
+    seen_pairs: set[tuple[str, ...]] = set()
 
     for cat_id, others in overlaps.items():
         for other_id, overlap in others.items():

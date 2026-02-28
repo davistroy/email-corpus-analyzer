@@ -105,7 +105,8 @@ class CheckpointManager:
                 f"Checkpoint loaded: {checkpoint_data['emails_processed']} emails "
                 f"from {checkpoint_data['timestamp']}"
             )
-            return checkpoint_data
+            result: dict = checkpoint_data
+            return result
         except Exception as e:
             logger.warning(f"Failed to load checkpoint: {e}. Starting fresh extraction.")
             return None

@@ -102,7 +102,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             max_embedding_text_length: Max body chars for embedding text (default 1500)
         """
         self.model_name = model_name
-        self.model = None
+        self.model: SentenceTransformer | None = None
         self.min_top_clusters = min_top_clusters
         self.max_top_clusters = max_top_clusters
         self.min_subclusters = min_subclusters
@@ -127,7 +127,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             self.model = SentenceTransformer(self.model_name)
             logger.info(f"Model loaded successfully: {self.model_name}")
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self,
         corpus: Corpus,
         progress_callback: Callable[[int, int], None] | None = None,
@@ -170,6 +170,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
         ]
 
         logger.info("Generating embeddings with sentence transformer")
+        assert self.model is not None
         self._embeddings = self.model.encode(
             texts,
             show_progress_bar=True,
@@ -279,7 +280,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             if diff == 0:
                 break
 
-        return best_distance
+        return float(best_distance)
 
     def _build_clusters_from_labels(
         self,

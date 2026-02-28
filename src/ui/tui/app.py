@@ -388,7 +388,7 @@ class ReviewApp(App):
     def action_quit_confirm(self) -> None:
         """Quit with confirmation."""
 
-        def handle_quit(confirmed: bool) -> None:
+        def handle_quit(confirmed: bool | None) -> None:
             if confirmed:
                 self.exit()
 

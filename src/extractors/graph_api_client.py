@@ -191,7 +191,8 @@ class GraphAPIClient:
             raise RateLimitError(retry_after=retry_seconds)
 
         response.raise_for_status()
-        return response.json()
+        result: dict[str, Any] = response.json()
+        return result
 
     def fetch_emails(
         self,
@@ -242,7 +243,7 @@ class GraphAPIClient:
 
         try:
             data = self._make_request(url, params)
-            messages = data.get("value", [])
+            messages: list[dict[str, Any]] = data.get("value", [])
             logger.info(f"Fetched {len(messages)} emails (skip={skip})")
             return messages
         except requests.exceptions.HTTPError as e:
@@ -268,7 +269,8 @@ class GraphAPIClient:
 
         try:
             data = self._make_request(url, params)
-            return data.get("body", {}).get("content", "")
+            body_content: str = data.get("body", {}).get("content", "")
+            return body_content
         except Exception as e:
             logger.error(f"Failed to get message body: {e}")
             raise ConnectionError(f"Failed to get message body: {e}") from e
@@ -285,6 +287,7 @@ class GraphAPIClient:
 
         try:
             data = self._make_request(url, params)
-            return data.get("mail") or data.get("userPrincipalName", self.user_email)
+            email: str = data.get("mail") or data.get("userPrincipalName", self.user_email)
+            return email
         except Exception:
             return self.user_email

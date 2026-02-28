@@ -58,7 +58,7 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
     # Bracket tags regex: [\[\(]([^\]\)]+)[\]\)]
     BRACKET_TAG_PATTERN = re.compile(r"[\[\(]([^\]\)]+)[\]\)]")
 
-    def analyze(
+    def analyze(  # type: ignore[override]
         self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> SubjectPatterns:
         """

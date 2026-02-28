@@ -137,7 +137,7 @@ class ExtractionService:
                 progress_callback=email_progress_callback,
             )
 
-            corpus = incremental_result.corpus
+            corpus: Corpus = incremental_result.corpus
 
             if incremental_result.failed_emails:
                 logger.warning(
