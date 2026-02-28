@@ -12,6 +12,7 @@ from src.ui.tui.commands import (
     get_command_by_action,
     get_command_by_key,
 )
+from src.ui.tui.state import ReviewState
 from src.ui.tui.theme import (
     CONFIDENCE_COLORS,
     THEME_COLORS,
@@ -21,6 +22,7 @@ from src.ui.tui.theme import (
 
 __all__ = [
     "ReviewApp",
+    "ReviewState",
     "THEME_COLORS",
     "CONFIDENCE_COLORS",
     "get_confidence_color",

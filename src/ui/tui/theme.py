@@ -2,7 +2,19 @@
 Theme configuration for the TUI application.
 
 Defines colors, styles, and visual theming for the Category Review TUI.
+
+Confidence utility functions (get_confidence_color, get_confidence_level)
+and threshold constants are delegated to src.ui.tui.utils — re-exported
+here for backward compatibility.
 """
+
+from src.ui.tui.utils import (
+    CONFIDENCE_COLORS,
+    CONFIDENCE_HIGH_THRESHOLD,
+    CONFIDENCE_MEDIUM_THRESHOLD,
+    get_confidence_color,
+    get_confidence_level,
+)
 
 # Main theme colors
 THEME_COLORS = {
@@ -20,51 +32,16 @@ THEME_COLORS = {
     "highlight": "#264f78",  # Selection highlight
 }
 
-# Confidence level colors (red/yellow/green)
-CONFIDENCE_COLORS = {
-    "high": "#28a745",  # Green - >= 0.7
-    "medium": "#ffc107",  # Yellow - 0.4 to 0.7
-    "low": "#dc3545",  # Red - < 0.4
-}
-
-# Confidence thresholds
-CONFIDENCE_HIGH_THRESHOLD = 0.7
-CONFIDENCE_MEDIUM_THRESHOLD = 0.4
-
-
-def get_confidence_color(confidence: float) -> str:
-    """
-    Get the appropriate color for a confidence value.
-
-    Args:
-        confidence: Confidence value between 0 and 1
-
-    Returns:
-        Color hex string for the confidence level
-    """
-    if confidence >= CONFIDENCE_HIGH_THRESHOLD:
-        return CONFIDENCE_COLORS["high"]
-    if confidence >= CONFIDENCE_MEDIUM_THRESHOLD:
-        return CONFIDENCE_COLORS["medium"]
-    return CONFIDENCE_COLORS["low"]
-
-
-def get_confidence_level(confidence: float) -> str:
-    """
-    Get the confidence level name.
-
-    Args:
-        confidence: Confidence value between 0 and 1
-
-    Returns:
-        String: "high", "medium", or "low"
-    """
-    if confidence >= CONFIDENCE_HIGH_THRESHOLD:
-        return "high"
-    if confidence >= CONFIDENCE_MEDIUM_THRESHOLD:
-        return "medium"
-    return "low"
-
+# Re-export for backward compatibility — these are now defined in utils.py
+__all__ = [
+    "THEME_COLORS",
+    "CONFIDENCE_COLORS",
+    "CONFIDENCE_HIGH_THRESHOLD",
+    "CONFIDENCE_MEDIUM_THRESHOLD",
+    "get_confidence_color",
+    "get_confidence_level",
+    "APP_CSS",
+]
 
 # CSS styles for the TUI application
 APP_CSS = """

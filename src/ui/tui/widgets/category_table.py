@@ -13,6 +13,7 @@ from textual.reactive import reactive
 from textual.widgets import DataTable
 
 from src.models.category import Category, CategorySource
+from src.ui.tui.utils import MAX_NAME_DISPLAY, format_confidence_bar
 
 # Table column definitions
 TABLE_COLUMNS = ["#", "Name", "Confidence", "Emails", "Source"]
@@ -25,24 +26,6 @@ CHILD_INDICATOR = "|--"
 
 # Selection indicator
 SELECTED_INDICATOR = "*"
-
-
-def format_confidence_bar(confidence: float, width: int = 10) -> str:
-    """
-    Format confidence as a visual bar.
-
-    Args:
-        confidence: Confidence value between 0 and 1
-        width: Width of the bar in characters
-
-    Returns:
-        String representing the confidence bar
-    """
-    filled = int(confidence * width)
-    empty = width - filled
-    bar = "\u2588" * filled + "\u2591" * empty
-    percentage = f"{confidence * 100:.0f}%"
-    return f"{bar} {percentage}"
 
 
 def format_source(source: CategorySource) -> str:
@@ -183,7 +166,7 @@ class CategoryTable(DataTable):
             confidence_bar = format_confidence_bar(category.confidence)
             self.add_row(
                 str(idx),
-                display_name[:28],  # Truncate long names
+                display_name[:MAX_NAME_DISPLAY],  # Truncate long names
                 confidence_bar,
                 format_email_count(category.email_count),
                 format_source(category.source),

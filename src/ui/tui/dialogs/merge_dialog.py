@@ -13,6 +13,7 @@ from textual.screen import ModalScreen
 from textual.widgets import DataTable, Static
 
 from src.models.category import Category
+from src.ui.tui.utils import MAX_NAME_DISPLAY
 
 
 class MergeDialog(ModalScreen[Category | None]):
@@ -127,7 +128,7 @@ class MergeDialog(ModalScreen[Category | None]):
             email_str = str(category.email_count) if category.email_count else "-"
             table.add_row(
                 str(idx),
-                category.category_name[:28],
+                category.category_name[:MAX_NAME_DISPLAY],
                 email_str,
                 confidence_str,
                 key=category.category_id,

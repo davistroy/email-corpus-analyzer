@@ -33,7 +33,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ### Work Items
 
-#### 1.1 Centralize Shared Utilities
+#### 1.1 Centralize Shared Utilities — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/utils.py` (NEW)
@@ -97,7 +97,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 1.4 Centralize State Management
+#### 1.4 Centralize State Management — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/state.py` (NEW)

@@ -3,6 +3,8 @@ Main TUI application for category review.
 
 Provides an interactive terminal-based interface for reviewing,
 approving, and modifying suggested email categories.
+
+State is centralized in ReviewState (state.py) per Phase 2 Item 1.4.
 """
 
 from textual.app import App, ComposeResult
@@ -14,6 +16,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Static
 
 from src.models.category import Category
+from src.ui.tui.state import ReviewState
 from src.ui.tui.theme import APP_CSS
 from src.ui.tui.widgets.action_bar import ActionBar, HelpOverlay
 from src.ui.tui.widgets.category_table import CategoryTable
@@ -139,6 +142,7 @@ class ReviewApp(App):
     """
     Main TUI application for reviewing email categories.
 
+    All mutable state is centralized in self.state (ReviewState).
     Provides an interactive interface for:
     - Viewing suggested categories in a scrollable table
     - Seeing detailed information about each category
@@ -179,14 +183,87 @@ class ReviewApp(App):
             email_lookup: Optional dictionary mapping email IDs to Email objects
         """
         super().__init__(*args, **kwargs)
-        self.categories = categories
+        self.state = ReviewState(categories=categories)
         self.email_lookup = email_lookup or {}
-        self.approved_categories: list[Category] = []
-        self.skipped_categories: list[Category] = []
-        self.modified_count = 0
-        self.merged_count = 0
-        self.deleted_count = 0
-        self._selected_index = 0
+
+    # -------------------------------------------------------------------------
+    # Backward-compatible property accessors (delegate to state)
+    # -------------------------------------------------------------------------
+
+    @property
+    def categories(self) -> list[Category]:
+        """Pending categories (delegates to state.pending)."""
+        return self.state._pending
+
+    @categories.setter
+    def categories(self, value: list[Category]) -> None:
+        """Set pending categories (used only during init/legacy paths)."""
+        # Only used if something directly assigns app.categories
+        self.state._pending = list(value)
+
+    @property
+    def approved_categories(self) -> list[Category]:
+        """Approved categories (delegates to state)."""
+        return self.state._approved
+
+    @approved_categories.setter
+    def approved_categories(self, value: list[Category]) -> None:
+        """Set approved categories (backward compat for tests)."""
+        self.state._approved = list(value)
+
+    @property
+    def skipped_categories(self) -> list[Category]:
+        """Skipped categories (delegates to state)."""
+        return self.state._skipped
+
+    @skipped_categories.setter
+    def skipped_categories(self, value: list[Category]) -> None:
+        """Set skipped categories (backward compat)."""
+        self.state._skipped = list(value)
+
+    @property
+    def modified_count(self) -> int:
+        """Renamed count (backward compat name)."""
+        return self.state._counters["renamed"]
+
+    @modified_count.setter
+    def modified_count(self, value: int) -> None:
+        """Set renamed count (backward compat)."""
+        self.state._counters["renamed"] = value
+
+    @property
+    def merged_count(self) -> int:
+        """Merged count."""
+        return self.state._counters["merged"]
+
+    @merged_count.setter
+    def merged_count(self, value: int) -> None:
+        """Set merged count (backward compat)."""
+        self.state._counters["merged"] = value
+
+    @property
+    def deleted_count(self) -> int:
+        """Deleted count."""
+        return self.state._counters["deleted"]
+
+    @deleted_count.setter
+    def deleted_count(self, value: int) -> None:
+        """Set deleted count (backward compat)."""
+        self.state._counters["deleted"] = value
+
+    @property
+    def _selected_index(self) -> int:
+        """Selected index (delegates to state)."""
+        return self.state._selected_index
+
+    @_selected_index.setter
+    def _selected_index(self, value: int) -> None:
+        """Set selected index (delegates to state)."""
+        self.state.selected_index = value
+
+    # -------------------------------------------------------------------------
+    # Compose & Mount
+    # -------------------------------------------------------------------------
 
     def compose(self) -> ComposeResult:
         """Compose the application UI."""
@@ -217,6 +294,10 @@ class ReviewApp(App):
         self._update_detail_panel()
         self._update_action_bar()
 
+    # -------------------------------------------------------------------------
+    # Public query methods
+    # -------------------------------------------------------------------------
+
     def get_selected_category(self) -> Category | None:
         """
         Get the currently selected category.
@@ -224,36 +305,39 @@ class ReviewApp(App):
         Returns:
             Selected Category or None if no selection
         """
-        if not self.categories:
-            return None
-        if self._selected_index < 0 or self._selected_index >= len(self.categories):
-            return None
-        return self.categories[self._selected_index]
+        return self.state.selected_category
 
     def get_approved_categories(self) -> list[Category]:
         """
         Get all approved categories.
 
         Returns:
-            List of approved categories
+            List of approved categories (copy)
         """
-        return self.approved_categories.copy()
+        return self.state.approved
 
     def get_stats(self) -> dict:
         """
         Get review statistics.
 
         Returns:
-            Dictionary with modification stats
+            Dictionary with modification stats.
+            Includes backward-compatible keys (modified, merged, deleted,
+            approved, skipped, remaining).
         """
+        state_stats = self.state.get_stats()
         return {
-            "modified": self.modified_count,
-            "merged": self.merged_count,
-            "deleted": self.deleted_count,
-            "approved": len(self.approved_categories),
-            "skipped": len(self.skipped_categories),
-            "remaining": len(self.categories),
+            "modified": state_stats["renamed"],
+            "merged": state_stats["merged"],
+            "deleted": state_stats["deleted"],
+            "approved": state_stats["approved"],
+            "skipped": state_stats["skipped"],
+            "remaining": state_stats["remaining"],
         }
+
+    # -------------------------------------------------------------------------
+    # Widget update helpers
+    # -------------------------------------------------------------------------
 
     def _update_detail_panel(self) -> None:
         """Update the detail panel with selected category."""
@@ -281,8 +365,19 @@ class ReviewApp(App):
         except NoMatches:
             pass  # Table may not be mounted yet
 
+    def _refresh_all_widgets(self) -> None:
+        """Refresh all widgets after a state change."""
+        self._update_table()
+        self._update_detail_panel()
+        self._update_action_bar()
+
     def _remove_current_category(self) -> Category | None:
-        """Remove and return the current category from the list."""
+        """Remove and return the current category from the list.
+
+        NOTE: This is kept for backward compatibility with action methods
+        that still need the removed category reference. The actual removal
+        is handled through ReviewState methods in the action_* methods.
+        """
         category = self.get_selected_category()
         if category and category in self.categories:
             self.categories.remove(category)
@@ -293,14 +388,15 @@ class ReviewApp(App):
             self._update_detail_panel()
         return category
 
-    # Action methods
+    # -------------------------------------------------------------------------
+    # Action methods (delegate to state, update widgets)
+    # -------------------------------------------------------------------------
 
     def action_accept(self) -> None:
         """Accept the current category."""
-        category = self._remove_current_category()
-        if category:
-            self.approved_categories.append(category)
-            self._update_action_bar()
+        category = self.get_selected_category()
+        if category and self.state.accept(category.category_id):
+            self._refresh_all_widgets()
             self.notify(f"Accepted: {category.category_name}")
 
     def action_rename(self) -> None:
@@ -309,16 +405,14 @@ class ReviewApp(App):
         if not category:
             return
 
+        cat_id = category.category_id
+
         def handle_rename(new_name: str | None) -> None:
             if new_name:
                 old_name = category.category_name
-                category.category_name = new_name
-                category.user_modified = True
-                self._remove_current_category()
-                self.approved_categories.append(category)
-                self.modified_count += 1
-                self._update_action_bar()
-                self.notify(f"Renamed: {old_name} -> {new_name}")
+                if self.state.rename(cat_id, new_name):
+                    self._refresh_all_widgets()
+                    self.notify(f"Renamed: {old_name} -> {new_name}")
 
         self.push_screen(RenameModal(category.category_name), handle_rename)
 
@@ -332,37 +426,33 @@ class ReviewApp(App):
         if not category:
             return
 
+        source_id = category.category_id
+
         def handle_merge(target: Category | None) -> None:
-            if target:
-                # Merge email IDs
-                all_ids = set(target.example_email_ids) | set(category.example_email_ids)
-                target.example_email_ids = list(all_ids)[:10]
-                target.email_count = (target.email_count or 0) + (category.email_count or 0)
-                target.user_modified = True
-                self._remove_current_category()
-                self.merged_count += 1
+            if target and self.state.merge(source_id, target.category_id):
+                self._refresh_all_widgets()
                 self.notify(f"Merged into: {target.category_name}")
 
         self.push_screen(MergeModal(self.approved_categories), handle_merge)
 
     def action_delete(self) -> None:
         """Delete the current category."""
-        category = self._remove_current_category()
-        if category:
-            self.deleted_count += 1
+        category = self.get_selected_category()
+        if category and self.state.delete(category.category_id):
+            self._refresh_all_widgets()
             self.notify(f"Deleted: {category.category_name}")
 
     def action_skip(self) -> None:
         """Skip the current category for later review."""
-        category = self._remove_current_category()
-        if category:
-            self.skipped_categories.append(category)
+        category = self.get_selected_category()
+        if category and self.state.skip(category.category_id):
+            self._refresh_all_widgets()
             self.notify(f"Skipped: {category.category_name}")
 
     def action_move_down(self) -> None:
         """Move selection down."""
         if self.categories:
-            self._selected_index = (self._selected_index + 1) % len(self.categories)
+            self.state.move_selection_down()
             self._update_detail_panel()
             try:
                 table = self.query_one("#category-table", CategoryTable)
@@ -373,7 +463,7 @@ class ReviewApp(App):
     def action_move_up(self) -> None:
         """Move selection up."""
         if self.categories:
-            self._selected_index = (self._selected_index - 1) % len(self.categories)
+            self.state.move_selection_up()
             self._update_detail_panel()
             try:
                 table = self.query_one("#category-table", CategoryTable)
@@ -399,6 +489,10 @@ class ReviewApp(App):
         if event.cursor_row is not None:
             self._selected_index = event.cursor_row
             self._update_detail_panel()
+
+    # -------------------------------------------------------------------------
+    # Backward-compatible aliases
+    # -------------------------------------------------------------------------
 
     def accept_category(self) -> None:
         """Alias for action_accept."""

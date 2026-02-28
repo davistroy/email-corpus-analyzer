@@ -25,3 +25,15 @@
 - Summary: Live tqdm progress bar showing email count, rate, and elapsed time during extraction, 227 new test lines
 
 **Phase 1 complete.** All 4 extraction pipeline fixes delivered.
+
+## 2026-02-28 (Phase 2 — TUI Polish & Integration)
+
+### Item 1.1: Centralize Shared Utilities
+- Status: Complete
+- Files changed: src/ui/tui/utils.py (created), src/ui/tui/theme.py, src/ui/tui/widgets/category_table.py, src/ui/tui/widgets/detail_panel.py, src/ui/tui/dialogs/merge_dialog.py, tests/unit/test_tui_utils.py (created)
+- Summary: Extracted duplicated `format_confidence_bar()` and `get_confidence_level()` into shared `utils.py` module, moved hardcoded truncation lengths into named constants, made confidence thresholds config-driven
+
+### Item 1.4: Centralize State Management
+- Status: Complete
+- Files changed: src/ui/tui/state.py (created), src/ui/tui/app.py, src/ui/tui/__init__.py, tests/unit/test_review_state.py (created), tests/unit/test_review_state_app_integration.py (created)
+- Summary: Created `ReviewState` dataclass holding all mutable state, replaced scattered state across app and widgets with single centralized instance, added state change notifications and invalid state transition guards
