@@ -1,8 +1,14 @@
 # Feature Specification: Email Corpus Extraction and Analysis System
 
+> **Phase 0 Baseline Document** — This specification represents the original Phase 0 scope
+> defined on 2025-10-05. The system has since grown significantly beyond these 51 functional
+> requirements to include Gmail extraction, TUI interface, export system, YAML configuration,
+> feedback learning, auto-cluster optimization, and more. For the current state of the system,
+> see [CLAUDE.md](/CLAUDE.md) (authoritative) and [README.md](/README.md).
+
 **Feature Branch**: `001-use-the-document`
 **Created**: 2025-10-05
-**Status**: Draft
+**Status**: Phase 0 Complete — Superseded by CLAUDE.md for current scope
 **Input**: User description: "use the document ./info/email-corpus-analysis-spec.md as input"
 
 ## Execution Flow (main)
@@ -271,9 +277,14 @@ The feature is complete when:
 9. User can optionally cleanup intermediate files after category approval
 
 ## Out of Scope (Phase 0)
-- Email-by-email categorization (future Phase 1)
-- Interactive learning from user corrections (future)
-- Automated daily processing (future)
-- Email filtering or moving (future)
-- Real-time email monitoring (future)
-- Category rule refinement (future)
+
+> **Scope Update (2026-02-28):** Item 2 below was deliberately pulled into scope and
+> shipped as part of the feedback learning system (`src/learning/`). The remaining 5 items
+> are planned for Phase 2 — see `IMPLEMENTATION_PLAN_v2.md`.
+
+- Email-by-email categorization (future Phase 2)
+- ~~Interactive learning from user corrections~~ — **ADOPTED**: Implemented as `src/learning/decision_logger.py` and `src/learning/pattern_detector.py` with 90-day temporal decay, integrated into review flow
+- Automated daily processing (future Phase 2)
+- Email filtering or moving (future Phase 2)
+- Real-time email monitoring (future Phase 2)
+- Category rule refinement (future Phase 2)
