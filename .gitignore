@@ -41,6 +41,9 @@ htmlcov/
 # Linting
 .ruff_cache/
 
+# Type checking
+.mypy_cache/
+
 # Output directory (local-only data)
 outputs/
 /mnt/user-data/outputs/
