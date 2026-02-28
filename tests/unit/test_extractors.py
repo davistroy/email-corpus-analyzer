@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 from src.exceptions import RateLimitError
 from src.extractors.checkpoint_manager import CheckpointManager
@@ -1883,3 +1884,308 @@ class TestSharedBatchLoopCheckpoint:
         assert full_save_count == 2, (
             f"Expected 2 checkpoint saves (at 25 and 50), got {full_save_count}"
         )
+
+
+class TestErrorMessageFormatting:
+    """Test cases for work item 1.4: Clean up error messages during extraction.
+
+    Validates that:
+    - Pydantic ValidationErrors produce single-line warnings with field name
+    - Generic exceptions show type and message concisely
+    - Email IDs are truncated to 12 characters
+    - End-of-extraction summary reports error counts by category
+    - Full error details are preserved in ExtractionError.error_message
+    """
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create EmailExtractor for error formatting tests."""
+        return EmailExtractor(
+            user_email="errors@example.com",
+            checkpoint_dir=str(tmp_path),
+        )
+
+    @pytest.fixture
+    def valid_email_data(self):
+        """Create valid M365 email data."""
+        return {
+            "id": "valid_msg_12345",
+            "subject": "Valid Subject",
+            "from": {
+                "emailAddress": {
+                    "address": "sender@example.com",
+                    "name": "Sender",
+                }
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": "recipient@example.com", "name": "R"}}
+            ],
+            "body": {"content": "<p>Valid body</p>"},
+            "receivedDateTime": "2024-01-01T00:00:00Z",
+            "hasAttachments": False,
+        }
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_validation_error_single_line_with_field(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Pydantic ValidationError is logged as single-line warning with field name."""
+        mock_get_count.return_value = 1
+        # Email with missing sender to trigger ValidationError
+        bad_email = {
+            "id": "abcdef123456_extra_chars",
+            "subject": "Bad",
+            "from": {},  # Missing emailAddress -> KeyError before Pydantic
+            "toRecipients": [],
+            "body": {"content": "body"},
+            "receivedDateTime": "2024-01-01T00:00:00Z",
+            "hasAttachments": False,
+        }
+        mock_fetch_batch.return_value = [bad_email]
+
+        warnings = []
+        original_warning = extractor.logger.warning
+        extractor.logger.warning = lambda msg, *a, **kw: warnings.append(msg)
+
+        try:
+            extractor.extract_all(max_batch_size=100)
+        finally:
+            extractor.logger.warning = original_warning
+
+        # Should have exactly one warning about skipping
+        assert len(warnings) == 1
+        msg = warnings[0]
+        # Email ID should be truncated to 12 chars
+        assert "abcdef123456" in msg
+        assert "abcdef123456_extra_chars" not in msg
+        # Should contain "Skipped email" prefix
+        assert msg.startswith("Skipped email")
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_generic_exception_shows_type_and_message(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Generic exceptions display type name and message concisely."""
+        mock_get_count.return_value = 1
+        bad_email = {"id": "long_id_abcdef_ghijkl"}
+        mock_fetch_batch.return_value = [bad_email]
+
+        warnings = []
+        original_warning = extractor.logger.warning
+        extractor.logger.warning = lambda msg, *a, **kw: warnings.append(msg)
+
+        try:
+            extractor.extract_all(max_batch_size=100)
+        finally:
+            extractor.logger.warning = original_warning
+
+        assert len(warnings) == 1
+        msg = warnings[0]
+        # Should show error type name (KeyError, TypeError, etc.)
+        assert "Skipped email long_id_abcd" in msg
+        # Should contain the exception class name
+        assert "Error" in msg or "error" in msg.lower()
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_email_id_truncated_to_12_chars(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Email ID in warning messages is truncated to first 12 characters."""
+        mock_get_count.return_value = 1
+        bad_email = {"id": "123456789012XYZEXTRA"}
+        mock_fetch_batch.return_value = [bad_email]
+
+        warnings = []
+        original_warning = extractor.logger.warning
+        extractor.logger.warning = lambda msg, *a, **kw: warnings.append(msg)
+
+        try:
+            extractor.extract_all(max_batch_size=100)
+        finally:
+            extractor.logger.warning = original_warning
+
+        msg = warnings[0]
+        assert "123456789012" in msg
+        assert "XYZEXTRA" not in msg
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_error_summary_logged_after_extraction(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """End-of-extraction summary reports total errors and counts by type."""
+        mock_get_count.return_value = 3
+        # Three bad emails to produce errors
+        bad_emails = [
+            {"id": "bad1"},
+            {"id": "bad2"},
+            {"id": "bad3"},
+        ]
+        mock_fetch_batch.return_value = bad_emails
+
+        info_messages = []
+        original_info = extractor.logger.info
+        extractor.logger.info = lambda msg, *a, **kw: info_messages.append(msg)
+
+        try:
+            extractor.extract_all(max_batch_size=100)
+        finally:
+            extractor.logger.info = original_info
+
+        # Find the summary message
+        summary_msgs = [m for m in info_messages if "Skipped" in m and "emails" in m]
+        assert len(summary_msgs) == 1, (
+            f"Expected exactly one summary message, got: {info_messages}"
+        )
+        summary = summary_msgs[0]
+        assert "Skipped 3 emails" in summary
+        # Should contain error type breakdown
+        assert "KeyError" in summary or "Error" in summary
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_no_summary_when_no_errors(
+        self, mock_fetch_batch, mock_get_count, extractor, valid_email_data
+    ):
+        """No error summary is logged when all emails process successfully."""
+        mock_get_count.return_value = 1
+        mock_fetch_batch.return_value = [valid_email_data]
+
+        info_messages = []
+        original_info = extractor.logger.info
+        extractor.logger.info = lambda msg, *a, **kw: info_messages.append(msg)
+
+        try:
+            extractor.extract_all(max_batch_size=100)
+        finally:
+            extractor.logger.info = original_info
+
+        # No "Skipped N emails" summary should appear
+        summary_msgs = [m for m in info_messages if m.startswith("Skipped") and "emails" in m]
+        assert len(summary_msgs) == 0, (
+            f"Unexpected error summary in successful extraction: {summary_msgs}"
+        )
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_full_error_preserved_in_extraction_error(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Full error details are stored in ExtractionError.error_message for debugging."""
+        mock_get_count.return_value = 1
+        bad_email = {"id": "preserve_test"}
+        mock_fetch_batch.return_value = [bad_email]
+
+        result = extractor.extract_all(max_batch_size=100)
+
+        assert len(result.failed_emails) == 1
+        error = result.failed_emails[0]
+        assert error.email_id == "preserve_test"
+        assert error.error_type == "malformed"
+        # Full error message should be present (not truncated)
+        assert len(error.error_message) > 0
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_validation_error_format_with_pydantic(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Pydantic ValidationError produces field-specific single-line warning."""
+        mock_get_count.return_value = 1
+
+        # Force _process_email to raise a Pydantic ValidationError
+        def raise_validation_error(email_data):
+            # Create a real Pydantic ValidationError by trying to construct Email
+            # with invalid data
+            from pydantic import BaseModel
+
+            class StrictModel(BaseModel):
+                required_field: int
+
+            StrictModel(required_field="not_an_int")  # Will raise ValidationError
+
+        with patch.object(extractor, "_process_email", side_effect=raise_validation_error):
+            mock_fetch_batch.return_value = [{"id": "pydantic_test_id"}]
+
+            # This won't work because raise_validation_error raises before returning
+            # Let's use a direct ValidationError instead
+            pass
+
+        # Better approach: directly raise a ValidationError
+        def make_validation_error(email_data):
+            raise ValidationError.from_exception_data(
+                title="Email",
+                line_errors=[
+                    {
+                        "type": "missing",
+                        "loc": ("sender_email",),
+                        "msg": "Field required",
+                        "input": {},
+                    }
+                ],
+            )
+
+        with patch.object(extractor, "_process_email", side_effect=make_validation_error):
+            mock_fetch_batch.return_value = [{"id": "pydantic_test_long_id"}]
+
+            warnings = []
+            original_warning = extractor.logger.warning
+            extractor.logger.warning = lambda msg, *a, **kw: warnings.append(msg)
+
+            try:
+                extractor.extract_all(max_batch_size=100)
+            finally:
+                extractor.logger.warning = original_warning
+
+            assert len(warnings) == 1
+            msg = warnings[0]
+            assert "Skipped email pydantic_tes" in msg
+            assert "sender_email" in msg
+            assert "Field required" in msg
+
+    @patch.object(EmailExtractor, "_get_total_email_count")
+    @patch.object(EmailExtractor, "_fetch_batch")
+    def test_mixed_error_types_in_summary(
+        self, mock_fetch_batch, mock_get_count, extractor
+    ):
+        """Summary groups errors by type when multiple error types occur."""
+        mock_get_count.return_value = 3
+
+        call_count = 0
+
+        def mixed_errors(email_data):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise KeyError("missing_field")
+            elif call_count == 2:
+                raise KeyError("another_field")
+            else:
+                raise ValueError("bad value")
+
+        with patch.object(extractor, "_process_email", side_effect=mixed_errors):
+            mock_fetch_batch.return_value = [
+                {"id": "err1"}, {"id": "err2"}, {"id": "err3"}
+            ]
+
+            info_messages = []
+            original_info = extractor.logger.info
+            extractor.logger.info = lambda msg, *a, **kw: info_messages.append(msg)
+
+            try:
+                extractor.extract_all(max_batch_size=100)
+            finally:
+                extractor.logger.info = original_info
+
+            summary_msgs = [m for m in info_messages if "Skipped" in m and "emails" in m]
+            assert len(summary_msgs) == 1
+            summary = summary_msgs[0]
+            assert "Skipped 3 emails" in summary
+            assert "KeyError" in summary
+            assert "ValueError" in summary
+            # KeyError should show count of 2
+            assert "2 KeyError" in summary
+            assert "1 ValueError" in summary

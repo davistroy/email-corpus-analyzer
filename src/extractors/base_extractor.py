@@ -21,6 +21,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from src.exceptions import RateLimitError
 from src.extractors.checkpoint_manager import CheckpointManager
 from src.models.corpus import Corpus, CorpusMetadata
@@ -232,6 +234,7 @@ class BaseExtractor(ABC):
 
         all_emails: list[Email] = []
         failed_emails: list[ExtractionError] = []
+        error_counts: dict[str, int] = {}
 
         # For full extraction, get total count; for incremental, loop until empty
         total_emails = EMAIL_COUNT_SENTINEL
@@ -303,10 +306,35 @@ class BaseExtractor(ABC):
                         if progress_callback:
                             progress_callback(emails_processed, len(all_emails))
 
-                    except Exception as e:
-                        self.logger.warning(f"Failed to process email: {e}")
+                    except ValidationError as e:
+                        emails_processed += 1
+                        email_id = email_data.get("id", "unknown")
+                        short_id = email_id[:12]
+                        first = e.errors()[0]
+                        field = first.get("loc", ("unknown",))[-1]
+                        msg = first.get("msg", str(e))
+                        self.logger.warning(
+                            f"Skipped email {short_id}: {field} - {msg}"
+                        )
+                        error_type = "ValidationError"
+                        error_counts[error_type] = error_counts.get(error_type, 0) + 1
                         failed_emails.append(ExtractionError(
-                            email_id=email_data.get("id", "unknown"),
+                            email_id=email_id,
+                            error_type="malformed",
+                            error_message=str(e),
+                            timestamp=datetime.now(),
+                        ))
+                    except Exception as e:
+                        emails_processed += 1
+                        email_id = email_data.get("id", "unknown")
+                        short_id = email_id[:12]
+                        error_type = type(e).__name__
+                        self.logger.warning(
+                            f"Skipped email {short_id}: {error_type}: {e}"
+                        )
+                        error_counts[error_type] = error_counts.get(error_type, 0) + 1
+                        failed_emails.append(ExtractionError(
+                            email_id=email_id,
                             error_type="malformed",
                             error_message=str(e),
                             timestamp=datetime.now(),
@@ -335,6 +363,15 @@ class BaseExtractor(ABC):
                 break  # Stop on non-rate-limit errors
 
             current_batch += 1
+
+        # Log error summary if any emails were skipped
+        if error_counts:
+            summary = ", ".join(
+                f"{count} {etype}" for etype, count in error_counts.items()
+            )
+            self.logger.info(
+                f"Skipped {sum(error_counts.values())} emails ({summary})"
+            )
 
         return all_emails, failed_emails
 
