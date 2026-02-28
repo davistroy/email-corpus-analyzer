@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "email-corpus-analyzer"
-version = "0.1.0"
+version = "1.0.0"
 description = "Email Corpus Extraction and Analysis System"
 requires-python = ">=3.10"
 dependencies = [
