@@ -168,7 +168,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ### Work Items
 
-#### 2.1 Undo/Redo System
+#### 2.1 Undo/Redo System — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/state.py` (extend ReviewState)
@@ -191,7 +191,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 2.2 Bulk Operations UI
+#### 2.2 Bulk Operations UI — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/app.py`
@@ -218,7 +218,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 2.3 Column Sorting
+#### 2.3 Column Sorting — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/widgets/category_table.py`
@@ -240,7 +240,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 2.4 Accessibility Improvements
+#### 2.4 Accessibility Improvements — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/theme.py`
@@ -262,7 +262,7 @@ Phase 2 brings the 5 originally out-of-scope features into the system and overha
 
 ---
 
-#### 2.5 Clean Up Dead Code and Inconsistencies
+#### 2.5 Clean Up Dead Code and Inconsistencies — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/ui/tui/commands.py`

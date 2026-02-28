@@ -52,3 +52,32 @@
 - Status: Complete
 - Files changed: src/ui/tui/theme.py, src/ui/tui/app.py, src/ui/tui/widgets/category_table.py, src/ui/tui/dialogs/merge_dialog.py, src/ui/tui/dialogs/rename_dialog.py, tests/unit/test_tui_responsive.py (created)
 - Summary: Replaced hardcoded layout splits with CSS fr units, scaled column widths, added minimum terminal size check, percentage-based modal widths, and terminal resize handling. 33 new tests.
+
+## 2026-02-28 (Phase 2 — TUI Advanced Features)
+
+### Item 2.1: Undo/Redo System
+- Status: Complete
+- Files changed: src/ui/tui/commands_undo.py (created), src/ui/tui/app.py, src/ui/tui/state.py
+- Summary: Implemented command pattern for reversible actions (accept, rename, merge, delete) with Ctrl+Z/Ctrl+Y bindings. 48 new tests.
+
+### Item 2.2: Bulk Operations UI
+- Status: Complete
+- Files changed: src/ui/tui/state.py, src/ui/tui/widgets/action_bar.py, src/ui/tui/widgets/category_table.py, src/ui/tui/app.py
+- Summary: Added multi-selection with Space toggle, Ctrl+A select all, bulk accept/delete with confirmation dialog, selection count in ActionBar. 55 new tests.
+
+### Item 2.3: Column Sorting
+- Status: Complete
+- Files changed: src/ui/tui/widgets/category_table.py, src/ui/tui/app.py, src/ui/tui/widgets/action_bar.py
+- Summary: F1-F4 column sorting with ascending/descending toggle, sort indicator arrows in headers, sort persistence across actions. 44 new tests.
+
+### Item 2.4: Accessibility Improvements
+- Status: Complete
+- Files changed: src/ui/tui/utils.py, src/ui/tui/theme.py, src/ui/tui/widgets/action_bar.py, src/ui/tui/app.py
+- Summary: High-contrast mode (Ctrl+H), text symbols alongside confidence colors for color-blind users, contextual key binding hints, mode indicator in status bar. 46 new tests.
+
+### Item 2.5: Dead Code Cleanup
+- Status: Complete
+- Files changed: src/ui/tui/commands.py, src/ui/tui/__init__.py, src/ui/tui/widgets/category_table.py, src/ui/tui/widgets/action_bar.py, src/ui/tui/widgets/__init__.py
+- Summary: Removed unused Command class fields and lookup functions, wired or removed dead hierarchical methods, normalized naming conventions, added missing type hints. 23 new tests.
+
+**Phase 2 complete.** All 5 TUI advanced feature items delivered.

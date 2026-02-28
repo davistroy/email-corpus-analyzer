@@ -3,10 +3,11 @@ Centralized state management for the TUI category review.
 
 Provides a single ReviewState class that holds all mutable state:
 categories (pending, approved, skipped, deleted), counters,
-selected_index, and filter_text. Supports change notifications
-and thread-safe mutations.
+selected_index, filter_text, and selected_categories (multi-select).
+Supports change notifications and thread-safe mutations.
 
 Per Phase 2 Item 1.4 specification.
+Phase 2 Item 2.2: Added selected_categories tracking and bulk operations.
 """
 
 from __future__ import annotations
@@ -28,6 +29,8 @@ class ReviewState:
     - Change notification via on_change callback
     - Thread-safe mutations via internal lock
     - Selected index management with auto-clamping
+    - Multi-select tracking for bulk operations (Phase 2 Item 2.2)
+    - Bulk accept/delete operations
     """
 
     def __init__(self, categories: list[Category]) -> None:
@@ -46,6 +49,9 @@ class ReviewState:
         self._filter_text: str = ""
         self._total_categories: int = len(categories)
         self._has_unsaved_changes: bool = False
+
+        # Multi-select tracking for bulk operations (Phase 2 Item 2.2)
+        self._selected_categories: set[str] = set()
 
         # Counters track individual action types
         self._counters: dict[str, int] = {
@@ -137,6 +143,169 @@ class ReviewState:
         return self._total_categories
 
     # -------------------------------------------------------------------------
+    # Multi-select (Phase 2 Item 2.2)
+    # -------------------------------------------------------------------------
+
+    @property
+    def selected_categories(self) -> set[str]:
+        """Set of category IDs currently selected for bulk operations."""
+        return set(self._selected_categories)
+
+    @property
+    def selection_count(self) -> int:
+        """Number of currently selected categories."""
+        return len(self._selected_categories)
+
+    @property
+    def has_selection(self) -> bool:
+        """Whether at least one category is selected."""
+        return len(self._selected_categories) > 0
+
+    def toggle_selection(self, category_id: str) -> None:
+        """
+        Toggle selection state for a category.
+
+        Only toggles if the category exists in the pending list.
+
+        Args:
+            category_id: ID of category to toggle.
+        """
+        with self._lock:
+            # Only allow selecting pending categories
+            if not any(c.category_id == category_id for c in self._pending):
+                return
+
+            if category_id in self._selected_categories:
+                self._selected_categories.discard(category_id)
+            else:
+                self._selected_categories.add(category_id)
+
+        self._notify(
+            {
+                "action": "selection_changed",
+                "category_id": category_id,
+                "selected_count": len(self._selected_categories),
+            }
+        )
+
+    def select_all_visible(self, visible_ids: list[str]) -> None:
+        """
+        Select or deselect all visible categories.
+
+        If all visible IDs are already selected, deselects all.
+        Otherwise, selects all visible IDs.
+
+        Args:
+            visible_ids: List of category IDs currently visible.
+        """
+        with self._lock:
+            visible_set = set(visible_ids)
+            if visible_set and visible_set.issubset(self._selected_categories):
+                # All visible are selected -> deselect all
+                self._selected_categories.clear()
+            else:
+                # Select all visible
+                self._selected_categories = set(visible_ids)
+
+        self._notify(
+            {
+                "action": "selection_changed",
+                "selected_count": len(self._selected_categories),
+            }
+        )
+
+    def clear_selection(self) -> None:
+        """Clear all selections."""
+        with self._lock:
+            self._selected_categories.clear()
+
+        self._notify(
+            {
+                "action": "selection_changed",
+                "selected_count": 0,
+            }
+        )
+
+    def get_selected_pending(self) -> list[Category]:
+        """
+        Get Category objects for all selected IDs that are still pending.
+
+        Returns:
+            List of selected Category objects in pending order.
+        """
+        return [cat for cat in self._pending if cat.category_id in self._selected_categories]
+
+    # -------------------------------------------------------------------------
+    # Bulk operations (Phase 2 Item 2.2)
+    # -------------------------------------------------------------------------
+
+    def bulk_accept(self) -> int:
+        """
+        Accept all selected categories, moving them to approved.
+
+        Returns:
+            Number of categories accepted.
+        """
+        with self._lock:
+            selected = [
+                cat for cat in self._pending if cat.category_id in self._selected_categories
+            ]
+            if not selected:
+                return 0
+
+            for cat in selected:
+                self._pending.remove(cat)
+                self._approved.append(cat)
+                self._counters["accepted"] += 1
+
+            count = len(selected)
+            self._selected_categories.clear()
+            self._has_unsaved_changes = True
+            self._clamp_selected_index()
+
+        self._notify(
+            {
+                "action": "bulk_accept",
+                "count": count,
+                "category_ids": [c.category_id for c in selected],
+            }
+        )
+        return count
+
+    def bulk_delete(self) -> int:
+        """
+        Delete all selected categories, moving them to deleted.
+
+        Returns:
+            Number of categories deleted.
+        """
+        with self._lock:
+            selected = [
+                cat for cat in self._pending if cat.category_id in self._selected_categories
+            ]
+            if not selected:
+                return 0
+
+            for cat in selected:
+                self._pending.remove(cat)
+                self._deleted.append(cat)
+                self._counters["deleted"] += 1
+
+            count = len(selected)
+            self._selected_categories.clear()
+            self._has_unsaved_changes = True
+            self._clamp_selected_index()
+
+        self._notify(
+            {
+                "action": "bulk_delete",
+                "count": count,
+                "category_ids": [c.category_id for c in selected],
+            }
+        )
+        return count
+
+    # -------------------------------------------------------------------------
     # Lookup helpers
     # -------------------------------------------------------------------------
 
@@ -192,6 +361,7 @@ class ReviewState:
             self._approved.append(cat)
             self._counters["accepted"] += 1
             self._has_unsaved_changes = True
+            self._selected_categories.discard(category_id)
             self._clamp_selected_index()
 
         self._notify(
@@ -221,6 +391,7 @@ class ReviewState:
             self._deleted.append(cat)
             self._counters["deleted"] += 1
             self._has_unsaved_changes = True
+            self._selected_categories.discard(category_id)
             self._clamp_selected_index()
 
         self._notify(
@@ -250,6 +421,7 @@ class ReviewState:
             self._skipped.append(cat)
             self._counters["skipped"] += 1
             self._has_unsaved_changes = True
+            self._selected_categories.discard(category_id)
             self._clamp_selected_index()
 
         self._notify(
@@ -286,6 +458,7 @@ class ReviewState:
             self._approved.append(cat)
             self._counters["renamed"] += 1
             self._has_unsaved_changes = True
+            self._selected_categories.discard(category_id)
             self._clamp_selected_index()
 
         self._notify(
@@ -335,6 +508,7 @@ class ReviewState:
 
             self._counters["merged"] += 1
             self._has_unsaved_changes = True
+            self._selected_categories.discard(source_id)
             self._clamp_selected_index()
 
         self._notify(

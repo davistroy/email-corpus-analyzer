@@ -8,6 +8,9 @@ State is centralized in ReviewState (state.py) per Phase 2 Item 1.4.
 Responsive layout per Phase 2 Item 1.5.
 Search/filter system per Phase 2 Item 1.3.
 Error handling & user feedback per Phase 2 Item 1.6.
+Undo/redo system per Phase 2 Item 2.1.
+Bulk operations UI per Phase 2 Item 2.2.
+Accessibility improvements per Phase 2 Item 2.4.
 """
 
 import logging
@@ -22,8 +25,18 @@ from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Static
 
 from src.models.category import Category
+from src.ui.tui.commands_undo import (
+    AcceptCommand,
+    DeleteCommand,
+    MergeCommand,
+    RenameCommand,
+    SkipCommand,
+    UndoManager,
+)
+from src.ui.tui.dialogs.bulk_action_dialog import BulkActionDialog
 from src.ui.tui.state import ReviewState
 from src.ui.tui.theme import APP_CSS
+from src.ui.tui.utils import is_high_contrast_mode, toggle_high_contrast_mode
 from src.ui.tui.widgets.action_bar import ActionBar, HelpOverlay
 from src.ui.tui.widgets.category_table import CategoryTable
 from src.ui.tui.widgets.detail_panel import DetailPanel
@@ -172,7 +185,6 @@ class HelpScreen(ModalScreen[None]):
     BINDINGS = [
         Binding("escape", "dismiss", "Close"),
         Binding("?", "dismiss", "Close"),
-        Binding("f1", "dismiss", "Close"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -208,13 +220,24 @@ class ReviewApp(App):
         Binding("q", "quit_confirm", "Quit"),
         Binding("ctrl+c", "quit_confirm", "Quit"),
         Binding("?", "help", "Help"),
-        Binding("f1", "help", "Help"),
         Binding("slash", "activate_search", "Search"),
         Binding("a", "accept", "Accept"),
         Binding("r", "rename", "Rename"),
         Binding("m", "merge", "Merge"),
         Binding("d", "delete", "Delete"),
         Binding("s", "skip", "Skip"),
+        Binding("ctrl+z", "undo", "Undo"),
+        Binding("ctrl+y", "redo", "Redo"),
+        Binding("ctrl+h", "toggle_high_contrast", "High Contrast", show=False),
+        Binding("ctrl+a", "select_all", "Select All", show=False),
+        Binding("A", "bulk_accept", "Bulk Accept", show=False),
+        Binding("D", "bulk_delete", "Bulk Delete", show=False),
+        Binding("escape", "deselect_all", "Deselect", show=False),
+        # Column sorting (Phase 2 Item 2.3)
+        Binding("f1", "sort_by_name", "Sort Name", show=False),
+        Binding("f2", "sort_by_confidence", "Sort Confidence", show=False),
+        Binding("f3", "sort_by_source", "Sort Source", show=False),
+        Binding("f4", "sort_by_emails", "Sort Emails", show=False),
         Binding("j", "move_down", "Down"),
         Binding("k", "move_up", "Up"),
         Binding("down", "move_down", "Down"),
@@ -235,6 +258,7 @@ class ReviewApp(App):
         """
         super().__init__(*args, **kwargs)
         self.state = ReviewState(categories=categories)
+        self.undo_manager = UndoManager(max_undo=50)
         self.email_lookup = email_lookup or {}
 
     # -------------------------------------------------------------------------
@@ -487,14 +511,6 @@ class ReviewApp(App):
         except NoMatches:
             logger.debug("Detail panel not mounted yet, skipping update")
 
-    def _update_action_bar(self) -> None:
-        """Update action bar based on current state."""
-        try:
-            bar = self.query_one("#action-bar", ActionBar)
-            bar.set_merge_enabled(len(self.approved_categories) > 0)
-        except NoMatches:
-            logger.debug("Action bar not mounted yet, skipping update")
-
     def _update_table(self) -> None:
         """Update the category table."""
         try:
@@ -566,7 +582,8 @@ class ReviewApp(App):
         category = self.get_selected_category()
         if not category:
             return
-        if self.state.accept(category.category_id):
+        cmd = AcceptCommand(self.state, category.category_id)
+        if self.undo_manager.execute(cmd):
             self._refresh_all_widgets()
             self.notify(f"Accepted: {category.category_name}")
         else:
@@ -586,7 +603,8 @@ class ReviewApp(App):
         def handle_rename(new_name: str | None) -> None:
             if new_name:
                 old_name = category.category_name
-                if self.state.rename(cat_id, new_name):
+                cmd = RenameCommand(self.state, cat_id, new_name)
+                if self.undo_manager.execute(cmd):
                     self._refresh_all_widgets()
                     self.notify(f"Renamed: {old_name} -> {new_name}")
                 else:
@@ -625,7 +643,8 @@ class ReviewApp(App):
             source_id: ID of the source (pending) category being merged.
             target: The approved Category the source is merging into.
         """
-        if self.state.merge(source_id, target.category_id):
+        cmd = MergeCommand(self.state, source_id, target.category_id)
+        if self.undo_manager.execute(cmd):
             self._refresh_all_widgets()
             self.notify(f"Merged into: {target.category_name}")
         else:
@@ -639,7 +658,8 @@ class ReviewApp(App):
         category = self.get_selected_category()
         if not category:
             return
-        if self.state.delete(category.category_id):
+        cmd = DeleteCommand(self.state, category.category_id)
+        if self.undo_manager.execute(cmd):
             self._refresh_all_widgets()
             self.notify(f"Deleted: {category.category_name}")
         else:
@@ -653,7 +673,8 @@ class ReviewApp(App):
         category = self.get_selected_category()
         if not category:
             return
-        if self.state.skip(category.category_id):
+        cmd = SkipCommand(self.state, category.category_id)
+        if self.undo_manager.execute(cmd):
             self._refresh_all_widgets()
             self.notify(f"Skipped: {category.category_name}")
         else:
@@ -661,6 +682,213 @@ class ReviewApp(App):
                 f"Skip failed: '{category.category_name}' is no longer pending",
                 severity="warning",
             )
+
+    # -------------------------------------------------------------------------
+    # Undo / Redo (Phase 2 Item 2.1)
+    # -------------------------------------------------------------------------
+
+    def action_undo(self) -> None:
+        """Undo the last action (Ctrl+Z)."""
+        desc = self.undo_manager.undo()
+        if desc:
+            self._refresh_all_widgets()
+            self.notify(f"Undid: {desc}")
+        else:
+            self.notify("Nothing to undo", severity="warning")
+
+    def action_redo(self) -> None:
+        """Redo the last undone action (Ctrl+Y)."""
+        desc = self.undo_manager.redo()
+        if desc:
+            self._refresh_all_widgets()
+            self.notify(f"Redid: {desc}")
+        else:
+            self.notify("Nothing to redo", severity="warning")
+
+    # -------------------------------------------------------------------------
+    # Accessibility (Phase 2 Item 2.4)
+    # -------------------------------------------------------------------------
+
+    def action_toggle_high_contrast(self) -> None:
+        """Toggle high-contrast mode (Ctrl+H).
+
+        Toggles the module-level high-contrast flag and applies/removes
+        the 'high-contrast' CSS class on the screen for visual updates.
+        """
+        new_state = toggle_high_contrast_mode()
+        if new_state:
+            self.add_class("high-contrast")
+            self.notify("High contrast mode ON")
+        else:
+            self.remove_class("high-contrast")
+            self.notify("High contrast mode OFF")
+        self._update_mode_indicator()
+        self._refresh_all_widgets()
+
+    def _update_mode_indicator(self) -> None:
+        """Update the ActionBar mode indicator based on current state."""
+        try:
+            bar = self.query_one("#action-bar", ActionBar)
+            if self.state.has_selection:
+                bar.set_mode_text(f"Selecting {self.state.selection_count}")
+            elif self.state.filter_text:
+                bar.set_mode_text("Filtering")
+            elif is_high_contrast_mode():
+                bar.set_mode_text("Normal [HC]")
+            else:
+                bar.set_mode_text("Normal")
+        except NoMatches:
+            logger.debug("Action bar not mounted yet, cannot update mode indicator")
+
+    # -------------------------------------------------------------------------
+    # Bulk operations (Phase 2 Item 2.2)
+    # -------------------------------------------------------------------------
+
+    def action_toggle_select(self) -> None:
+        """Toggle selection on the current category."""
+        category = self.get_selected_category()
+        if not category:
+            return
+        self.state.toggle_selection(category.category_id)
+        self._sync_table_selection()
+        self._update_action_bar()
+
+    def action_select_all(self) -> None:
+        """Select or deselect all visible categories (Ctrl+A)."""
+        try:
+            table = self.query_one("#category-table", CategoryTable)
+            visible = table.get_visible_categories()
+            visible_ids = [c.category_id for c in visible]
+            self.state.select_all_visible(visible_ids)
+            self._sync_table_selection()
+            self._update_action_bar()
+        except NoMatches:
+            logger.debug("Category table not mounted yet, cannot select all")
+
+    def action_deselect_all(self) -> None:
+        """Deselect all categories (Escape).
+
+        Only clears selection if there is an active selection and no
+        active filter. If there is no selection, does nothing (allows
+        Escape to be handled by other bindings).
+        """
+        if not self.state.has_selection:
+            return
+        self.state.clear_selection()
+        self._sync_table_selection()
+        self._update_action_bar()
+
+    def action_bulk_accept(self) -> None:
+        """Initiate bulk accept with confirmation dialog (Shift+A)."""
+        if not self.state.has_selection:
+            return
+        selected = self.state.get_selected_pending()
+        if not selected:
+            return
+
+        def handle_confirm(confirmed: bool | None) -> None:
+            if confirmed:
+                self._execute_bulk_accept()
+
+        self.push_screen(
+            BulkActionDialog(
+                action="accept",
+                count=len(selected),
+                categories=selected,
+            ),
+            handle_confirm,
+        )
+
+    def action_bulk_delete(self) -> None:
+        """Initiate bulk delete with confirmation dialog (Shift+D)."""
+        if not self.state.has_selection:
+            return
+        selected = self.state.get_selected_pending()
+        if not selected:
+            return
+
+        def handle_confirm(confirmed: bool | None) -> None:
+            if confirmed:
+                self._execute_bulk_delete()
+
+        self.push_screen(
+            BulkActionDialog(
+                action="delete",
+                count=len(selected),
+                categories=selected,
+            ),
+            handle_confirm,
+        )
+
+    def _execute_bulk_accept(self) -> None:
+        """Execute bulk accept after confirmation."""
+        count = self.state.bulk_accept()
+        if count > 0:
+            self._sync_table_selection()
+            self._refresh_all_widgets()
+            self.notify(f"Accepted {count} categories")
+
+    def _execute_bulk_delete(self) -> None:
+        """Execute bulk delete after confirmation."""
+        count = self.state.bulk_delete()
+        if count > 0:
+            self._sync_table_selection()
+            self._refresh_all_widgets()
+            self.notify(f"Deleted {count} categories")
+
+    # -------------------------------------------------------------------------
+    # Column sorting (Phase 2 Item 2.3)
+    # -------------------------------------------------------------------------
+
+    def _apply_table_sort(self, column: str) -> None:
+        """Apply sort to the category table for the given column.
+
+        Args:
+            column: Column key to sort by (name, confidence, emails, source).
+        """
+        try:
+            table = self.query_one("#category-table", CategoryTable)
+            table.apply_sort(column)
+            direction = "ascending" if table.sort_state.ascending else "descending"
+            self.notify(f"Sorted by {column} ({direction})")
+            self._update_detail_panel()
+        except NoMatches:
+            logger.debug("Category table not mounted yet, cannot apply sort")
+
+    def action_sort_by_name(self) -> None:
+        """Sort by name column (F1)."""
+        self._apply_table_sort("name")
+
+    def action_sort_by_confidence(self) -> None:
+        """Sort by confidence column (F2)."""
+        self._apply_table_sort("confidence")
+
+    def action_sort_by_source(self) -> None:
+        """Sort by source column (F3)."""
+        self._apply_table_sort("source")
+
+    def action_sort_by_emails(self) -> None:
+        """Sort by emails column (F4)."""
+        self._apply_table_sort("emails")
+
+    def _sync_table_selection(self) -> None:
+        """Sync the CategoryTable's selected_ids with ReviewState's selected_categories."""
+        try:
+            table = self.query_one("#category-table", CategoryTable)
+            table.selected_ids = set(self.state._selected_categories)
+            table.refresh_display()
+        except NoMatches:
+            logger.debug("Category table not mounted yet, cannot sync selection")
+
+    def _update_action_bar(self) -> None:
+        """Update action bar based on current state."""
+        try:
+            bar = self.query_one("#action-bar", ActionBar)
+            bar.set_merge_enabled(len(self.approved_categories) > 0)
+            bar.set_selection_count(self.state.selection_count)
+        except NoMatches:
+            logger.debug("Action bar not mounted yet, skipping update")
+        self._update_mode_indicator()
 
     def action_move_down(self) -> None:
         """Move selection down."""

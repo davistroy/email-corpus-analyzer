@@ -9,8 +9,6 @@ from src.ui.tui.commands import (
     Command,
     format_command_help,
     get_all_commands,
-    get_command_by_action,
-    get_command_by_key,
 )
 from src.ui.tui.state import ReviewState
 from src.ui.tui.theme import (
@@ -29,7 +27,5 @@ __all__ = [
     "get_confidence_level",
     "Command",
     "get_all_commands",
-    "get_command_by_key",
-    "get_command_by_action",
     "format_command_help",
 ]
