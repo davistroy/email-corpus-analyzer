@@ -109,6 +109,7 @@ class ExtractionService:
         progress_callback: Callable[[str], None] | None = None,
         since_last: bool = False,
         existing_corpus: Corpus | None = None,
+        email_progress_callback: Callable[[int, int], None] | None = None,
     ) -> Corpus:
         """
         Run extraction with a single extractor.
@@ -119,6 +120,7 @@ class ExtractionService:
             progress_callback: Optional callback for status updates
             since_last: If True, do incremental extraction
             existing_corpus: Existing corpus for incremental mode
+            email_progress_callback: Optional per-email callback(current, total)
 
         Returns:
             Extracted corpus
@@ -131,6 +133,7 @@ class ExtractionService:
                 existing_corpus=existing_corpus,
                 max_batch_size=self.config.batch_size,
                 checkpoint_interval=self.config.checkpoint_interval,
+                progress_callback=email_progress_callback,
             )
 
             corpus = incremental_result.corpus
@@ -152,6 +155,7 @@ class ExtractionService:
             result = extractor.extract_all(
                 max_batch_size=self.config.batch_size,
                 checkpoint_interval=self.config.checkpoint_interval,
+                progress_callback=email_progress_callback,
             )
 
             corpus = result.corpus
@@ -221,6 +225,7 @@ class ExtractionService:
         progress_callback: Callable[[str], None] | None = None,
         since_last: bool = False,
         existing_corpus: Corpus | None = None,
+        email_progress_callback: Callable[[int, int], None] | None = None,
     ) -> Corpus:
         """
         Run email extraction based on configured source.
@@ -232,6 +237,7 @@ class ExtractionService:
             progress_callback: Optional callback(message) for status updates
             since_last: If True, only extract emails since last extraction
             existing_corpus: Existing corpus for incremental extraction
+            email_progress_callback: Optional per-email callback(current, total) for progress bars
 
         Returns:
             Extracted email corpus
@@ -262,6 +268,7 @@ class ExtractionService:
                 corpus = self._run_single_extractor(
                     extractor, sc.label,
                     progress_callback, since_last, existing_corpus,
+                    email_progress_callback,
                 )
                 corpora.append(corpus)
 

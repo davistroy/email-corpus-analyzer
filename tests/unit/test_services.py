@@ -1829,6 +1829,7 @@ class TestExtractionServiceConfigPropagation:
         service._m365_extractor.extract_all.assert_called_once_with(
             max_batch_size=250,
             checkpoint_interval=50,
+            progress_callback=None,
         )
 
     def test_checkpoint_interval_propagated_to_incremental(self):
@@ -1853,6 +1854,86 @@ class TestExtractionServiceConfigPropagation:
             existing_corpus=existing_corpus,
             max_batch_size=300,
             checkpoint_interval=75,
+            progress_callback=None,
+        )
+
+    def test_email_progress_callback_passed_to_extract_all(self):
+        """Test that email_progress_callback is forwarded to extract_all."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(batch_size=500, checkpoint_interval=100)
+        service = ExtractionService(config, user_email="test@example.com")
+
+        mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus, failed_emails=[],
+            success_count=10, failure_count=0, total_attempted=10,
+        )
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = mock_result
+
+        my_callback = MagicMock()
+        service.run(email_progress_callback=my_callback)
+
+        service._m365_extractor.extract_all.assert_called_once_with(
+            max_batch_size=500,
+            checkpoint_interval=100,
+            progress_callback=my_callback,
+        )
+
+    def test_email_progress_callback_none_by_default(self):
+        """Test that email_progress_callback defaults to None."""
+        from src.extractors.m365_extractor import ExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(batch_size=500, checkpoint_interval=100)
+        service = ExtractionService(config, user_email="test@example.com")
+
+        mock_corpus = create_test_corpus()
+        mock_result = ExtractionResult(
+            corpus=mock_corpus, failed_emails=[],
+            success_count=10, failure_count=0, total_attempted=10,
+        )
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_all.return_value = mock_result
+
+        service.run()
+
+        service._m365_extractor.extract_all.assert_called_once_with(
+            max_batch_size=500,
+            checkpoint_interval=100,
+            progress_callback=None,
+        )
+
+    def test_email_progress_callback_passed_in_incremental_mode(self):
+        """Test that email_progress_callback is forwarded in incremental mode."""
+        from src.extractors.m365_extractor import IncrementalExtractionResult
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig(batch_size=500, checkpoint_interval=100)
+        service = ExtractionService(config, user_email="test@example.com")
+
+        existing_corpus = create_test_corpus()
+        mock_result = IncrementalExtractionResult(
+            corpus=existing_corpus, failed_emails=[],
+            new_emails_count=5, previous_count=10, total_count=15,
+        )
+        service._m365_extractor = MagicMock()
+        service._m365_extractor.extract_incremental.return_value = mock_result
+
+        my_callback = MagicMock()
+        service.run(
+            since_last=True,
+            existing_corpus=existing_corpus,
+            email_progress_callback=my_callback,
+        )
+
+        service._m365_extractor.extract_incremental.assert_called_once_with(
+            existing_corpus=existing_corpus,
+            max_batch_size=500,
+            checkpoint_interval=100,
+            progress_callback=my_callback,
         )
 
 

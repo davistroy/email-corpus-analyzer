@@ -2189,3 +2189,125 @@ class TestErrorMessageFormatting:
             # KeyError should show count of 2
             assert "2 KeyError" in summary
             assert "1 ValueError" in summary
+
+
+class TestProgressBarIntegration:
+    """Test cases for tqdm progress bar in extract command.
+
+    Validates that:
+    - Progress bar is created in normal mode
+    - Progress bar is suppressed with --json
+    - Progress bar is suppressed with --quiet
+    - Progress bar is closed on success
+    - Progress bar is closed on error
+    """
+
+    @pytest.fixture
+    def extract_args(self):
+        """Base argparse.Namespace for extract command tests."""
+        import argparse
+
+        return argparse.Namespace(
+            user_email="test@example.com",
+            source="hotmail",
+            gmail_email=None,
+            corpus_file=None,
+            batch_size=500,
+            checkpoint_interval=100,
+            dry_run=False,
+            since_last=False,
+            json=False,
+            quiet=False,
+            verbose=False,
+        )
+
+    @pytest.fixture
+    def mock_service(self):
+        """Create a mock ExtractionService with a successful result."""
+        mock_corpus = MagicMock()
+        mock_corpus.emails = []
+        mock_corpus.model_dump.return_value = {}
+        mock_corpus.extraction_metadata.total_emails = 0
+        service = MagicMock()
+        service.run.return_value = mock_corpus
+        return service
+
+    def test_progress_bar_created_in_normal_mode(
+        self, extract_args, mock_service
+    ):
+        """tqdm progress bar is created when not --json and not --quiet."""
+        from src.cli.commands.extract import cmd_extract
+
+        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
+             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
+             patch("src.cli.commands.extract.save_json"), \
+             patch("src.cli.commands.extract.PathConfig"):
+            mock_bar = MagicMock()
+            mock_tqdm_cls.return_value = mock_bar
+            cmd_extract(extract_args)
+            mock_tqdm_cls.assert_called_once()
+
+    def test_progress_bar_suppressed_with_json(
+        self, extract_args, mock_service
+    ):
+        """No tqdm progress bar when --json flag is set."""
+        from src.cli.commands.extract import cmd_extract
+
+        extract_args.json = True
+
+        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
+             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
+             patch("src.cli.commands.extract.save_json"), \
+             patch("src.cli.commands.extract.PathConfig"), \
+             patch("src.cli.commands.extract.output_json"):
+            cmd_extract(extract_args)
+            mock_tqdm_cls.assert_not_called()
+
+    def test_progress_bar_suppressed_with_quiet(
+        self, extract_args, mock_service
+    ):
+        """No tqdm progress bar when --quiet flag is set."""
+        from src.cli.commands.extract import cmd_extract
+
+        extract_args.quiet = True
+
+        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
+             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
+             patch("src.cli.commands.extract.save_json"), \
+             patch("src.cli.commands.extract.PathConfig"):
+            cmd_extract(extract_args)
+            mock_tqdm_cls.assert_not_called()
+
+    def test_progress_bar_closed_on_success(
+        self, extract_args, mock_service
+    ):
+        """Progress bar close() is called after successful extraction."""
+        from src.cli.commands.extract import cmd_extract
+
+        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
+             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
+             patch("src.cli.commands.extract.save_json"), \
+             patch("src.cli.commands.extract.PathConfig"):
+            mock_bar = MagicMock()
+            mock_tqdm_cls.return_value = mock_bar
+            cmd_extract(extract_args)
+            mock_bar.close.assert_called_once()
+
+    def test_progress_bar_closed_on_error(
+        self, extract_args
+    ):
+        """Progress bar close() is called even when extraction raises."""
+        from src.cli.commands.extract import cmd_extract
+
+        failing_service = MagicMock()
+        failing_service.run.side_effect = ConnectionError("Server unreachable")
+
+        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
+             patch("src.services.extraction_service.ExtractionService", return_value=failing_service), \
+             patch("src.cli.commands.extract.save_json"), \
+             patch("src.cli.commands.extract.PathConfig"):
+            mock_bar = MagicMock()
+            mock_tqdm_cls.return_value = mock_bar
+            result = cmd_extract(extract_args)
+            assert result == 1
+            mock_bar.close.assert_called_once()

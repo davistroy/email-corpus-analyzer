@@ -3,6 +3,8 @@ import argparse
 import time
 from pathlib import Path
 
+from tqdm import tqdm
+
 from src.cli.formatters import output_json
 from src.cli.parsers import validate_email_format
 from src.utils.file_manager import load_json, save_json
@@ -209,11 +211,22 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 })
             return 1
 
+    # Set up tqdm progress bar (suppressed for --json and --quiet)
+    use_progress = not getattr(args, 'json', False) and not getattr(args, 'quiet', False)
+    bar = None
+    if use_progress:
+        bar = tqdm(total=None, desc="Extracting emails", unit=" emails", dynamic_ncols=True)
+
+    def _email_progress(current: int, total: int) -> None:
+        if bar is not None:
+            bar.update(current - bar.n)
+
     # Run extraction via ExtractionService
     try:
         corpus = service.run(
             since_last=getattr(args, 'since_last', False),
             existing_corpus=existing_corpus,
+            email_progress_callback=_email_progress if use_progress else None,
         )
 
         # Save corpus
@@ -252,3 +265,7 @@ def cmd_extract(args: argparse.Namespace) -> int:
                 "error": str(e)
             })
         return 1
+
+    finally:
+        if bar is not None:
+            bar.close()
