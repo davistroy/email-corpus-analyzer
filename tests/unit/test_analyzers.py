@@ -1793,9 +1793,18 @@ class TestClusterQualityMetrics:
 # ============================================================================
 
 
+try:
+    import matplotlib  # noqa: F401
+
+    _has_matplotlib = True
+except ImportError:
+    _has_matplotlib = False
+
+
 class TestClusterVisualization:
     """Test cases for generate_cluster_visualization function."""
 
+    @pytest.mark.skipif(not _has_matplotlib, reason="matplotlib required")
     def test_generates_png_with_silhouette_scores(self, tmp_path):
         """Test that visualization creates a PNG file with scatter + bar chart."""
         from src.analyzers.semantic_analyzer import generate_cluster_visualization
@@ -1820,6 +1829,7 @@ class TestClusterVisualization:
         # File should be non-trivial in size (at least a few KB)
         assert result.stat().st_size > 1000
 
+    @pytest.mark.skipif(not _has_matplotlib, reason="matplotlib required")
     def test_generates_png_without_silhouette_scores(self, tmp_path):
         """Test that visualization works without silhouette scores (scatter only)."""
         from src.analyzers.semantic_analyzer import generate_cluster_visualization
@@ -1860,6 +1870,7 @@ class TestClusterVisualization:
         assert result is None
         assert not output_path.exists()
 
+    @pytest.mark.skipif(not _has_matplotlib, reason="matplotlib required")
     def test_single_cluster_visualization(self, tmp_path):
         """Test visualization with a single cluster."""
         from src.analyzers.semantic_analyzer import generate_cluster_visualization
@@ -1879,6 +1890,7 @@ class TestClusterVisualization:
         assert result is not None
         assert result.exists()
 
+    @pytest.mark.skipif(not _has_matplotlib, reason="matplotlib required")
     def test_output_path_as_string(self, tmp_path):
         """Test that output_path accepts string as well as Path."""
         from src.analyzers.semantic_analyzer import generate_cluster_visualization
