@@ -9,6 +9,7 @@ Tests cover:
 
 Uses TDD approach - tests written first before implementation.
 """
+
 import csv
 import tempfile
 from pathlib import Path
@@ -212,7 +213,7 @@ class TestCsvExporter:
             Category(
                 category_id="cat_special",
                 category_name="Caf\u00e9 & Restaurant",
-                description="Orders with \"quotes\" and commas, etc.",
+                description='Orders with "quotes" and commas, etc.',
                 confidence=0.75,
                 email_count=50,
                 source=CategorySource.CUSTOM,
@@ -301,9 +302,7 @@ class TestHtmlExporter:
         from src.exporters.html_exporter import export_categories_to_html
 
         output_path = temp_output_dir / "report.html"
-        export_categories_to_html(
-            sample_categories, output_path, title="My Custom Report"
-        )
+        export_categories_to_html(sample_categories, output_path, title="My Custom Report")
 
         content = output_path.read_text(encoding="utf-8")
 
@@ -491,10 +490,13 @@ class TestHtmlExporter:
 
         output_path = temp_output_dir / "report.html"
 
-        with patch(
-            "src.exporters.html_exporter.TEMPLATE_DIR",
-            Path(temp_output_dir / "nonexistent_templates"),
-        ), pytest.raises(ExportError, match="Template not found at"):
+        with (
+            patch(
+                "src.exporters.html_exporter.TEMPLATE_DIR",
+                Path(temp_output_dir / "nonexistent_templates"),
+            ),
+            pytest.raises(ExportError, match="Template not found at"),
+        ):
             export_categories_to_html(sample_categories, output_path)
 
     def test_export_html_missing_template_error_message_includes_path(
@@ -531,10 +533,13 @@ class TestHtmlExporter:
 
         output_path = temp_output_dir / "report.html"
 
-        with patch(
-            "src.exporters.html_exporter.TEMPLATE_DIR",
-            empty_template_dir,
-        ), pytest.raises(ExportError, match="Template not found at"):
+        with (
+            patch(
+                "src.exporters.html_exporter.TEMPLATE_DIR",
+                empty_template_dir,
+            ),
+            pytest.raises(ExportError, match="Template not found at"),
+        ):
             export_categories_to_html(sample_categories, output_path)
 
 

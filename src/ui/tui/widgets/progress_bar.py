@@ -3,6 +3,7 @@ Progress bar widget for the TUI application.
 
 Displays review progress as a visual progress bar showing reviewed/total.
 """
+
 from textual.reactive import reactive
 from textual.widgets import Static
 
@@ -20,13 +21,7 @@ class ProgressBar(Static):
     total: reactive[int] = reactive(0)
     reviewed: reactive[int] = reactive(0)
 
-    def __init__(
-        self,
-        total: int = 0,
-        reviewed: int = 0,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, total: int = 0, reviewed: int = 0, *args, **kwargs):
         """
         Initialize the progress bar.
 

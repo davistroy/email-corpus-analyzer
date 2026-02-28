@@ -7,6 +7,7 @@ Work Item 3.2: Added subject-based fallback grouping tests.
 
 Uses TDD approach - tests written first before implementation.
 """
+
 from datetime import datetime, timedelta
 
 import pytest

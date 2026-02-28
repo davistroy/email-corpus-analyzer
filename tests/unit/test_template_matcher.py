@@ -46,31 +46,37 @@ def create_test_analysis(
             RepresentativeSample(subject=subj, sender="test@test.com", body_preview=body)
             for subj, body in zip(cluster_subjects, body_previews, strict=True)
         ]
-        clusters.append(ContentCluster(
-            cluster_id=0,
-            size=100,
-            percentage=10.0,
-            representative_samples=samples,
-            common_domains=[],
-            email_ids=[f"e{i}" for i in range(100)],
-        ))
+        clusters.append(
+            ContentCluster(
+                cluster_id=0,
+                size=100,
+                percentage=10.0,
+                representative_samples=samples,
+                common_domains=[],
+                email_ids=[f"e{i}" for i in range(100)],
+            )
+        )
 
     if sender_domains:
         for i, domain in enumerate(sender_domains):
-            senders.append(Sender(
-                email=f"test@{domain}",
-                name="Test",
-                domain=domain,
-                type=SenderType.SERVICE,
-                frequency_count=50,
-                sample_subjects=["Test"],
-                email_ids=[f"sender{i}_e{j}" for j in range(50)],
-            ))
+            senders.append(
+                Sender(
+                    email=f"test@{domain}",
+                    name="Test",
+                    domain=domain,
+                    type=SenderType.SERVICE,
+                    frequency_count=50,
+                    sample_subjects=["Test"],
+                    email_ids=[f"sender{i}_e{j}" for j in range(50)],
+                )
+            )
 
     return AnalysisResults(
         sender_analysis=SenderAnalysis(
             top_senders=senders,
-            top_domains=[DomainCount(domain=s.domain, count=50) for s in senders] if senders else [],
+            top_domains=[DomainCount(domain=s.domain, count=50) for s in senders]
+            if senders
+            else [],
             unique_senders=len(senders),
             unique_domains=len({s.domain for s in senders}) if senders else 0,
         ),
@@ -102,13 +108,15 @@ def create_test_analysis(
 # Template Library Expansion Tests
 # -----------------------------------------------------------------------------
 
+
 class TestExpandedTemplateLibrary:
     """Tests for expanded template library (6 -> 15+ templates)."""
 
     def test_template_count_minimum_15(self):
         """Template library should have at least 15 templates."""
-        assert len(PREDEFINED_TEMPLATES) >= 15, \
+        assert len(PREDEFINED_TEMPLATES) >= 15, (
             f"Expected at least 15 templates, got {len(PREDEFINED_TEMPLATES)}"
+        )
 
     def test_all_templates_have_required_fields(self):
         """All templates should have name, keywords, domains, description."""
@@ -120,8 +128,9 @@ class TestExpandedTemplateLibrary:
     def test_all_templates_have_minimum_keywords(self):
         """All templates should have at least 5 keywords."""
         for template in PREDEFINED_TEMPLATES:
-            assert len(template.keywords) >= 5, \
+            assert len(template.keywords) >= 5, (
                 f"Template '{template.name}' has only {len(template.keywords)} keywords, need at least 5"
+            )
 
 
 class TestExistingTemplatesEnhanced:
@@ -204,7 +213,9 @@ class TestNewTemplates:
 
     def test_education_template_exists(self):
         """Education template should exist."""
-        edu_templates = [t for t in PREDEFINED_TEMPLATES if "Education" in t.name or "School" in t.name]
+        edu_templates = [
+            t for t in PREDEFINED_TEMPLATES if "Education" in t.name or "School" in t.name
+        ]
         assert len(edu_templates) >= 1, "Education template should exist"
 
         edu = edu_templates[0]
@@ -244,7 +255,9 @@ class TestNewTemplates:
 
     def test_real_estate_template_exists(self):
         """Real Estate template should exist."""
-        re_templates = [t for t in PREDEFINED_TEMPLATES if "Real Estate" in t.name or "Housing" in t.name]
+        re_templates = [
+            t for t in PREDEFINED_TEMPLATES if "Real Estate" in t.name or "Housing" in t.name
+        ]
         assert len(re_templates) >= 1, "Real Estate template should exist"
 
     def test_insurance_template_exists(self):
@@ -254,23 +267,39 @@ class TestNewTemplates:
 
     def test_food_template_exists(self):
         """Food/Restaurant template should exist."""
-        food_templates = [t for t in PREDEFINED_TEMPLATES if "Food" in t.name or "Restaurant" in t.name or "Dining" in t.name]
+        food_templates = [
+            t
+            for t in PREDEFINED_TEMPLATES
+            if "Food" in t.name or "Restaurant" in t.name or "Dining" in t.name
+        ]
         assert len(food_templates) >= 1, "Food/Dining template should exist"
 
     def test_fitness_template_exists(self):
         """Fitness/Health template should exist."""
         # Could be combined with healthcare or separate
-        fitness_templates = [t for t in PREDEFINED_TEMPLATES if "Fitness" in t.name or "Gym" in t.name or "Wellness" in t.name]
+        fitness_templates = [
+            t
+            for t in PREDEFINED_TEMPLATES
+            if "Fitness" in t.name or "Gym" in t.name or "Wellness" in t.name
+        ]
         assert len(fitness_templates) >= 1, "Fitness template should exist"
 
     def test_charity_template_exists(self):
         """Charity/Nonprofit template should exist."""
-        charity_templates = [t for t in PREDEFINED_TEMPLATES if "Charit" in t.name or "Nonprofit" in t.name or "Donation" in t.name]
+        charity_templates = [
+            t
+            for t in PREDEFINED_TEMPLATES
+            if "Charit" in t.name or "Nonprofit" in t.name or "Donation" in t.name
+        ]
         assert len(charity_templates) >= 1, "Charity template should exist"
 
     def test_jobs_template_exists(self):
         """Jobs/Career template should exist."""
-        jobs_templates = [t for t in PREDEFINED_TEMPLATES if "Job" in t.name or "Career" in t.name or "Employment" in t.name]
+        jobs_templates = [
+            t
+            for t in PREDEFINED_TEMPLATES
+            if "Job" in t.name or "Career" in t.name or "Employment" in t.name
+        ]
         assert len(jobs_templates) >= 1, "Jobs template should exist"
 
 
@@ -281,19 +310,27 @@ class TestTemplateMatching:
         """Work template should match meeting-related emails."""
         analysis = create_test_analysis(
             cluster_subjects=["Meeting invitation: Q4 Planning", "Calendar reminder: Team standup"],
-            cluster_body_previews=["You've been invited to a meeting", "Your meeting starts in 15 minutes"],
+            cluster_body_previews=[
+                "You've been invited to a meeting",
+                "Your meeting starts in 15 minutes",
+            ],
         )
 
         categories = match_templates(analysis, PREDEFINED_TEMPLATES)
 
-        work_cats = [c for c in categories if "Work" in c.category_name or "Office" in c.category_name]
+        work_cats = [
+            c for c in categories if "Work" in c.category_name or "Office" in c.category_name
+        ]
         assert len(work_cats) >= 1, "Work template should match meeting emails"
 
     def test_healthcare_template_matches_appointments(self):
         """Healthcare template should match appointment emails."""
         analysis = create_test_analysis(
             cluster_subjects=["Appointment reminder", "Your prescription is ready"],
-            cluster_body_previews=["Your appointment with Dr. Smith is tomorrow", "Prescription pickup available"],
+            cluster_body_previews=[
+                "Your appointment with Dr. Smith is tomorrow",
+                "Prescription pickup available",
+            ],
         )
 
         categories = match_templates(analysis, PREDEFINED_TEMPLATES)
@@ -310,7 +347,9 @@ class TestTemplateMatching:
 
         categories = match_templates(analysis, PREDEFINED_TEMPLATES)
 
-        job_cats = [c for c in categories if "Job" in c.category_name or "Career" in c.category_name]
+        job_cats = [
+            c for c in categories if "Job" in c.category_name or "Career" in c.category_name
+        ]
         assert len(job_cats) >= 1, "Jobs template should match application emails"
 
     def test_entertainment_template_matches_streaming(self):
@@ -362,12 +401,15 @@ class TestTemplateUniqueness:
             else:
                 categories.add("other")
 
-        assert len(categories) >= 8, f"Should cover at least 8 diverse categories, got {len(categories)}"
+        assert len(categories) >= 8, (
+            f"Should cover at least 8 diverse categories, got {len(categories)}"
+        )
 
 
 # -----------------------------------------------------------------------------
 # Word-Boundary Keyword Matching Tests (false-positive prevention)
 # -----------------------------------------------------------------------------
+
 
 class TestKeywordWordBoundaryMatching:
     """Test that keyword matching uses word boundaries to prevent false positives."""
@@ -499,6 +541,7 @@ class TestKeywordWordBoundaryMatching:
 # Domain Suffix Matching Tests (false-positive prevention)
 # -----------------------------------------------------------------------------
 
+
 class TestDomainSuffixMatching:
     """Test that domain matching uses suffix-based logic to prevent false positives."""
 
@@ -583,9 +626,7 @@ class TestDomainSuffixMatching:
             description="Test domain matching",
         )
         categories = match_templates(analysis, [minimal_template])
-        assert len(categories) == 0, (
-            "'paypal.com' should not match 'fakepaypal.com'"
-        )
+        assert len(categories) == 0, "'paypal.com' should not match 'fakepaypal.com'"
 
     def test_domain_matching_is_case_insensitive(self):
         """Domain matching should be case-insensitive."""
@@ -627,21 +668,31 @@ class TestDomainSuffixMatching:
 
         analysis = AnalysisResults(
             sender_analysis=SenderAnalysis(
-                top_senders=[], top_domains=[], unique_senders=0, unique_domains=0,
+                top_senders=[],
+                top_domains=[],
+                unique_senders=0,
+                unique_domains=0,
             ),
             subject_patterns=SubjectPatterns(
-                common_prefixes={}, numbered_patterns={}, top_keywords=[],
-                bracket_tags=[], total_subjects_analyzed=1000,
+                common_prefixes={},
+                numbered_patterns={},
+                top_keywords=[],
+                bracket_tags=[],
+                total_subjects_analyzed=1000,
             ),
             content_clusters=[cluster],
             temporal_patterns=TemporalPatterns(
-                frequency_distribution={}, sender_frequencies={},
+                frequency_distribution={},
+                sender_frequencies={},
             ),
             volume_stats=VolumeStats(
-                total_emails=1000, unique_senders=1,
+                total_emails=1000,
+                unique_senders=1,
                 date_range={"oldest": "2024-01-01", "newest": "2024-12-31", "span_days": "365"},
-                with_attachments=0, attachment_percentage=0.0,
-                avg_body_length_chars=500, emails_per_day=2.7,
+                with_attachments=0,
+                attachment_percentage=0.0,
+                avg_body_length_chars=500,
+                emails_per_day=2.7,
             ),
         )
 
@@ -661,12 +712,14 @@ class TestDomainSuffixMatching:
 # Pre-compiled Pattern Tests
 # -----------------------------------------------------------------------------
 
+
 class TestPrecompiledPatterns:
     """Test that the pre-compiled pattern caching works correctly."""
 
     def test_get_keyword_pattern_returns_compiled_regex(self):
         """_get_keyword_pattern should return a compiled regex Pattern."""
         import re
+
         pattern = _get_keyword_pattern("visa")
         assert isinstance(pattern, re.Pattern), "Should return a compiled regex pattern"
 
@@ -717,6 +770,7 @@ class TestPrecompiledPatterns:
 # -----------------------------------------------------------------------------
 # All 18 Templates Still Match Their Intended Emails
 # -----------------------------------------------------------------------------
+
 
 class TestAll18TemplatesMatchIntendedEmails:
     """Verify each of the 18 predefined templates matches its intended content."""
@@ -870,6 +924,7 @@ class TestAll18TemplatesMatchIntendedEmails:
 # load_templates() Tests (Phase 3.2: Externalized JSON templates)
 # -----------------------------------------------------------------------------
 
+
 class TestLoadTemplates:
     """Test the load_templates() function for JSON-based template loading."""
 
@@ -882,9 +937,7 @@ class TestLoadTemplates:
         """load_templates() should return a list of CategoryTemplate instances."""
         templates = load_templates()
         for t in templates:
-            assert isinstance(t, CategoryTemplate), (
-                f"Expected CategoryTemplate, got {type(t)}"
-            )
+            assert isinstance(t, CategoryTemplate), f"Expected CategoryTemplate, got {type(t)}"
 
     def test_load_templates_matches_predefined_templates(self):
         """load_templates() output should match PREDEFINED_TEMPLATES (backward compat)."""
@@ -903,7 +956,7 @@ class TestLoadTemplates:
                 "name": "Custom Category",
                 "keywords": ["custom", "test", "category", "special", "unique"],
                 "domains": ["custom.com"],
-                "description": "A custom test category"
+                "description": "A custom test category",
             }
         ]
         custom_file = tmp_path / "custom_templates.json"

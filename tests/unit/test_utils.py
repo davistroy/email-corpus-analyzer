@@ -7,6 +7,7 @@ Tests cover:
 - src/utils/progress.py - progress tracking utilities
 - src/utils/logger.py - logging setup and error logging
 """
+
 import json
 import logging
 import os
@@ -168,7 +169,7 @@ class TestPathConfig:
         PathConfig.ensure_output_dir_exists()
 
         # Check permissions (on Unix-like systems)
-        if os.name != 'nt':  # Skip on Windows
+        if os.name != "nt":  # Skip on Windows
             mode = os.stat(custom_dir).st_mode & 0o777
             assert mode == 0o700
 
@@ -250,7 +251,7 @@ class TestFileManagerSaveJson:
 
         save_json(data, file_path)
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded == data
 
@@ -270,7 +271,7 @@ class TestFileManagerSaveJson:
 
         save_json(data, file_path, indent=4)
 
-        content = file_path.read_text(encoding='utf-8')
+        content = file_path.read_text(encoding="utf-8")
         # Check that 4-space indent is used
         assert "    " in content
 
@@ -299,7 +300,7 @@ class TestFileManagerSaveJson:
         save_json(data, file_path)
 
         # Check permissions (on Unix-like systems)
-        if os.name != 'nt':  # Skip on Windows
+        if os.name != "nt":  # Skip on Windows
             mode = os.stat(file_path).st_mode & 0o777
             assert mode == 0o600
 
@@ -310,7 +311,7 @@ class TestFileManagerSaveJson:
 
         save_json(data, file_path)
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded == data
 
@@ -321,19 +322,20 @@ class TestFileManagerSaveJson:
 
         save_json({"new": "data"}, file_path)
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded == {"new": "data"}
 
     def test_save_json_handles_non_serializable_with_default_str(self, tmp_path):
         """Test save_json uses default=str for non-serializable objects."""
         from datetime import datetime
+
         data = {"timestamp": datetime(2024, 1, 15, 10, 30, 0)}
         file_path = tmp_path / "datetime.json"
 
         save_json(data, file_path)
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             loaded = json.load(f)
         # datetime should be converted to string
         assert isinstance(loaded["timestamp"], str)
@@ -345,7 +347,7 @@ class TestFileManagerSaveJson:
 
         save_json(data, file_path)
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded == {}
 
@@ -356,7 +358,7 @@ class TestFileManagerSaveJson:
 
         save_json(data, file_path)
 
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded == data
 
@@ -368,7 +370,7 @@ class TestFileManagerLoadJson:
         """Test basic load_json functionality."""
         file_path = tmp_path / "test.json"
         expected = {"key": "value", "number": 123}
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(expected, f)
 
         result = load_json(file_path)
@@ -379,7 +381,7 @@ class TestFileManagerLoadJson:
         """Test load_json with string path argument."""
         file_path = tmp_path / "string.json"
         data = {"test": True}
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
         result = load_json(str(file_path))
@@ -398,7 +400,7 @@ class TestFileManagerLoadJson:
     def test_load_json_invalid_json(self, tmp_path):
         """Test load_json raises JSONDecodeError for invalid JSON."""
         file_path = tmp_path / "invalid.json"
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write("{ invalid json }")
 
         with pytest.raises(json.JSONDecodeError):
@@ -416,7 +418,7 @@ class TestFileManagerLoadJson:
         """Test load_json handles Unicode content."""
         file_path = tmp_path / "unicode.json"
         data = {"message": "Hello, World!"}
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
 
         result = load_json(file_path)
@@ -426,16 +428,8 @@ class TestFileManagerLoadJson:
     def test_load_json_nested_structure(self, tmp_path):
         """Test load_json with deeply nested structure."""
         file_path = tmp_path / "nested.json"
-        data = {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "value": "deep"
-                    }
-                }
-            }
-        }
-        with open(file_path, 'w', encoding='utf-8') as f:
+        data = {"level1": {"level2": {"level3": {"value": "deep"}}}}
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
         result = load_json(file_path)
@@ -446,7 +440,7 @@ class TestFileManagerLoadJson:
         """Test load_json with list as root element."""
         file_path = tmp_path / "list.json"
         data = [1, "two", {"three": 3}]
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
         result = load_json(file_path)
@@ -499,7 +493,7 @@ class TestFileManagerEnsureOutputDir:
 
         fm_ensure_output_dir(custom_dir)
 
-        if os.name != 'nt':  # Skip on Windows
+        if os.name != "nt":  # Skip on Windows
             mode = os.stat(custom_dir).st_mode & 0o777
             assert mode == 0o700
 
@@ -725,10 +719,7 @@ class TestSaveJsonAtomic:
     def test_save_json_roundtrip_still_works(self, tmp_path):
         """Test save_json/load_json roundtrip works with atomic writes."""
         file_path = tmp_path / "roundtrip.json"
-        data = {
-            "categories": [{"id": 1, "name": "Test"}],
-            "metadata": {"version": "2.0"}
-        }
+        data = {"categories": [{"id": 1, "name": "Test"}], "metadata": {"version": "2.0"}}
 
         save_json(data, file_path)
         loaded = load_json(file_path)
@@ -882,48 +873,35 @@ class TestWrapWithProgress:
 
     def test_wrap_with_progress_basic(self):
         """Test wrap_with_progress executes function."""
+
         def sample_func(data, progress_callback=None):
             if progress_callback:
                 progress_callback(50, 100)
             return data * 2
 
-        result = wrap_with_progress(
-            sample_func,
-            total=100,
-            desc="Processing",
-            data=21
-        )
+        result = wrap_with_progress(sample_func, total=100, desc="Processing", data=21)
 
         assert result == 42
 
     def test_wrap_with_progress_passes_kwargs(self):
         """Test wrap_with_progress passes keyword arguments."""
+
         def func_with_kwargs(a, b, multiplier=1, progress_callback=None):
             return (a + b) * multiplier
 
         result = wrap_with_progress(
-            func_with_kwargs,
-            total=50,
-            desc="Test",
-            a=10,
-            b=5,
-            multiplier=3
+            func_with_kwargs, total=50, desc="Test", a=10, b=5, multiplier=3
         )
 
         assert result == 45
 
     def test_wrap_with_progress_passes_args(self):
         """Test wrap_with_progress passes positional arguments."""
+
         def func_with_args(x, y, progress_callback=None):
             return x - y
 
-        result = wrap_with_progress(
-            func_with_args,
-            total=100,
-            desc="Subtract",
-            x=100,
-            y=30
-        )
+        result = wrap_with_progress(func_with_args, total=100, desc="Subtract", x=100, y=30)
 
         assert result == 70
 
@@ -934,7 +912,7 @@ class TestWrapWithProgress:
         def sample_func(progress_callback=None):
             return "success"
 
-        with patch('src.utils.progress.create_progress_callback') as mock_create:
+        with patch("src.utils.progress.create_progress_callback") as mock_create:
             mock_callback = MagicMock()
             mock_cleanup = MagicMock(side_effect=lambda: cleanup_called.append(True))
             mock_create.return_value = (mock_callback, mock_cleanup)
@@ -951,7 +929,7 @@ class TestWrapWithProgress:
         def failing_func(progress_callback=None):
             raise ValueError("Test error")
 
-        with patch('src.utils.progress.create_progress_callback') as mock_create:
+        with patch("src.utils.progress.create_progress_callback") as mock_create:
             mock_callback = MagicMock()
             mock_cleanup = MagicMock(side_effect=lambda: cleanup_called.append(True))
             mock_create.return_value = (mock_callback, mock_cleanup)
@@ -977,6 +955,7 @@ class TestWrapWithProgress:
 
     def test_wrap_with_progress_returns_none(self):
         """Test wrap_with_progress handles function returning None."""
+
         def func_returns_none(progress_callback=None):
             return None
 
@@ -986,6 +965,7 @@ class TestWrapWithProgress:
 
     def test_wrap_with_progress_complex_return(self):
         """Test wrap_with_progress handles complex return values."""
+
         def func_complex_return(progress_callback=None):
             return {"data": [1, 2, 3], "status": "ok"}
 
@@ -1035,11 +1015,7 @@ class TestProgressTrackerEdgeCases:
 
     def test_special_characters_in_description(self):
         """Test ProgressTracker with special characters in description."""
-        tracker = ProgressTracker(
-            total=100,
-            desc="Processing: [test] (100%)",
-            show_bar=False
-        )
+        tracker = ProgressTracker(total=100, desc="Processing: [test] (100%)", show_bar=False)
 
         assert "Processing" in tracker.desc
         tracker.close()
@@ -1059,11 +1035,8 @@ class TestIntegration:
     def test_save_and_load_json_roundtrip(self, tmp_path):
         """Test that save_json and load_json work together."""
         original_data = {
-            "categories": [
-                {"id": 1, "name": "Test"},
-                {"id": 2, "name": "Example"}
-            ],
-            "metadata": {"version": "1.0"}
+            "categories": [{"id": 1, "name": "Test"}, {"id": 2, "name": "Example"}],
+            "metadata": {"version": "1.0"},
         }
         file_path = tmp_path / "roundtrip.json"
 
@@ -1092,6 +1065,7 @@ class TestIntegration:
 
     def test_progress_with_file_operations(self, tmp_path):
         """Test progress tracking with file operations."""
+
         def process_files(files, progress_callback=None):
             results = []
             for i, file_data in enumerate(files):
@@ -1105,14 +1079,14 @@ class TestIntegration:
         files_to_process = [
             {"id": 1, "value": "a"},
             {"id": 2, "value": "b"},
-            {"id": 3, "value": "c"}
+            {"id": 3, "value": "c"},
         ]
 
         result = wrap_with_progress(
             process_files,
             total=len(files_to_process),
             desc="Processing files",
-            files=files_to_process
+            files=files_to_process,
         )
 
         assert len(result) == 3
@@ -1126,7 +1100,7 @@ class TestSetupLogger:
     def teardown_method(self):
         """Clean up loggers after each test to avoid handler accumulation."""
         # Remove all handlers from test loggers
-        for name in ['test_logger', 'test_file_logger', 'extraction_errors']:
+        for name in ["test_logger", "test_file_logger", "extraction_errors"]:
             logger = logging.getLogger(name)
             for handler in logger.handlers[:]:
                 handler.close()
@@ -1134,9 +1108,9 @@ class TestSetupLogger:
 
     def test_setup_logger_basic(self):
         """Test basic logger setup without file handler."""
-        logger = setup_logger('test_logger')
+        logger = setup_logger("test_logger")
 
-        assert logger.name == 'test_logger'
+        assert logger.name == "test_logger"
         assert logger.level == logging.DEBUG
         # Should have console handler
         assert len(logger.handlers) >= 1
@@ -1145,7 +1119,7 @@ class TestSetupLogger:
         """Test logger setup with file handler creates log file."""
         log_file = tmp_path / "logs" / "test.log"
 
-        logger = setup_logger('test_file_logger', log_file=log_file)
+        logger = setup_logger("test_file_logger", log_file=log_file)
 
         # Verify file handler was added
         file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
@@ -1161,11 +1135,11 @@ class TestSetupLogger:
         """Test that file handler uses detailed format with timestamp."""
         log_file = tmp_path / "detailed.log"
 
-        logger = setup_logger('test_file_logger', log_file=log_file)
+        logger = setup_logger("test_file_logger", log_file=log_file)
         logger.debug("Test message for format")
 
         # Read log file content
-        content = log_file.read_text(encoding='utf-8')
+        content = log_file.read_text(encoding="utf-8")
 
         # Should contain timestamp format YYYY-MM-DD HH:MM:SS
         assert " - test_file_logger - DEBUG - " in content
@@ -1174,7 +1148,7 @@ class TestSetupLogger:
         """Test that setup_logger creates parent directories for log file."""
         log_file = tmp_path / "deep" / "nested" / "path" / "app.log"
 
-        logger = setup_logger('test_file_logger', log_file=log_file)
+        logger = setup_logger("test_file_logger", log_file=log_file)
         logger.info("Test message")
 
         assert log_file.parent.exists()
@@ -1185,11 +1159,11 @@ class TestSetupLogger:
         log_file = tmp_path / "duplicate.log"
 
         # First call
-        logger1 = setup_logger('test_file_logger', log_file=log_file)
+        logger1 = setup_logger("test_file_logger", log_file=log_file)
         handler_count_1 = len(logger1.handlers)
 
         # Second call should return same logger without adding handlers
-        logger2 = setup_logger('test_file_logger', log_file=log_file)
+        logger2 = setup_logger("test_file_logger", log_file=log_file)
         handler_count_2 = len(logger2.handlers)
 
         assert logger1 is logger2
@@ -1197,7 +1171,7 @@ class TestSetupLogger:
 
     def test_setup_logger_custom_level(self):
         """Test logger with custom logging level."""
-        logger = setup_logger('test_logger', level=logging.WARNING)
+        logger = setup_logger("test_logger", level=logging.WARNING)
 
         assert logger.level == logging.WARNING
 
@@ -1207,23 +1181,23 @@ class TestGetLogger:
 
     def teardown_method(self):
         """Clean up loggers after each test."""
-        logger = logging.getLogger('get_test_logger')
+        logger = logging.getLogger("get_test_logger")
         for handler in logger.handlers[:]:
             handler.close()
             logger.removeHandler(handler)
 
     def test_get_logger_returns_configured_logger(self):
         """Test that get_logger returns a configured logger."""
-        logger = get_logger('get_test_logger')
+        logger = get_logger("get_test_logger")
 
-        assert logger.name == 'get_test_logger'
+        assert logger.name == "get_test_logger"
         assert logger.level == logging.DEBUG
 
     def test_get_logger_with_log_file(self, tmp_path):
         """Test get_logger with log file parameter."""
         log_file = tmp_path / "get_logger.log"
 
-        logger = get_logger('get_test_logger', log_file=log_file)
+        logger = get_logger("get_test_logger", log_file=log_file)
         logger.debug("Test message")
 
         assert log_file.exists()
@@ -1234,7 +1208,7 @@ class TestLogExtractionError:
 
     def teardown_method(self):
         """Clean up extraction_errors logger after each test."""
-        logger = logging.getLogger('extraction_errors')
+        logger = logging.getLogger("extraction_errors")
         for handler in logger.handlers[:]:
             handler.close()
             logger.removeHandler(handler)
@@ -1247,7 +1221,7 @@ class TestLogExtractionError:
             email_id="test_email_123",
             error_type="rate_limit",
             error_message="API rate limit exceeded",
-            log_file=log_file
+            log_file=log_file,
         )
 
         assert log_file.exists()
@@ -1260,10 +1234,10 @@ class TestLogExtractionError:
             email_id="email_456",
             error_type="timeout",
             error_message="Connection timed out after 30s",
-            log_file=log_file
+            log_file=log_file,
         )
 
-        content = log_file.read_text(encoding='utf-8')
+        content = log_file.read_text(encoding="utf-8")
 
         # Verify structured format
         assert "email_id=email_456" in content
@@ -1278,7 +1252,7 @@ class TestLogExtractionError:
             email_id="email_789",
             error_type="malformed",
             error_message="Invalid email format",
-            log_file=log_file
+            log_file=log_file,
         )
 
         assert log_file.parent.exists()
@@ -1292,16 +1266,16 @@ class TestLogExtractionError:
             email_id="email_1",
             error_type="rate_limit",
             error_message="First error",
-            log_file=log_file
+            log_file=log_file,
         )
         log_extraction_error(
             email_id="email_2",
             error_type="unknown",
             error_message="Second error",
-            log_file=log_file
+            log_file=log_file,
         )
 
-        content = log_file.read_text(encoding='utf-8')
+        content = log_file.read_text(encoding="utf-8")
 
         assert "email_id=email_1" in content
         assert "email_id=email_2" in content
@@ -1312,9 +1286,7 @@ class TestLogExtractionError:
         monkeypatch.chdir(tmp_path)
 
         log_extraction_error(
-            email_id="default_test",
-            error_type="test",
-            error_message="Testing default path"
+            email_id="default_test", error_type="test", error_message="Testing default path"
         )
 
         default_log = tmp_path / "outputs" / "extraction_errors.log"
@@ -1333,20 +1305,121 @@ class TestSharedTextWordLists:
         """Shared STOP_WORDS must contain every word from the old name_generator list."""
         from src.utils.text import STOP_WORDS
 
-        old_name_generator_stops = frozenset([
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-            "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-            "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
-            "used", "this", "that", "these", "those", "i", "you", "he", "she", "it",
-            "we", "they", "what", "which", "who", "whom", "whose", "when", "where",
-            "why", "how", "all", "each", "every", "both", "few", "more", "most",
-            "other", "some", "such", "no", "not", "only", "same", "so", "than",
-            "too", "very", "just", "also", "now", "here", "there", "then", "once",
-            "email", "emails", "mail", "message", "messages", "subject", "re", "fwd",
-            "fw", "sent", "received", "please", "thanks", "thank", "regards", "hi",
-            "hello", "dear", "sincerely", "best", "am", "pm", "your", "our", "my",
-        ])
+        old_name_generator_stops = frozenset(
+            [
+                "the",
+                "a",
+                "an",
+                "and",
+                "or",
+                "but",
+                "in",
+                "on",
+                "at",
+                "to",
+                "for",
+                "of",
+                "with",
+                "by",
+                "from",
+                "as",
+                "is",
+                "was",
+                "are",
+                "were",
+                "been",
+                "be",
+                "have",
+                "has",
+                "had",
+                "do",
+                "does",
+                "did",
+                "will",
+                "would",
+                "could",
+                "should",
+                "may",
+                "might",
+                "must",
+                "shall",
+                "can",
+                "need",
+                "dare",
+                "ought",
+                "used",
+                "this",
+                "that",
+                "these",
+                "those",
+                "i",
+                "you",
+                "he",
+                "she",
+                "it",
+                "we",
+                "they",
+                "what",
+                "which",
+                "who",
+                "whom",
+                "whose",
+                "when",
+                "where",
+                "why",
+                "how",
+                "all",
+                "each",
+                "every",
+                "both",
+                "few",
+                "more",
+                "most",
+                "other",
+                "some",
+                "such",
+                "no",
+                "not",
+                "only",
+                "same",
+                "so",
+                "than",
+                "too",
+                "very",
+                "just",
+                "also",
+                "now",
+                "here",
+                "there",
+                "then",
+                "once",
+                "email",
+                "emails",
+                "mail",
+                "message",
+                "messages",
+                "subject",
+                "re",
+                "fwd",
+                "fw",
+                "sent",
+                "received",
+                "please",
+                "thanks",
+                "thank",
+                "regards",
+                "hi",
+                "hello",
+                "dear",
+                "sincerely",
+                "best",
+                "am",
+                "pm",
+                "your",
+                "our",
+                "my",
+            ]
+        )
 
         missing = old_name_generator_stops - STOP_WORDS
         assert not missing, f"Words missing from shared STOP_WORDS: {missing}"
@@ -1356,12 +1429,60 @@ class TestSharedTextWordLists:
         from src.utils.text import STOP_WORDS
 
         old_subject_analyzer_stops = {
-            'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
-            'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-            'to', 'was', 'will', 'with', 'you', 'your', 'have', 'this', 'but',
-            'or', 'not', 'can', 'we', 'all', 'been', 'were', 'when', 'what',
-            'which', 'who', 'if', 'out', 'so', 'up', 'there', 'their', 'they',
-            'me', 'my', 'our', 'us', 'am', 'i', 'them',
+            "a",
+            "an",
+            "and",
+            "are",
+            "as",
+            "at",
+            "be",
+            "by",
+            "for",
+            "from",
+            "has",
+            "he",
+            "in",
+            "is",
+            "it",
+            "its",
+            "of",
+            "on",
+            "that",
+            "the",
+            "to",
+            "was",
+            "will",
+            "with",
+            "you",
+            "your",
+            "have",
+            "this",
+            "but",
+            "or",
+            "not",
+            "can",
+            "we",
+            "all",
+            "been",
+            "were",
+            "when",
+            "what",
+            "which",
+            "who",
+            "if",
+            "out",
+            "so",
+            "up",
+            "there",
+            "their",
+            "they",
+            "me",
+            "my",
+            "our",
+            "us",
+            "am",
+            "i",
+            "them",
         }
 
         missing = old_subject_analyzer_stops - STOP_WORDS
@@ -1372,16 +1493,90 @@ class TestSharedTextWordLists:
         from src.utils.text import STOP_WORDS
 
         old_category_generator_stops = {
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-            'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-            'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it',
-            'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how',
-            'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other',
-            'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
-            'than', 'too', 'very', 'just', 'your', 'our', 'my', 'for', 'and',
-            'but', 'or', 'of', 'to', 'in', 'on', 'at', 'by', 'from', 'with',
-            're', 'fwd', 'fw',
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "this",
+            "that",
+            "these",
+            "those",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "what",
+            "which",
+            "who",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "every",
+            "both",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "just",
+            "your",
+            "our",
+            "my",
+            "for",
+            "and",
+            "but",
+            "or",
+            "of",
+            "to",
+            "in",
+            "on",
+            "at",
+            "by",
+            "from",
+            "with",
+            "re",
+            "fwd",
+            "fw",
         }
 
         missing = old_category_generator_stops - STOP_WORDS
@@ -1390,61 +1585,145 @@ class TestSharedTextWordLists:
     def test_stop_words_is_frozenset(self):
         """STOP_WORDS must be a frozenset to prevent accidental mutation."""
         from src.utils.text import STOP_WORDS
+
         assert isinstance(STOP_WORDS, frozenset)
 
     def test_generic_words_contains_all_original_words(self):
         """Shared GENERIC_WORDS must contain all original name_generator words."""
         from src.utils.text import GENERIC_WORDS
 
-        original = frozenset([
-            "category", "related", "miscellaneous", "other", "various", "general",
-            "stuff", "things", "items", "emails", "messages", "mail", "type", "kind",
-        ])
+        original = frozenset(
+            [
+                "category",
+                "related",
+                "miscellaneous",
+                "other",
+                "various",
+                "general",
+                "stuff",
+                "things",
+                "items",
+                "emails",
+                "messages",
+                "mail",
+                "type",
+                "kind",
+            ]
+        )
         missing = original - GENERIC_WORDS
         assert not missing, f"Words missing from shared GENERIC_WORDS: {missing}"
 
     def test_generic_words_is_frozenset(self):
         """GENERIC_WORDS must be a frozenset."""
         from src.utils.text import GENERIC_WORDS
+
         assert isinstance(GENERIC_WORDS, frozenset)
 
     def test_action_words_contains_all_original_words(self):
         """Shared ACTION_WORDS must contain all original name_generator words."""
         from src.utils.text import ACTION_WORDS
 
-        original = frozenset([
-            "update", "updates", "notification", "notifications", "alert", "alerts",
-            "confirmation", "confirmations", "reminder", "reminders", "request",
-            "requests", "shipping", "shipped", "delivery", "delivered", "payment",
-            "paid", "invoice", "invoiced", "order", "ordered", "receipt", "report",
-            "reports", "summary", "weekly", "daily", "monthly", "newsletter",
-        ])
+        original = frozenset(
+            [
+                "update",
+                "updates",
+                "notification",
+                "notifications",
+                "alert",
+                "alerts",
+                "confirmation",
+                "confirmations",
+                "reminder",
+                "reminders",
+                "request",
+                "requests",
+                "shipping",
+                "shipped",
+                "delivery",
+                "delivered",
+                "payment",
+                "paid",
+                "invoice",
+                "invoiced",
+                "order",
+                "ordered",
+                "receipt",
+                "report",
+                "reports",
+                "summary",
+                "weekly",
+                "daily",
+                "monthly",
+                "newsletter",
+            ]
+        )
         missing = original - ACTION_WORDS
         assert not missing, f"Words missing from shared ACTION_WORDS: {missing}"
 
     def test_action_words_is_frozenset(self):
         """ACTION_WORDS must be a frozenset."""
         from src.utils.text import ACTION_WORDS
+
         assert isinstance(ACTION_WORDS, frozenset)
 
     def test_known_proper_nouns_contains_all_original_words(self):
         """Shared KNOWN_PROPER_NOUNS must contain all original name_generator brands."""
         from src.utils.text import KNOWN_PROPER_NOUNS
 
-        original = frozenset([
-            "amazon", "google", "microsoft", "apple", "facebook", "twitter", "linkedin",
-            "github", "slack", "zoom", "netflix", "spotify", "uber", "lyft", "paypal",
-            "venmo", "chase", "wells", "fargo", "citi", "capital", "american", "express",
-            "mastercard", "visa", "discover", "walmart", "target", "costco", "ebay",
-            "etsy", "shopify", "stripe", "square", "dropbox", "box", "salesforce",
-            "hubspot", "mailchimp", "constant", "contact", "sendgrid", "twilio",
-        ])
+        original = frozenset(
+            [
+                "amazon",
+                "google",
+                "microsoft",
+                "apple",
+                "facebook",
+                "twitter",
+                "linkedin",
+                "github",
+                "slack",
+                "zoom",
+                "netflix",
+                "spotify",
+                "uber",
+                "lyft",
+                "paypal",
+                "venmo",
+                "chase",
+                "wells",
+                "fargo",
+                "citi",
+                "capital",
+                "american",
+                "express",
+                "mastercard",
+                "visa",
+                "discover",
+                "walmart",
+                "target",
+                "costco",
+                "ebay",
+                "etsy",
+                "shopify",
+                "stripe",
+                "square",
+                "dropbox",
+                "box",
+                "salesforce",
+                "hubspot",
+                "mailchimp",
+                "constant",
+                "contact",
+                "sendgrid",
+                "twilio",
+            ]
+        )
         missing = original - KNOWN_PROPER_NOUNS
         assert not missing, f"Words missing from shared KNOWN_PROPER_NOUNS: {missing}"
 
     def test_known_proper_nouns_is_frozenset(self):
         """KNOWN_PROPER_NOUNS must be a frozenset."""
         from src.utils.text import KNOWN_PROPER_NOUNS
+
         assert isinstance(KNOWN_PROPER_NOUNS, frozenset)
 
     def test_module_specific_extension_pattern(self):
@@ -1487,90 +1766,108 @@ class TestStripDomainSuffix:
     def test_simple_com_domain(self):
         """Standard .com domain returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("amazon.com") == "amazon"
 
     def test_simple_org_domain(self):
         """Standard .org domain returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("wikipedia.org") == "wikipedia"
 
     def test_simple_net_domain(self):
         """Standard .net domain returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("speedtest.net") == "speedtest"
 
     def test_co_uk_domain(self):
         """Country-code second-level domain .co.uk returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("amazon.co.uk") == "amazon"
 
     def test_bbc_co_uk(self):
         """BBC .co.uk returns correct registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("bbc.co.uk") == "bbc"
 
     def test_com_au_domain(self):
         """Country-code second-level domain .com.au returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("ebay.com.au") == "ebay"
 
     def test_org_br_domain(self):
         """Country-code second-level domain .org.br returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("example.org.br") == "example"
 
     def test_subdomain_preserved(self):
         """Subdomain is preserved — only the TLD portion is stripped."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("mail.google.com") == "mail.google"
 
     def test_subdomain_with_cc_sld(self):
         """Subdomain with country-code second-level TLD preserved correctly."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("shop.amazon.co.uk") == "shop.amazon"
 
     def test_subdomain_with_com_au(self):
         """Subdomain with .com.au preserved correctly."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("shop.amazon.com.au") == "shop.amazon"
 
     def test_single_label_domain(self):
         """Single label (no dots) returns the domain unchanged."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("localhost") == "localhost"
 
     def test_case_insensitive(self):
         """Domain is lowercased during processing."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("Amazon.COM") == "amazon"
 
     def test_gov_uk_domain(self):
         """Government .gov.uk domain handled correctly."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("hmrc.gov.uk") == "hmrc"
 
     def test_ac_uk_domain(self):
         """Academic .ac.uk domain handled correctly."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("oxford.ac.uk") == "oxford"
 
     def test_edu_au_domain(self):
         """Educational .edu.au domain handled correctly."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("unsw.edu.au") == "unsw"
 
     def test_simple_de_domain(self):
         """Simple country-code TLD (.de) returns registrable name."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("example.de") == "example"
 
     def test_empty_string(self):
         """Empty string returns empty string."""
         from src.utils.text import strip_domain_suffix
+
         assert strip_domain_suffix("") == ""
 
     def test_category_generator_imports_strip_domain_suffix(self):
         """Verify category_generator imports strip_domain_suffix from shared utils."""
         import src.generators.category_generator as cg
         from src.utils.text import strip_domain_suffix
+
         assert cg.strip_domain_suffix is strip_domain_suffix

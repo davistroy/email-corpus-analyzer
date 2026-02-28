@@ -8,6 +8,7 @@ Per Phase 7, Track 7B specification.
 Rewired in Work Item 1.1 to use real extractors instead of MCP stubs.
 Updated in Work Item 1.2 to support Gmail and multi-source extraction.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -109,6 +110,7 @@ class ExtractionService:
         progress_callback: Callable[[str], None] | None = None,
         since_last: bool = False,
         existing_corpus: Corpus | None = None,
+        email_progress_callback: Callable[[int, int], None] | None = None,
     ) -> Corpus:
         """
         Run extraction with a single extractor.
@@ -119,6 +121,7 @@ class ExtractionService:
             progress_callback: Optional callback for status updates
             since_last: If True, do incremental extraction
             existing_corpus: Existing corpus for incremental mode
+            email_progress_callback: Optional per-email callback(current, total)
 
         Returns:
             Extracted corpus
@@ -131,9 +134,10 @@ class ExtractionService:
                 existing_corpus=existing_corpus,
                 max_batch_size=self.config.batch_size,
                 checkpoint_interval=self.config.checkpoint_interval,
+                progress_callback=email_progress_callback,
             )
 
-            corpus = incremental_result.corpus
+            corpus: Corpus = incremental_result.corpus
 
             if incremental_result.failed_emails:
                 logger.warning(
@@ -152,6 +156,7 @@ class ExtractionService:
             result = extractor.extract_all(
                 max_batch_size=self.config.batch_size,
                 checkpoint_interval=self.config.checkpoint_interval,
+                progress_callback=email_progress_callback,
             )
 
             corpus = result.corpus
@@ -165,8 +170,7 @@ class ExtractionService:
 
             if progress_callback:
                 progress_callback(
-                    f"{source_label}: extracted "
-                    f"{corpus.extraction_metadata.total_emails} emails"
+                    f"{source_label}: extracted {corpus.extraction_metadata.total_emails} emails"
                 )
 
         return corpus
@@ -221,6 +225,7 @@ class ExtractionService:
         progress_callback: Callable[[str], None] | None = None,
         since_last: bool = False,
         existing_corpus: Corpus | None = None,
+        email_progress_callback: Callable[[int, int], None] | None = None,
     ) -> Corpus:
         """
         Run email extraction based on configured source.
@@ -232,6 +237,7 @@ class ExtractionService:
             progress_callback: Optional callback(message) for status updates
             since_last: If True, only extract emails since last extraction
             existing_corpus: Existing corpus for incremental extraction
+            email_progress_callback: Optional per-email callback(current, total) for progress bars
 
         Returns:
             Extracted email corpus
@@ -260,8 +266,12 @@ class ExtractionService:
             for sc in source_configs:
                 extractor = getattr(self, sc.factory_attr)()
                 corpus = self._run_single_extractor(
-                    extractor, sc.label,
-                    progress_callback, since_last, existing_corpus,
+                    extractor,
+                    sc.label,
+                    progress_callback,
+                    since_last,
+                    existing_corpus,
+                    email_progress_callback,
                 )
                 corpora.append(corpus)
 
@@ -280,8 +290,7 @@ class ExtractionService:
             if progress_callback:
                 individual = " + ".join(str(len(c.emails)) for c in corpora)
                 progress_callback(
-                    f"Merged corpus: {len(merged.emails)} emails "
-                    f"(deduplicated from {individual})"
+                    f"Merged corpus: {len(merged.emails)} emails (deduplicated from {individual})"
                 )
 
             return merged

@@ -6,6 +6,7 @@ Tests cover:
 
 Following TDD: these tests were written BEFORE implementation.
 """
+
 import os
 from pathlib import Path
 from unittest.mock import mock_open, patch
@@ -178,10 +179,7 @@ class TestLoadConfig:
         """Test load_config loads from global config."""
         from src.config.loader import load_config
 
-        global_yaml = {
-            "user_email": "global@example.com",
-            "extract": {"batch_size": 300}
-        }
+        global_yaml = {"user_email": "global@example.com", "extract": {"batch_size": 300}}
 
         def mock_load(path):
             if "email-analyzer" in str(path):  # Global path
@@ -198,10 +196,7 @@ class TestLoadConfig:
         """Test load_config loads from project config."""
         from src.config.loader import load_config
 
-        project_yaml = {
-            "extract": {"checkpoint_interval": 50},
-            "analyze": {"num_clusters": 20}
-        }
+        project_yaml = {"extract": {"checkpoint_interval": 50}, "analyze": {"num_clusters": 20}}
 
         def mock_load(path):
             if ".email-analyzer.yaml" in str(path):  # Project path
@@ -235,10 +230,7 @@ class TestLoadConfig:
         """Test load_config with custom config file path."""
         from src.config.loader import load_config
 
-        custom_yaml = {
-            "output_dir": "/custom/output",
-            "verbose": True
-        }
+        custom_yaml = {"output_dir": "/custom/output", "verbose": True}
 
         custom_path = Path("/my/custom/config.yaml")
 
@@ -287,15 +279,16 @@ class TestLoadConfig:
         ):
             load_config()
 
-        assert "batch_size" in str(exc_info.value).lower() or "validation" in str(exc_info.value).lower()
+        assert (
+            "batch_size" in str(exc_info.value).lower()
+            or "validation" in str(exc_info.value).lower()
+        )
 
     def test_load_config_invalid_email_raises_error(self):
         """Test load_config raises error for invalid email format."""
         from src.config.loader import ConfigLoadError, load_config
 
-        invalid_yaml = {
-            "user_email": "not-an-email"
-        }
+        invalid_yaml = {"user_email": "not-an-email"}
 
         with (
             patch("src.config.loader.load_yaml_file", return_value=invalid_yaml),
@@ -459,10 +452,7 @@ class TestIntegration:
         config_file = tmp_path / "config.yaml"
         config_data = {
             "user_email": "test@example.com",
-            "extract": {
-                "batch_size": 250,
-                "checkpoint_interval": 50
-            }
+            "extract": {"batch_size": 250, "checkpoint_interval": 50},
         }
         config_file.write_text(yaml.dump(config_data))
 

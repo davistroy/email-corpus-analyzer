@@ -3,6 +3,7 @@ Sender data model.
 
 Per data-model.md lines 174-205.
 """
+
 from enum import Enum
 
 from pydantic import BaseModel, Field

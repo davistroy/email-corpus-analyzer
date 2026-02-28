@@ -1,4 +1,5 @@
 """Config command: manage configuration files."""
+
 import argparse
 from pathlib import Path
 
@@ -22,48 +23,46 @@ def build_config_parser(subparsers) -> argparse.ArgumentParser:
     config_parser = subparsers.add_parser(
         "config",
         help="Manage configuration files",
-        description="Initialize or display configuration settings."
+        description="Initialize or display configuration settings.",
     )
     config_subparsers = config_parser.add_subparsers(
-        dest="config_action",
-        required=True,
-        help="Config action to perform"
+        dest="config_action", required=True, help="Config action to perform"
     )
 
     # config init
     config_init_parser = config_subparsers.add_parser(
         "init",
         help="Generate a template configuration file",
-        description="Create a new configuration file with default values."
+        description="Create a new configuration file with default values.",
     )
     config_init_parser.add_argument(
         "--output",
         dest="config_output",
         type=Path,
-        help="Output path for config file (default: .email-analyzer.yaml)"
+        help="Output path for config file (default: .email-analyzer.yaml)",
     )
     config_init_parser.add_argument(
         "--global",
         dest="config_global",
         action="store_true",
-        help="Create global config in ~/.config/email-analyzer/"
+        help="Create global config in ~/.config/email-analyzer/",
     )
 
     # config show
     config_subparsers.add_parser(
         "show",
         help="Display resolved configuration",
-        description="Show the current configuration with all sources merged."
+        description="Show the current configuration with all sources merged.",
     )
 
     # config validate
     config_subparsers.add_parser(
         "validate",
         help="Validate configuration settings",
-        description="Check all configuration values and runtime conditions."
+        description="Check all configuration values and runtime conditions.",
     )
 
-    return config_parser
+    return config_parser  # type: ignore[no-any-return]
 
 
 def validate_config(config) -> list[dict]:
@@ -91,133 +90,167 @@ def validate_config(config) -> list[dict]:
                     test_file = output_path / ".write_test"
                     test_file.touch()
                     test_file.unlink()
-                    results.append({
-                        "field": "output_dir",
-                        "status": "ok",
-                        "message": f"Directory exists and is writable: {output_path}"
-                    })
+                    results.append(
+                        {
+                            "field": "output_dir",
+                            "status": "ok",
+                            "message": f"Directory exists and is writable: {output_path}",
+                        }
+                    )
                 except (PermissionError, OSError):
-                    results.append({
+                    results.append(
+                        {
+                            "field": "output_dir",
+                            "status": "error",
+                            "message": f"Directory is not writable: {output_path}",
+                        }
+                    )
+            else:
+                results.append(
+                    {
                         "field": "output_dir",
                         "status": "error",
-                        "message": f"Directory is not writable: {output_path}"
-                    })
-            else:
-                results.append({
-                    "field": "output_dir",
-                    "status": "error",
-                    "message": f"Path exists but is not a directory: {output_path}"
-                })
+                        "message": f"Path exists but is not a directory: {output_path}",
+                    }
+                )
         else:
             # Check if parent exists and is writable
             parent = output_path.parent
             if parent.exists():
-                results.append({
-                    "field": "output_dir",
-                    "status": "warning",
-                    "message": f"Directory does not exist but parent is accessible: {output_path}"
-                })
+                results.append(
+                    {
+                        "field": "output_dir",
+                        "status": "warning",
+                        "message": f"Directory does not exist but parent is accessible: {output_path}",
+                    }
+                )
             else:
-                results.append({
-                    "field": "output_dir",
-                    "status": "error",
-                    "message": f"Directory does not exist and cannot be created: {output_path}"
-                })
+                results.append(
+                    {
+                        "field": "output_dir",
+                        "status": "error",
+                        "message": f"Directory does not exist and cannot be created: {output_path}",
+                    }
+                )
     else:
-        results.append({
-            "field": "output_dir",
-            "status": "ok",
-            "message": "Using default output directory"
-        })
+        results.append(
+            {"field": "output_dir", "status": "ok", "message": "Using default output directory"}
+        )
 
     # Validate user_email
     if config.user_email:
         if validate_email_format(config.user_email):
-            results.append({
-                "field": "user_email",
-                "status": "ok",
-                "message": f"Valid email format: {config.user_email}"
-            })
+            results.append(
+                {
+                    "field": "user_email",
+                    "status": "ok",
+                    "message": f"Valid email format: {config.user_email}",
+                }
+            )
         else:
-            results.append({
-                "field": "user_email",
-                "status": "error",
-                "message": f"Invalid email format: {config.user_email}"
-            })
+            results.append(
+                {
+                    "field": "user_email",
+                    "status": "error",
+                    "message": f"Invalid email format: {config.user_email}",
+                }
+            )
     else:
-        results.append({
-            "field": "user_email",
-            "status": "warning",
-            "message": "No user email configured (required for extract command)"
-        })
+        results.append(
+            {
+                "field": "user_email",
+                "status": "warning",
+                "message": "No user email configured (required for extract command)",
+            }
+        )
 
     # Validate extract settings
     if config.extract.batch_size <= 0:
-        results.append({
-            "field": "extract.batch_size",
-            "status": "error",
-            "message": "Batch size must be positive"
-        })
+        results.append(
+            {
+                "field": "extract.batch_size",
+                "status": "error",
+                "message": "Batch size must be positive",
+            }
+        )
     else:
-        results.append({
-            "field": "extract.batch_size",
-            "status": "ok",
-            "message": f"Batch size: {config.extract.batch_size}"
-        })
+        results.append(
+            {
+                "field": "extract.batch_size",
+                "status": "ok",
+                "message": f"Batch size: {config.extract.batch_size}",
+            }
+        )
 
     if config.extract.checkpoint_interval <= 0:
-        results.append({
-            "field": "extract.checkpoint_interval",
-            "status": "error",
-            "message": "Checkpoint interval must be positive"
-        })
+        results.append(
+            {
+                "field": "extract.checkpoint_interval",
+                "status": "error",
+                "message": "Checkpoint interval must be positive",
+            }
+        )
     else:
-        results.append({
-            "field": "extract.checkpoint_interval",
-            "status": "ok",
-            "message": f"Checkpoint interval: {config.extract.checkpoint_interval}"
-        })
+        results.append(
+            {
+                "field": "extract.checkpoint_interval",
+                "status": "ok",
+                "message": f"Checkpoint interval: {config.extract.checkpoint_interval}",
+            }
+        )
 
     # Validate analyze settings
     if config.analyze.num_clusters < 1:
-        results.append({
-            "field": "analyze.num_clusters",
-            "status": "error",
-            "message": "Number of clusters must be at least 1"
-        })
+        results.append(
+            {
+                "field": "analyze.num_clusters",
+                "status": "error",
+                "message": "Number of clusters must be at least 1",
+            }
+        )
     else:
-        results.append({
-            "field": "analyze.num_clusters",
-            "status": "ok",
-            "message": f"Number of clusters: {config.analyze.num_clusters}"
-        })
+        results.append(
+            {
+                "field": "analyze.num_clusters",
+                "status": "ok",
+                "message": f"Number of clusters: {config.analyze.num_clusters}",
+            }
+        )
 
     # Validate suggest settings
     if config.suggest.min_cluster_percentage < 0 or config.suggest.min_cluster_percentage > 100:
-        results.append({
-            "field": "suggest.min_cluster_percentage",
-            "status": "error",
-            "message": "Min cluster percentage must be between 0 and 100"
-        })
+        results.append(
+            {
+                "field": "suggest.min_cluster_percentage",
+                "status": "error",
+                "message": "Min cluster percentage must be between 0 and 100",
+            }
+        )
     else:
-        results.append({
-            "field": "suggest.min_cluster_percentage",
-            "status": "ok",
-            "message": f"Min cluster percentage: {config.suggest.min_cluster_percentage}%"
-        })
+        results.append(
+            {
+                "field": "suggest.min_cluster_percentage",
+                "status": "ok",
+                "message": f"Min cluster percentage: {config.suggest.min_cluster_percentage}%",
+            }
+        )
 
     if config.suggest.min_sender_count < 1:
-        results.append({
-            "field": "suggest.min_sender_count",
-            "status": "error",
-            "message": "Min sender count must be at least 1"
-        })
+        results.append(
+            {
+                "field": "suggest.min_sender_count",
+                "status": "error",
+                "message": "Min sender count must be at least 1",
+            }
+        )
     else:
-        results.append({
-            "field": "suggest.min_sender_count",
-            "status": "ok",
-            "message": f"Min sender count: {config.suggest.min_sender_count}"
-        })
+        results.append(
+            {
+                "field": "suggest.min_sender_count",
+                "status": "ok",
+                "message": f"Min sender count: {config.suggest.min_sender_count}",
+            }
+        )
 
     return results
 
@@ -273,7 +306,9 @@ def cmd_config_show(args: argparse.Namespace) -> int:
         print(output)
         return 0
     except ConfigLoadError as e:
-        config_path_display = args.config or f"{get_global_config_path()} / {get_project_config_path()}"
+        config_path_display = (
+            args.config or f"{get_global_config_path()} / {get_project_config_path()}"
+        )
         logger.error(
             f"Failed to load configuration from {config_path_display}: {e}. "
             f"Run 'config validate' to check your config file, "
@@ -295,17 +330,15 @@ def cmd_config_validate(args: argparse.Namespace) -> int:
     try:
         config = load_config(config_path=args.config)
     except ConfigLoadError as e:
-        config_path_display = args.config or f"{get_global_config_path()} / {get_project_config_path()}"
+        config_path_display = (
+            args.config or f"{get_global_config_path()} / {get_project_config_path()}"
+        )
         logger.error(
             f"Failed to load configuration from {config_path_display}: {e}. "
             f"Run 'config init' to generate a valid config template."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "config validate",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "config validate", "status": "error", "error": str(e)})
         return 1
 
     validations = validate_config(config)
@@ -314,18 +347,20 @@ def cmd_config_validate(args: argparse.Namespace) -> int:
     errors = [v for v in validations if v["status"] == "error"]
     warnings = [v for v in validations if v["status"] == "warning"]
 
-    if getattr(args, 'json', False):
-        output_json({
-            "command": "config validate",
-            "status": "error" if errors else "ok",
-            "validations": validations,
-            "summary": {
-                "total": len(validations),
-                "ok": len([v for v in validations if v["status"] == "ok"]),
-                "warnings": len(warnings),
-                "errors": len(errors)
+    if getattr(args, "json", False):
+        output_json(
+            {
+                "command": "config validate",
+                "status": "error" if errors else "ok",
+                "validations": validations,
+                "summary": {
+                    "total": len(validations),
+                    "ok": len([v for v in validations if v["status"] == "ok"]),
+                    "warnings": len(warnings),
+                    "errors": len(errors),
+                },
             }
-        })
+        )
     else:
         print("\nConfiguration Validation")
         print("=" * 50)

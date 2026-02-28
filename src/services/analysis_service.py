@@ -8,6 +8,7 @@ Per Phase 7, Track 7B specification.
 Work Item 2.1: Expanded to be the single source of truth for all analysis,
 delegating to run_full_analysis() with full feature parity.
 """
+
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -123,6 +124,7 @@ class AnalysisService:
         # Adapt single-arg progress callback to 3-arg format for run_full_analysis
         rfa_progress: Callable[[str, int, int], None] | None = None
         if progress_callback:
+
             def rfa_progress(analyzer_name: str, current: int, total: int) -> None:
                 progress_callback(f"Running {analyzer_name}... ({current}/{total})")
 
@@ -178,6 +180,7 @@ class AnalysisService:
                 email.combined_text_with_limit(self.config.max_embedding_text_length)
                 for email in corpus.emails
             ]
+            assert analyzer.model is not None
             embeddings = analyzer.model.encode(
                 texts, show_progress_bar=False, convert_to_numpy=True
             )

@@ -3,6 +3,7 @@ Unit tests for CLI TUI integration.
 
 Tests the --no-tui flag, --headless flag, and TUI fallback behavior (Task 3B.4).
 """
+
 import argparse
 from pathlib import Path
 from unittest.mock import patch
@@ -25,7 +26,7 @@ def create_test_category(
         source=CategorySource.CONTENT_CLUSTER,
         source_id="test_source",
         example_email_ids=[],
-        distinguishing_features=[]
+        distinguishing_features=[],
     )
 
 
@@ -103,7 +104,9 @@ class TestTUILaunch:
     @patch("src.ui.category_review.review_categories")
     @patch("src.ui.category_review.load_json")
     @patch("src.utils.paths.PathConfig.get_corpus_path")
-    def test_review_uses_legacy_cli_with_no_tui(self, mock_corpus_path, mock_load_json, mock_review):
+    def test_review_uses_legacy_cli_with_no_tui(
+        self, mock_corpus_path, mock_load_json, mock_review
+    ):
         """Test that --no-tui uses legacy CLI interface."""
         from src.ui.category_review import review_categories_with_ui
 

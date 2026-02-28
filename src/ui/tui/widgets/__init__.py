@@ -4,6 +4,7 @@ TUI widgets package.
 Provides reusable widgets for the Category Review TUI.
 Phase 8 Track 8B.2: Added SearchInput for category filtering.
 """
+
 from src.ui.tui.widgets.action_bar import COMMANDS, ActionBar, HelpOverlay
 from src.ui.tui.widgets.category_table import (
     TABLE_COLUMNS,

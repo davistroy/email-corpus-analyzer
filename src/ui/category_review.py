@@ -6,6 +6,7 @@ Allows users to review, approve, modify, merge, or delete suggested categories.
 Task 5A.3: Enhanced confidence display with breakdown.
 Task 5B.3: Integration with feedback learning to log decisions and apply patterns.
 """
+
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,7 +48,7 @@ def format_confidence_display(category: Category) -> str:
                 "source": "Src",
                 "percentage": "Pct",
                 "name_quality": "Name",
-                "distinctiveness": "Dist"
+                "distinctiveness": "Dist",
             }
             short_name = short_names.get(component, component[:4].title())
             breakdown_parts.append(f"{short_name}:{score_pct}")
@@ -62,7 +63,7 @@ class CategoryReview:
     def __init__(
         self,
         categories: list[Category],
-        email_lookup: dict[str, Email] = None,
+        email_lookup: dict[str, Email] | None = None,
         decision_logger: DecisionLogger | None = None,
         enable_learning: bool = True,
     ):
@@ -107,7 +108,7 @@ class CategoryReview:
         if not patterns:
             return self.categories, []
 
-        auto_applied = []
+        auto_applied: list[dict[str, object]] = []
         categories_to_review = []
 
         for category in self.categories:
@@ -118,29 +119,33 @@ class CategoryReview:
                     # Auto-accept categories with matching names
                     if category.category_name == pattern.parameters.get("category_name"):
                         self.approved.append(category)
-                        auto_applied.append({
-                            "action": "accept",
-                            "category_name": category.category_name,
-                            "pattern": pattern.to_dict(),
-                        })
+                        auto_applied.append(
+                            {
+                                "action": "accept",
+                                "category_name": category.category_name,
+                                "pattern": pattern.to_dict(),
+                            }
+                        )
                         applied = True
                         break
 
                 elif pattern.pattern_type == PatternType.RENAME:
                     # Auto-rename categories matching old name
                     if category.category_name == pattern.parameters.get("old_name"):
-                        new_name = pattern.parameters.get("new_name")
+                        new_name: str = str(pattern.parameters.get("new_name", ""))
                         old_name = category.category_name
                         category.category_name = new_name
                         category.user_modified = True
                         self.approved.append(category)
                         self.modified_count += 1
-                        auto_applied.append({
-                            "action": "rename",
-                            "old_name": old_name,
-                            "new_name": new_name,
-                            "pattern": pattern.to_dict(),
-                        })
+                        auto_applied.append(
+                            {
+                                "action": "rename",
+                                "old_name": old_name,
+                                "new_name": new_name,
+                                "pattern": pattern.to_dict(),
+                            }
+                        )
                         applied = True
                         break
 
@@ -149,13 +154,15 @@ class CategoryReview:
                     threshold = pattern.parameters.get("threshold", 0.3)
                     if category.confidence < threshold:
                         self.deleted_count += 1
-                        auto_applied.append({
-                            "action": "delete",
-                            "category_name": category.category_name,
-                            "confidence": category.confidence,
-                            "threshold": threshold,
-                            "pattern": pattern.to_dict(),
-                        })
+                        auto_applied.append(
+                            {
+                                "action": "delete",
+                                "category_name": category.category_name,
+                                "confidence": category.confidence,
+                                "threshold": threshold,
+                                "pattern": pattern.to_dict(),
+                            }
+                        )
                         applied = True
                         break
 
@@ -173,7 +180,9 @@ class CategoryReview:
         print("AUTO-APPLIED LEARNED PREFERENCES")
         print("=" * 60)
         print()
-        print(f"Based on your previous review patterns, {len(self.auto_applied_actions)} actions were auto-applied:")
+        print(
+            f"Based on your previous review patterns, {len(self.auto_applied_actions)} actions were auto-applied:"
+        )
         print()
 
         for action in self.auto_applied_actions:
@@ -182,7 +191,9 @@ class CategoryReview:
             elif action["action"] == "rename":
                 print(f"  [R] Renamed: '{action['old_name']}' -> '{action['new_name']}'")
             elif action["action"] == "delete":
-                print(f"  [D] Deleted: '{action['category_name']}' (confidence: {action['confidence']:.0%})")
+                print(
+                    f"  [D] Deleted: '{action['category_name']}' (confidence: {action['confidence']:.0%})"
+                )
 
         print()
         print("You can override these during the review by re-adding categories.")
@@ -223,7 +234,7 @@ class CategoryReview:
             remaining_skipped = []
             for idx, category in enumerate(self.skipped, 1):
                 result = self._review_category(category, idx, len(self.skipped), is_retry=True)
-                if result == 'skip':
+                if result == "skip":
                     remaining_skipped.append(category)
 
             # If still skipped, auto-accept them
@@ -234,7 +245,7 @@ class CategoryReview:
         # Prompt for custom categories
         print("\n" + "=" * 60)
         add_custom = input("Would you like to add any custom categories? (y/n): ").strip().lower()
-        if add_custom == 'y':
+        if add_custom == "y":
             self._add_custom_categories()
 
         print("\n" + "=" * 60)
@@ -245,11 +256,7 @@ class CategoryReview:
         return self.approved
 
     def _review_category(
-        self,
-        category: Category,
-        idx: int,
-        total: int,
-        is_retry: bool = False
+        self, category: Category, idx: int, total: int, is_retry: bool = False
     ) -> str:
         """
         Review a single category interactively.
@@ -302,7 +309,7 @@ class CategoryReview:
         while True:
             choice = input("Your choice: ").strip().upper()
 
-            if choice == 'A':
+            if choice == "A":
                 self.approved.append(category)
                 print(f"✓ Category '{category.category_name}' approved")
                 logger.info(f"Category accepted: {category.category_name}")
@@ -313,9 +320,9 @@ class CategoryReview:
                         DecisionAction.ACCEPT,
                     )
                 print()
-                return 'accept'
+                return "accept"
 
-            if choice == 'R':
+            if choice == "R":
                 new_name = input("Enter new category name: ").strip()
                 if new_name:
                     old_name = category.category_name
@@ -334,11 +341,11 @@ class CategoryReview:
                             new_name=new_name,
                         )
                     print()
-                    return 'rename'
+                    return "rename"
                 print("Invalid name. Category not modified.")
                 logger.debug("Invalid category name provided for rename")
 
-            elif choice == 'M':
+            elif choice == "M":
                 print("\nAvailable categories to merge with:")
                 for i, approved_cat in enumerate(self.approved, 1):
                     print(f"  {i}. {approved_cat.category_name}")
@@ -356,11 +363,13 @@ class CategoryReview:
                         # Merge email IDs and update counts
                         all_ids = set(target.example_email_ids) | set(category.example_email_ids)
                         target.example_email_ids = list(all_ids)[:10]
-                        target.email_count += category.email_count
+                        target.email_count = (target.email_count or 0) + (category.email_count or 0)
                         target.user_modified = True
                         self.merged_count += 1
                         print(f"✓ Merged into '{target.category_name}'")
-                        logger.info(f"Category merged: '{category.category_name}' into '{target.category_name}'")
+                        logger.info(
+                            f"Category merged: '{category.category_name}' into '{target.category_name}'"
+                        )
                         # Log decision for learning (Task 5B.3)
                         if self.decision_logger:
                             self.decision_logger.log_decision(
@@ -369,14 +378,14 @@ class CategoryReview:
                                 merge_target=target.category_name,
                             )
                         print()
-                        return 'merge'
+                        return "merge"
                 except (ValueError, IndexError):
                     print("Invalid selection.")
                     logger.debug("Invalid merge selection")
 
-            elif choice == 'D':
+            elif choice == "D":
                 confirm = input(f"Delete '{category.category_name}'? (y/n): ").strip().lower()
-                if confirm == 'y':
+                if confirm == "y":
                     self.deleted_count += 1
                     print(f"✓ Category '{category.category_name}' deleted")
                     logger.info(f"Category deleted: {category.category_name}")
@@ -388,21 +397,23 @@ class CategoryReview:
                             confidence=category.confidence,
                         )
                     print()
-                    return 'delete'
+                    return "delete"
                 logger.debug(f"Category deletion cancelled for: {category.category_name}")
 
-            elif choice == 'S':
+            elif choice == "S":
                 if not is_retry:
                     self.skipped.append(category)
                     print(f"⊙ Category '{category.category_name}' skipped")
                     logger.debug(f"Category skipped: {category.category_name}")
                     print()
-                    return 'skip'
+                    return "skip"
                 # On retry, skip means we'll auto-accept later
                 print(f"⊙ Category '{category.category_name}' skipped (will auto-accept)")
-                logger.debug(f"Category skipped on retry (will auto-accept): {category.category_name}")
+                logger.debug(
+                    f"Category skipped on retry (will auto-accept): {category.category_name}"
+                )
                 print()
-                return 'skip'
+                return "skip"
 
             else:
                 print("Invalid choice. Please enter A, R, M, D, or S.")
@@ -433,7 +444,7 @@ class CategoryReview:
                 source_id="user_defined",
                 user_modified=True,
                 distinguishing_features=[],
-                example_email_ids=[]
+                example_email_ids=[],
             )
 
             self.approved.append(custom_category)
@@ -456,7 +467,9 @@ class CategoryReview:
         approved_base = len(self.approved) - self.custom_count
 
         approval_data = {
-            "approval_date": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),  # ISO 8601
+            "approval_date": datetime.now(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),  # ISO 8601
             "total_categories": len(self.approved),
             "processing_stats": {
                 "suggested": suggested_count,
@@ -464,9 +477,9 @@ class CategoryReview:
                 "modified": self.modified_count,
                 "merged": self.merged_count,
                 "deleted": self.deleted_count,
-                "custom": self.custom_count
+                "custom": self.custom_count,
             },
-            "categories": [cat.model_dump() for cat in self.approved]
+            "categories": [cat.model_dump() for cat in self.approved],
         }
 
         save_json(approval_data, output_path)
@@ -506,6 +519,7 @@ def review_categories(
 
     # Load email corpus for sample display
     from src.utils.paths import PathConfig
+
     corpus_path = PathConfig.get_corpus_path()
     email_lookup = {}
     if corpus_path.exists():
@@ -526,7 +540,11 @@ def review_categories(
 
     # Assign unique category IDs to all approved categories (FR-035)
     for category in approved:
-        if not category.category_id or category.category_id.startswith("temp_") or category.category_id.startswith("custom_"):
+        if (
+            not category.category_id
+            or category.category_id.startswith("temp_")
+            or category.category_id.startswith("custom_")
+        ):
             category.category_id = f"cat_{uuid.uuid4().hex[:12]}"
 
     # Save approved categories if output path provided
@@ -562,19 +580,16 @@ def cleanup_intermediate_files(output_dir: str = "outputs") -> None:
         "email_corpus.json",
         "corpus_analysis_results.json",
         "category_suggestions.json",
-        "category_suggestions_report.md"
+        "category_suggestions_report.md",
     ]
 
     # Files to keep
-    keep_files = [
-        "approved_categories.json",
-        "extraction_errors.log"
-    ]
+    keep_files = ["approved_categories.json", "extraction_errors.log"]
 
     print("\nCategory approval complete!")
     cleanup = input("Would you like to clean up intermediate files? (y/n): ").strip().lower()
 
-    if cleanup != 'y':
+    if cleanup != "y":
         print("Cleanup cancelled. All files kept.")
         logger.info("User declined cleanup")
         return
@@ -596,7 +611,7 @@ def cleanup_intermediate_files(output_dir: str = "outputs") -> None:
     # Confirm keeping important files (per quickstart.md line 260)
     keep_confirm = input(f"\nKeep {', '.join(keep_files)}? (y/n): ").strip().lower()
 
-    if keep_confirm != 'y':
+    if keep_confirm != "y":
         print("Cleanup cancelled.")
         logger.info("User cancelled cleanup during confirmation")
         return
@@ -636,6 +651,7 @@ def is_tui_supported() -> bool:
     # Check if we can import textual
     try:
         from textual.app import App  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -646,7 +662,7 @@ def is_tui_supported() -> bool:
 def run_tui_review(
     categories: list[Category],
     email_lookup: dict[str, Email] | None = None,
-    output_path: Path | None = None
+    output_path: Path | None = None,
 ) -> list[Category]:
     """
     Run the TUI-based category review.
@@ -677,7 +693,11 @@ def run_tui_review(
 
     # Assign unique category IDs to all approved categories (FR-035)
     for category in approved:
-        if not category.category_id or category.category_id.startswith("temp_") or category.category_id.startswith("custom_"):
+        if (
+            not category.category_id
+            or category.category_id.startswith("temp_")
+            or category.category_id.startswith("custom_")
+        ):
             category.category_id = f"cat_{uuid.uuid4().hex[:12]}"
 
     # Save approved categories if output path provided
@@ -720,6 +740,7 @@ def review_categories_with_ui(
     """
     # Load email corpus for sample display
     from src.utils.paths import PathConfig
+
     corpus_path = PathConfig.get_corpus_path()
     email_lookup = {}
     try:

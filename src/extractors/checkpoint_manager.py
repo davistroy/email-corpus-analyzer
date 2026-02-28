@@ -8,6 +8,7 @@ Checkpoint format v2 stores only lightweight metadata (< 1KB),
 not full email objects. On resume, extractors use the skip offset
 to re-fetch from the API at the correct position.
 """
+
 from datetime import datetime
 from pathlib import Path
 
@@ -24,11 +25,7 @@ CHECKPOINT_VERSION = 2
 class CheckpointManager:
     """Manages extraction checkpoints for resumability."""
 
-    def __init__(
-        self,
-        checkpoint_path: Path | str | None = None,
-        checkpoint_interval: int = 100
-    ):
+    def __init__(self, checkpoint_path: Path | str | None = None, checkpoint_interval: int = 100):
         """
         Initialize checkpoint manager.
 
@@ -44,10 +41,7 @@ class CheckpointManager:
             self.checkpoint_file = Path(checkpoint_path)
 
     def save_checkpoint(
-        self,
-        emails_processed: int,
-        last_processed_id: str,
-        source: str = "hotmail"
+        self, emails_processed: int, last_processed_id: str, source: str = "hotmail"
     ) -> None:
         """
         Save extraction checkpoint with lightweight metadata only.
@@ -95,9 +89,7 @@ class CheckpointManager:
             # Version check: reject v1 (legacy) checkpoints
             version = checkpoint_data.get("version")
             if version is None or version < CHECKPOINT_VERSION:
-                logger.warning(
-                    "Old checkpoint format detected, starting fresh extraction"
-                )
+                logger.warning("Old checkpoint format detected, starting fresh extraction")
                 return None
 
             # Integrity check: emails_processed must be a non-negative integer
@@ -113,7 +105,8 @@ class CheckpointManager:
                 f"Checkpoint loaded: {checkpoint_data['emails_processed']} emails "
                 f"from {checkpoint_data['timestamp']}"
             )
-            return checkpoint_data
+            result: dict = checkpoint_data
+            return result
         except Exception as e:
             logger.warning(f"Failed to load checkpoint: {e}. Starting fresh extraction.")
             return None
@@ -135,7 +128,9 @@ class CheckpointManager:
         if self.checkpoint_file.exists():
             # Ensure we're not trying to delete a directory
             if self.checkpoint_file.is_dir():
-                logger.error(f"Cannot clear checkpoint: {self.checkpoint_file} is a directory, not a file")
+                logger.error(
+                    f"Cannot clear checkpoint: {self.checkpoint_file} is a directory, not a file"
+                )
                 return
 
             self.checkpoint_file.unlink()

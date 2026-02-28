@@ -6,6 +6,7 @@ supporting pattern detection and learned preferences.
 
 Task 5B.1: Decision Logging
 """
+
 import json
 import tempfile
 from datetime import datetime, timezone
@@ -63,7 +64,7 @@ class TestReviewDecision:
             context={
                 "old_name": "Old Name",
                 "new_name": "New Name",
-            }
+            },
         )
         assert decision.action == DecisionAction.RENAME
         assert decision.context["old_name"] == "Old Name"
@@ -77,7 +78,7 @@ class TestReviewDecision:
             action=DecisionAction.MERGE,
             context={
                 "merge_target": "Target Category",
-            }
+            },
         )
         assert decision.action == DecisionAction.MERGE
         assert decision.context["merge_target"] == "Target Category"
@@ -91,7 +92,7 @@ class TestReviewDecision:
             context={
                 "confidence": 0.3,
                 "reason": "low_confidence",
-            }
+            },
         )
         assert decision.action == DecisionAction.DELETE
         assert decision.context["confidence"] == 0.3
@@ -103,7 +104,7 @@ class TestReviewDecision:
             timestamp=ts,
             category_name="Test Category",
             action=DecisionAction.ACCEPT,
-            context={"key": "value"}
+            context={"key": "value"},
         )
         result = decision.to_dict()
 
@@ -118,7 +119,7 @@ class TestReviewDecision:
             "timestamp": "2024-01-15T10:30:00+00:00",
             "category_name": "Test Category",
             "action": "rename",
-            "context": {"old_name": "Old", "new_name": "New"}
+            "context": {"old_name": "Old", "new_name": "New"},
         }
         decision = ReviewDecision.from_dict(data)
 
@@ -339,9 +340,13 @@ class TestDecisionLoggerGetDecisions:
 
             # Write some valid and invalid lines
             with open(path, "w", encoding="utf-8") as f:
-                f.write('{"timestamp": "2024-01-15T10:00:00+00:00", "category_name": "Valid", "action": "accept", "context": {}}\n')
-                f.write('invalid json line\n')
-                f.write('{"timestamp": "2024-01-15T11:00:00+00:00", "category_name": "Also Valid", "action": "delete", "context": {}}\n')
+                f.write(
+                    '{"timestamp": "2024-01-15T10:00:00+00:00", "category_name": "Valid", "action": "accept", "context": {}}\n'
+                )
+                f.write("invalid json line\n")
+                f.write(
+                    '{"timestamp": "2024-01-15T11:00:00+00:00", "category_name": "Also Valid", "action": "delete", "context": {}}\n'
+                )
 
             logger = DecisionLogger(decisions_path=path)
             decisions = logger.get_decisions()

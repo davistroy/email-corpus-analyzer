@@ -3,6 +3,7 @@ Session statistics panel widget for the TUI application.
 
 Displays real-time statistics about review actions taken during the session.
 """
+
 from __future__ import annotations
 
 from textual.reactive import reactive
@@ -34,7 +35,7 @@ class StatsPanel(Static):
         merged: int = 0,
         deleted: int = 0,
         *args,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize the stats panel.

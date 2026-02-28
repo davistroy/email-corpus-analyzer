@@ -6,6 +6,7 @@ Provides:
 - YAML config file loading
 - Config merging with precedence resolution
 """
+
 from src.config.loader import (
     ConfigLoadError,
     generate_template,

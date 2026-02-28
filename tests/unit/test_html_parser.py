@@ -4,6 +4,7 @@ Unit tests for HTML parser.
 Tests the extract_plain_text function with various HTML scenarios
 including malformed HTML, scripts, styles, and edge cases.
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -114,17 +115,14 @@ class TestHTMLParserFallback:
         html = "<p>Test content</p>"
 
         # Mock BeautifulSoup to fail on first call (lxml), succeed on second (html.parser)
-        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+        with patch("src.extractors.html_parser.BeautifulSoup") as mock_bs:
             # Create a mock soup object for successful html.parser parsing
             mock_soup = MagicMock()
             mock_soup.return_value = []  # For soup(['script', 'style'])
             mock_soup.get_text.return_value = "Test content"
 
             # First call (lxml) raises, second call (html.parser) succeeds
-            mock_bs.side_effect = [
-                Exception("lxml not available"),
-                mock_soup
-            ]
+            mock_bs.side_effect = [Exception("lxml not available"), mock_soup]
 
             extract_plain_text(html)
 
@@ -138,7 +136,7 @@ class TestHTMLParserFallback:
         html = "<div>Important content</div>"
 
         # Mock BeautifulSoup to always fail
-        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+        with patch("src.extractors.html_parser.BeautifulSoup") as mock_bs:
             mock_bs.side_effect = Exception("Parser failed")
 
             result = extract_plain_text(html)
@@ -151,7 +149,7 @@ class TestHTMLParserFallback:
         """Test fallback behavior with more complex HTML when both parsers fail."""
         html = "<html><body><p>First</p><p>Second</p></body></html>"
 
-        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+        with patch("src.extractors.html_parser.BeautifulSoup") as mock_bs:
             mock_bs.side_effect = Exception("All parsers unavailable")
 
             result = extract_plain_text(html)
@@ -164,7 +162,7 @@ class TestHTMLParserFallback:
         """Test that fallback strips HTML tags by adding spaces around brackets."""
         html = "<span>Hello</span><strong>World</strong>"
 
-        with patch('src.extractors.html_parser.BeautifulSoup') as mock_bs:
+        with patch("src.extractors.html_parser.BeautifulSoup") as mock_bs:
             mock_bs.side_effect = Exception("Parser failure")
 
             result = extract_plain_text(html)

@@ -7,6 +7,7 @@ Supports filter syntax:
 - source:cluster - filter by source type
 - confidence:>80 - filter by confidence threshold
 """
+
 from textual.widgets import Input
 
 
@@ -27,10 +28,7 @@ class SearchInput(Input):
 
     def __init__(self, **kwargs):
         """Initialize search input with placeholder."""
-        super().__init__(
-            placeholder="Search (/ to activate, Esc to clear)",
-            **kwargs
-        )
+        super().__init__(placeholder="Search (/ to activate, Esc to clear)", **kwargs)
 
     @property
     def filter_query(self) -> str:

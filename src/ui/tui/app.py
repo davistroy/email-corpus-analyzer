@@ -4,6 +4,7 @@ Main TUI application for category review.
 Provides an interactive terminal-based interface for reviewing,
 approving, and modifying suggested email categories.
 """
+
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
@@ -168,11 +169,7 @@ class ReviewApp(App):
     selected_index: reactive[int] = reactive(0)
 
     def __init__(
-        self,
-        categories: list[Category],
-        email_lookup: dict | None = None,
-        *args,
-        **kwargs
+        self, categories: list[Category], email_lookup: dict | None = None, *args, **kwargs
     ):
         """
         Initialize the review application.
@@ -390,7 +387,8 @@ class ReviewApp(App):
 
     def action_quit_confirm(self) -> None:
         """Quit with confirmation."""
-        def handle_quit(confirmed: bool) -> None:
+
+        def handle_quit(confirmed: bool | None) -> None:
             if confirmed:
                 self.exit()
 

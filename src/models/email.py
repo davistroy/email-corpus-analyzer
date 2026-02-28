@@ -4,6 +4,7 @@ Email data model.
 Per data-model.md lines 75-91.
 Phase 8 Track 8A.1: Added thread_id, in_reply_to, and references fields for thread analysis.
 """
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
@@ -35,6 +36,7 @@ class Email(BaseModel):
         if "@" not in v:
             raise ValueError(f"Email must contain @: {v!r}")
         return v
+
     recipient_name: str = ""
     subject: str
     body_text: str
@@ -42,17 +44,13 @@ class Email(BaseModel):
     has_attachments: bool
 
     # Thread analysis fields (Phase 8 Track 8A.1)
-    thread_id: str | None = Field(
-        default=None,
-        description="Unique ID for conversation thread"
-    )
+    thread_id: str | None = Field(default=None, description="Unique ID for conversation thread")
     in_reply_to: str | None = Field(
-        default=None,
-        description="Message ID this email is replying to (from In-Reply-To header)"
+        default=None, description="Message ID this email is replying to (from In-Reply-To header)"
     )
     references: list[str] = Field(
         default_factory=list,
-        description="List of message IDs in the thread (from References header)"
+        description="List of message IDs in the thread (from References header)",
     )
 
     def combined_text_with_limit(self, max_body_length: int = 1500) -> str:

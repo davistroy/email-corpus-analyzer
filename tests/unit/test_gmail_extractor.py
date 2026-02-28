@@ -1,4 +1,5 @@
 """Tests for GmailClient and GmailExtractor."""
+
 import base64
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -47,9 +48,7 @@ def sample_gmail_message():
             "parts": [
                 {
                     "mimeType": "text/plain",
-                    "body": {
-                        "data": base64.urlsafe_b64encode(b"Hello from Gmail").decode()
-                    },
+                    "body": {"data": base64.urlsafe_b64encode(b"Hello from Gmail").decode()},
                 },
                 {
                     "mimeType": "text/html",
@@ -137,17 +136,13 @@ class TestGmailClientExtractBody:
                         {
                             "mimeType": "text/plain",
                             "body": {
-                                "data": base64.urlsafe_b64encode(
-                                    plain_content.encode()
-                                ).decode()
+                                "data": base64.urlsafe_b64encode(plain_content.encode()).decode()
                             },
                         },
                         {
                             "mimeType": "text/html",
                             "body": {
-                                "data": base64.urlsafe_b64encode(
-                                    html_content.encode()
-                                ).decode()
+                                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
                             },
                         },
                     ],
@@ -255,9 +250,7 @@ class TestGmailClientExtractBody:
         # Build a chain 15 levels deep -- only leaf at depth 15 has content
         leaf = {
             "mimeType": "text/html",
-            "body": {
-                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
-            },
+            "body": {"data": base64.urlsafe_b64encode(html_content.encode()).decode()},
         }
         node = leaf
         for _ in range(14):
@@ -276,9 +269,7 @@ class TestGmailClientExtractBody:
         html_content = "<p>At depth limit</p>"
         leaf = {
             "mimeType": "text/html",
-            "body": {
-                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
-            },
+            "body": {"data": base64.urlsafe_b64encode(html_content.encode()).decode()},
         }
         # Build chain of depth 9 wrappings -> leaf at depth 10 (0-indexed: root=0, leaf=10)
         node = leaf
@@ -302,19 +293,11 @@ class TestGmailClientExtractBody:
             "parts": [
                 {
                     "mimeType": "text/plain",
-                    "body": {
-                        "data": base64.urlsafe_b64encode(
-                            plain_content.encode()
-                        ).decode()
-                    },
+                    "body": {"data": base64.urlsafe_b64encode(plain_content.encode()).decode()},
                 },
                 {
                     "mimeType": "text/html",
-                    "body": {
-                        "data": base64.urlsafe_b64encode(
-                            html_content.encode()
-                        ).decode()
-                    },
+                    "body": {"data": base64.urlsafe_b64encode(html_content.encode()).decode()},
                 },
             ],
         }
@@ -328,9 +311,7 @@ class TestGmailClientGetMessage:
         with patch.object(gmail_client, "_get_service") as mock_svc:
             mock_service = MagicMock()
             mock_svc.return_value = mock_service
-            mock_service.users().messages().get().execute.return_value = (
-                sample_gmail_message
-            )
+            mock_service.users().messages().get().execute.return_value = sample_gmail_message
 
             result = gmail_client._get_message(mock_service, "gmail_001")
 
@@ -500,9 +481,7 @@ class TestGmailExtractorExtractAll:
         # Should handle the error gracefully
         assert result.failure_count >= 0  # May or may not fail depending on validation
 
-    def test_extract_all_with_progress_callback(
-        self, gmail_extractor, normalized_gmail_messages
-    ):
+    def test_extract_all_with_progress_callback(self, gmail_extractor, normalized_gmail_messages):
         gmail_extractor.gmail_client.fetch_emails.side_effect = [
             normalized_gmail_messages,
             [],
@@ -528,12 +507,8 @@ class TestGmailExtractorProcessEmail:
         msg = {
             "id": "gmail_003",
             "subject": "Re: Discussion",
-            "from": {
-                "emailAddress": {"address": "a@b.com", "name": "A"}
-            },
-            "toRecipients": [
-                {"emailAddress": {"address": "test@gmail.com", "name": "Test"}}
-            ],
+            "from": {"emailAddress": {"address": "a@b.com", "name": "A"}},
+            "toRecipients": [{"emailAddress": {"address": "test@gmail.com", "name": "Test"}}],
             "receivedDateTime": "2025-01-17T10:00:00Z",
             "body": {"content": "<p>Reply</p>"},
             "hasAttachments": False,
@@ -550,9 +525,7 @@ class TestGmailExtractorProcessEmail:
 
 
 class TestGmailExtractorIncremental:
-    def test_incremental_deduplicates(
-        self, gmail_extractor, normalized_gmail_messages
-    ):
+    def test_incremental_deduplicates(self, gmail_extractor, normalized_gmail_messages):
         # Existing corpus with one email
         existing_email = Email(
             id="gmail_001",
@@ -617,3 +590,91 @@ class TestGmailExtractorComputeHash:
         h1 = GmailExtractor._compute_email_ids_hash(emails)
         h2 = GmailExtractor._compute_email_ids_hash(list(reversed(emails)))
         assert h1 == h2  # Order-independent
+
+
+class TestGmailRecipientParsing:
+    """Test safe recipient parsing for Gmail extractor (Work Item 1.1)."""
+
+    @pytest.fixture
+    def extractor(self, tmp_path):
+        """Create GmailExtractor with mocked GmailClient."""
+        mock_client = MagicMock()
+        with patch("src.extractors.gmail_client.GmailClient", return_value=mock_client):
+            ext = GmailExtractor(
+                user_email="test@gmail.com",
+                checkpoint_dir=str(tmp_path),
+            )
+        ext.gmail_client = mock_client
+        return ext
+
+    @pytest.fixture
+    def base_email_data(self):
+        """Base normalized Gmail email data without toRecipients."""
+        return {
+            "id": "gmail_recipient_test",
+            "subject": "Recipient Test",
+            "from": {
+                "emailAddress": {
+                    "address": "sender@example.com",
+                    "name": "Sender",
+                }
+            },
+            "body": {"content": "<p>Body</p>"},
+            "receivedDateTime": "2025-01-15T10:30:00Z",
+            "hasAttachments": False,
+            "_gmail_thread_id": "thread_test",
+            "_in_reply_to": None,
+            "_references": [],
+        }
+
+    def test_empty_to_recipients_list(self, extractor, base_email_data):
+        """Emails with toRecipients=[] produce recipient_email=None."""
+        base_email_data["toRecipients"] = []
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_none_to_recipients(self, extractor, base_email_data):
+        """Emails with toRecipients=None produce recipient_email=None."""
+        base_email_data["toRecipients"] = None
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_missing_to_recipients_key(self, extractor, base_email_data):
+        """Emails with no toRecipients key produce recipient_email=None."""
+        base_email_data.pop("toRecipients", None)
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""
+
+    def test_valid_to_recipients(self, extractor, base_email_data):
+        """Emails with valid toRecipients extract correctly."""
+        base_email_data["toRecipients"] = [
+            {
+                "emailAddress": {
+                    "address": "recipient@gmail.com",
+                    "name": "Gmail User",
+                }
+            }
+        ]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email == "recipient@gmail.com"
+        assert email.recipient_name == "Gmail User"
+
+    def test_multiple_to_recipients_takes_first(self, extractor, base_email_data):
+        """When multiple recipients exist, the first is used."""
+        base_email_data["toRecipients"] = [
+            {"emailAddress": {"address": "first@gmail.com", "name": "First"}},
+            {"emailAddress": {"address": "second@gmail.com", "name": "Second"}},
+        ]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email == "first@gmail.com"
+        assert email.recipient_name == "First"
+
+    def test_to_recipients_with_empty_email_address_dict(self, extractor, base_email_data):
+        """When toRecipients has entry with empty emailAddress, returns None/empty."""
+        base_email_data["toRecipients"] = [{"emailAddress": {}}]
+        email = extractor._process_email(base_email_data)
+        assert email.recipient_email is None
+        assert email.recipient_name == ""

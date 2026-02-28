@@ -5,6 +5,7 @@ Analyzes email threads/conversations by parsing In-Reply-To and References heade
 Per Phase 8 Track 8A.1 specification.
 Work Item 3.2: Added subject-based fallback grouping for emails without threading headers.
 """
+
 import logging
 import re
 import uuid
@@ -21,7 +22,7 @@ from .base import AnalysisError, BaseAnalyzer
 logger = logging.getLogger(__name__)
 
 # Pattern to match RE:/FWD:/FW: prefixes (case-insensitive, possibly repeated)
-_REPLY_PREFIX_RE = re.compile(r'^(re|fwd|fw)\s*:\s*', re.IGNORECASE)
+_REPLY_PREFIX_RE = re.compile(r"^(re|fwd|fw)\s*:\s*", re.IGNORECASE)
 
 
 def _normalize_subject(subject: str) -> str:
@@ -40,12 +41,12 @@ def _normalize_subject(subject: str) -> str:
     result = subject
     # Repeatedly strip leading reply/forward prefixes
     while True:
-        new_result = _REPLY_PREFIX_RE.sub('', result, count=1)
+        new_result = _REPLY_PREFIX_RE.sub("", result, count=1)
         if new_result == result:
             break
         result = new_result
     # Normalize whitespace and lowercase
-    result = ' '.join(result.split())
+    result = " ".join(result.split())
     return result.lower()
 
 
@@ -78,12 +79,8 @@ class ThreadAnalysisResult:
     def __post_init__(self):
         """Calculate counts from threads."""
         self.total_threads = len(self.threads)
-        self.conversation_count = sum(
-            1 for t in self.threads.values() if len(t.email_ids) > 1
-        )
-        self.single_email_count = sum(
-            1 for t in self.threads.values() if len(t.email_ids) == 1
-        )
+        self.conversation_count = sum(1 for t in self.threads.values() if len(t.email_ids) > 1)
+        self.single_email_count = sum(1 for t in self.threads.values() if len(t.email_ids) == 1)
 
 
 class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
@@ -124,10 +121,8 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
         """Thread analyzer does not support incremental analysis."""
         return False
 
-    def analyze(
-        self,
-        corpus: Corpus,
-        progress_callback: Callable[[int, int], None] | None = None
+    def analyze(  # type: ignore[override]
+        self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> ThreadAnalysisResult:
         """
         Parse email headers to identify conversation threads.
@@ -220,9 +215,7 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
         for _root_id, email_ids in root_to_emails.items():
             if len(email_ids) > 1:
                 # Multi-email thread from headers
-                thread = self._create_thread(
-                    email_ids, email_by_id, thread_method="header"
-                )
+                thread = self._create_thread(email_ids, email_by_id, thread_method="header")
                 threads[thread.thread_id] = thread
                 for eid in email_ids:
                     email_to_thread[eid] = thread.thread_id
@@ -230,19 +223,14 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
         # ----------------------------------------------------------------
         # Second pass: subject-based heuristic for ungrouped emails
         # ----------------------------------------------------------------
-        ungrouped_ids = [
-            eid for eid in email_ids_set if eid not in header_grouped_ids
-        ]
+        ungrouped_ids = [eid for eid in email_ids_set if eid not in header_grouped_ids]
 
         if self._subject_match_window_days > 0 and ungrouped_ids:
-            subject_threads = self._group_by_subject_heuristic(
-                ungrouped_ids, email_by_id
-            )
+            subject_threads = self._group_by_subject_heuristic(ungrouped_ids, email_by_id)
             for email_ids_group in subject_threads:
                 if len(email_ids_group) > 1:
                     thread = self._create_thread(
-                        email_ids_group, email_by_id,
-                        thread_method="subject_heuristic"
+                        email_ids_group, email_by_id, thread_method="subject_heuristic"
                     )
                     threads[thread.thread_id] = thread
                     for eid in email_ids_group:
@@ -257,9 +245,7 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
         else:
             # No subject heuristic; create individual threads for ungrouped
             for eid in ungrouped_ids:
-                thread = self._create_thread(
-                    [eid], email_by_id, thread_method="header"
-                )
+                thread = self._create_thread([eid], email_by_id, thread_method="header")
                 threads[thread.thread_id] = thread
                 email_to_thread[eid] = thread.thread_id
 
@@ -274,13 +260,9 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
 
         # Count method breakdown
         header_count = sum(
-            1 for t in threads.values()
-            if t.thread_method == "header" and t.message_count > 1
+            1 for t in threads.values() if t.thread_method == "header" and t.message_count > 1
         )
-        heuristic_count = sum(
-            1 for t in threads.values()
-            if t.thread_method == "subject_heuristic"
-        )
+        heuristic_count = sum(1 for t in threads.values() if t.thread_method == "subject_heuristic")
 
         logger.info(
             f"Threads: {len(threads)} total, "
@@ -317,9 +299,7 @@ class ThreadAnalyzer(BaseAnalyzer[ThreadAnalysisResult]):
         thread_emails = [email_by_id[eid] for eid in email_ids]
 
         # Sort by received_date to find the original
-        thread_emails_sorted = sorted(
-            thread_emails, key=lambda e: e.received_date
-        )
+        thread_emails_sorted = sorted(thread_emails, key=lambda e: e.received_date)
 
         # Get subject from the earliest email
         subject = thread_emails_sorted[0].subject

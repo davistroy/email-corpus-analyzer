@@ -4,6 +4,7 @@ Integration tests for configuration file loading precedence.
 Tests the config loading hierarchy: defaults < global < project < CLI args.
 Per Phase 7, Track 7C specification.
 """
+
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -240,9 +241,7 @@ class TestConfigFileFormats:
 
     @patch("src.config.loader.get_global_config_path")
     @patch("src.config.loader.get_project_config_path")
-    def test_yaml_config_loading(
-        self, mock_project_path, mock_global_path, temp_home_dir
-    ):
+    def test_yaml_config_loading(self, mock_project_path, mock_global_path, temp_home_dir):
         """Test YAML config file loading."""
         yaml_config = """
 analyze:
@@ -265,9 +264,7 @@ suggest:
 
     @patch("src.config.loader.get_global_config_path")
     @patch("src.config.loader.get_project_config_path")
-    def test_empty_config_file(
-        self, mock_project_path, mock_global_path, temp_home_dir
-    ):
+    def test_empty_config_file(self, mock_project_path, mock_global_path, temp_home_dir):
         """Test empty config file uses defaults."""
         config_dir = temp_home_dir / ".email-analyzer"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -285,9 +282,7 @@ suggest:
 
     @patch("src.config.loader.get_global_config_path")
     @patch("src.config.loader.get_project_config_path")
-    def test_malformed_yaml_raises_error(
-        self, mock_project_path, mock_global_path, temp_home_dir
-    ):
+    def test_malformed_yaml_raises_error(self, mock_project_path, mock_global_path, temp_home_dir):
         """Test that malformed YAML raises appropriate error."""
         config_dir = temp_home_dir / ".email-analyzer"
         config_dir.mkdir(parents=True, exist_ok=True)

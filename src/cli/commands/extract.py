@@ -1,7 +1,10 @@
 """Extract command: fetch emails from M365/Hotmail or Gmail."""
+
 import argparse
 import time
 from pathlib import Path
+
+from tqdm import tqdm
 
 from src.cli.formatters import output_json
 from src.cli.parsers import validate_email_format
@@ -38,55 +41,54 @@ Examples:
 
   # Preview without executing
   %(prog)s --user-email user@hotmail.com --dry-run
-        """
+        """,
     )
     extract_parser.add_argument(
-        "--user-email",
-        required=True,
-        help="Primary email address (Hotmail/Outlook or Gmail)"
+        "--user-email", required=True, help="Primary email address (Hotmail/Outlook or Gmail)"
     )
     extract_parser.add_argument(
         "--source",
         type=str,
         choices=["hotmail", "gmail", "both"],
         default="hotmail",
-        help="Email source: hotmail, gmail, or both (default: hotmail)"
+        help="Email source: hotmail, gmail, or both (default: hotmail)",
     )
     extract_parser.add_argument(
         "--gmail-email",
         type=str,
-        help="Gmail address (required when --source both, if different from --user-email)"
+        help="Gmail address (required when --source both, if different from --user-email)",
     )
     extract_parser.add_argument(
         "--corpus-file",
         type=Path,
-        help="Custom path for corpus JSON (default: {output-dir}/email_corpus.json)"
+        help="Custom path for corpus JSON (default: {output-dir}/email_corpus.json)",
     )
     extract_parser.add_argument(
         "--batch-size",
         type=int,
         default=500,
-        help="Number of emails to fetch per batch (default: 500)"
+        help="Number of emails to fetch per batch (default: 500)",
     )
     extract_parser.add_argument(
         "--checkpoint-interval",
         type=int,
         default=100,
-        help="Save checkpoint every N emails (default: 100)"
+        help="Save checkpoint every N emails (default: 100)",
     )
     extract_parser.add_argument(
-        "-n", "--dry-run",
+        "-n",
+        "--dry-run",
         action="store_true",
-        help="Show what would be done without actually executing"
+        help="Show what would be done without actually executing",
     )
     extract_parser.add_argument(
         "--since-last",
         action="store_true",
         default=False,
-        help="Incremental extraction: only fetch emails since last extraction (Task 4B.2)"
+        help="Incremental extraction: only fetch emails since last extraction (Task 4B.2)",
     )
 
-    return extract_parser
+    return extract_parser  # type: ignore[no-any-return]
 
 
 def cmd_extract(args: argparse.Namespace) -> int:
@@ -102,40 +104,44 @@ def cmd_extract(args: argparse.Namespace) -> int:
     # Validate email format first (even for dry-run)
     if not validate_email_format(args.user_email):
         logger.error(f"Invalid email format: {args.user_email}")
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "status": "error",
-                "error": f"Invalid email format: {args.user_email}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "extract",
+                    "status": "error",
+                    "error": f"Invalid email format: {args.user_email}",
+                }
+            )
         return 1
 
     # Handle dry-run mode
-    if getattr(args, 'dry_run', False):
+    if getattr(args, "dry_run", False):
         from src.preview.estimators import ExtractEstimator, format_extract_preview
 
         estimator = ExtractEstimator()
         estimate = estimator.estimate(args)
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "dry_run": True,
-                "status": "preview",
-                "user_email": estimate.user_email,
-                "output_path": str(estimate.output_path),
-                "email_count_estimate": estimate.email_count_estimate,
-                "output_size_estimate": estimate.output_size_estimate,
-                "duration_estimate": estimate.duration_estimate,
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "extract",
+                    "dry_run": True,
+                    "status": "preview",
+                    "user_email": estimate.user_email,
+                    "output_path": str(estimate.output_path),
+                    "email_count_estimate": estimate.email_count_estimate,
+                    "output_size_estimate": estimate.output_size_estimate,
+                    "duration_estimate": estimate.duration_estimate,
+                }
+            )
         else:
             print(format_extract_preview(estimate))
 
         return 0
 
     start_time = time.time()
-    source = getattr(args, 'source', 'hotmail')
-    gmail_email = getattr(args, 'gmail_email', None)
+    source = getattr(args, "source", "hotmail")
+    gmail_email = getattr(args, "gmail_email", None)
 
     logger.info("=== EMAIL EXTRACTION ===")
     logger.info(f"User email: {args.user_email}")
@@ -170,17 +176,13 @@ def cmd_extract(args: argparse.Namespace) -> int:
             f"Check your authentication credentials and network connection.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "extract", "status": "error", "error": str(e)})
         return 1
 
     # Handle incremental extraction (Task 4B.2)
     existing_corpus = None
-    if getattr(args, 'since_last', False):
+    if getattr(args, "since_last", False):
         from src.models.corpus import Corpus
 
         try:
@@ -189,31 +191,40 @@ def cmd_extract(args: argparse.Namespace) -> int:
             logger.info(f"Loaded existing corpus with {len(existing_corpus.emails)} emails")
         except FileNotFoundError:
             logger.error(f"No existing corpus found at {corpus_path}. Run full extraction first.")
-            if getattr(args, 'json', False):
-                output_json({
-                    "command": "extract",
-                    "status": "error",
-                    "error": f"No existing corpus found at {corpus_path}. Run full extraction first."
-                })
+            if getattr(args, "json", False):
+                output_json(
+                    {
+                        "command": "extract",
+                        "status": "error",
+                        "error": f"No existing corpus found at {corpus_path}. Run full extraction first.",
+                    }
+                )
             return 1
         except Exception as e:
             logger.error(
                 f"Failed to load existing corpus from {corpus_path}: {e}. "
                 f"The file may be corrupted. Try running a full extraction without --since-last."
             )
-            if getattr(args, 'json', False):
-                output_json({
-                    "command": "extract",
-                    "status": "error",
-                    "error": str(e)
-                })
+            if getattr(args, "json", False):
+                output_json({"command": "extract", "status": "error", "error": str(e)})
             return 1
+
+    # Set up tqdm progress bar (suppressed for --json and --quiet)
+    use_progress = not getattr(args, "json", False) and not getattr(args, "quiet", False)
+    bar = None
+    if use_progress:
+        bar = tqdm(total=None, desc="Extracting emails", unit=" emails", dynamic_ncols=True)
+
+    def _email_progress(current: int, total: int) -> None:
+        if bar is not None:
+            bar.update(current - bar.n)
 
     # Run extraction via ExtractionService
     try:
         corpus = service.run(
-            since_last=getattr(args, 'since_last', False),
+            since_last=getattr(args, "since_last", False),
             existing_corpus=existing_corpus,
+            email_progress_callback=_email_progress if use_progress else None,
         )
 
         # Save corpus
@@ -222,16 +233,18 @@ def cmd_extract(args: argparse.Namespace) -> int:
         duration = time.time() - start_time
         total_emails = len(corpus.emails)
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "status": "success",
-                "duration_seconds": round(duration, 2),
-                "output_file": str(corpus_path),
-                "stats": {
-                    "emails_extracted": total_emails,
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "extract",
+                    "status": "success",
+                    "duration_seconds": round(duration, 2),
+                    "output_file": str(corpus_path),
+                    "stats": {
+                        "emails_extracted": total_emails,
+                    },
                 }
-            })
+            )
         else:
             logger.info(f"Extraction complete: {total_emails} emails")
 
@@ -245,10 +258,10 @@ def cmd_extract(args: argparse.Namespace) -> int:
             f"Use --verbose for full traceback.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "extract",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "extract", "status": "error", "error": str(e)})
         return 1
+
+    finally:
+        if bar is not None:
+            bar.close()

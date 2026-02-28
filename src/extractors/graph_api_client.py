@@ -9,6 +9,7 @@ Authentication:
     - Subsequent runs: uses cached token (no re-auth needed)
     - Token cache: ~/.email-analyzer/ms_token_cache.json
 """
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -71,9 +72,11 @@ class GraphAPIClient:
         """Persist token cache to disk with restrictive permissions."""
         if cache.has_state_changed:
             import os
+
             self.token_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self.token_cache_path.write_text(cache.serialize())
             import contextlib
+
             with contextlib.suppress(OSError):
                 os.chmod(self.token_cache_path, 0o600)  # Windows may not support chmod
 
@@ -124,9 +127,7 @@ class GraphAPIClient:
 
         flow = app.initiate_device_flow(scopes=SCOPES)
         if "user_code" not in flow:
-            raise RuntimeError(
-                f"Failed to create device flow: {flow.get('error_description')}"
-            )
+            raise RuntimeError(f"Failed to create device flow: {flow.get('error_description')}")
 
         print(flow["message"])
         print("=" * 60 + "\n")
@@ -190,7 +191,8 @@ class GraphAPIClient:
             raise RateLimitError(retry_after=retry_seconds)
 
         response.raise_for_status()
-        return response.json()
+        result: dict[str, Any] = response.json()
+        return result
 
     def fetch_emails(
         self,
@@ -241,7 +243,7 @@ class GraphAPIClient:
 
         try:
             data = self._make_request(url, params)
-            messages = data.get("value", [])
+            messages: list[dict[str, Any]] = data.get("value", [])
             logger.info(f"Fetched {len(messages)} emails (skip={skip})")
             return messages
         except requests.exceptions.HTTPError as e:
@@ -267,7 +269,8 @@ class GraphAPIClient:
 
         try:
             data = self._make_request(url, params)
-            return data.get("body", {}).get("content", "")
+            body_content: str = data.get("body", {}).get("content", "")
+            return body_content
         except Exception as e:
             logger.error(f"Failed to get message body: {e}")
             raise ConnectionError(f"Failed to get message body: {e}") from e
@@ -284,6 +287,7 @@ class GraphAPIClient:
 
         try:
             data = self._make_request(url, params)
-            return data.get("mail") or data.get("userPrincipalName", self.user_email)
+            email: str = data.get("mail") or data.get("userPrincipalName", self.user_email)
+            return email
         except Exception:
             return self.user_email

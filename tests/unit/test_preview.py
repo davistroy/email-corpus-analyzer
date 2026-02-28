@@ -12,6 +12,7 @@ Tests cover:
 Uses mocking to avoid real file I/O, network calls, and external dependencies.
 Following TDD - these tests are written before implementation.
 """
+
 import argparse
 from pathlib import Path
 from unittest.mock import patch
@@ -347,9 +348,7 @@ class TestSuggestEstimator:
         from src.preview.estimators import SuggestEstimate, SuggestEstimator
 
         mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
-        mock_path_config.get_suggestions_path.return_value = Path(
-            "/output/suggestions.json"
-        )
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
 
         estimator = SuggestEstimator()
         args = argparse.Namespace(
@@ -371,9 +370,7 @@ class TestSuggestEstimator:
         from src.preview.estimators import SuggestEstimator
 
         mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
-        mock_path_config.get_suggestions_path.return_value = Path(
-            "/output/suggestions.json"
-        )
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
 
         estimator = SuggestEstimator()
         args = argparse.Namespace(
@@ -411,12 +408,8 @@ class TestReviewEstimator:
         """Test that estimate() returns ReviewEstimate."""
         from src.preview.estimators import ReviewEstimate, ReviewEstimator
 
-        mock_path_config.get_suggestions_path.return_value = Path(
-            "/output/suggestions.json"
-        )
-        mock_path_config.get_approved_categories_path.return_value = Path(
-            "/output/approved.json"
-        )
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
 
         estimator = ReviewEstimator()
         args = argparse.Namespace(
@@ -433,18 +426,12 @@ class TestReviewEstimator:
 
     @patch("src.preview.estimators.PathConfig")
     @patch("src.preview.estimators.load_json")
-    def test_review_estimator_with_existing_suggestions(
-        self, mock_load_json, mock_path_config
-    ):
+    def test_review_estimator_with_existing_suggestions(self, mock_load_json, mock_path_config):
         """Test ReviewEstimator with existing suggestions file."""
         from src.preview.estimators import ReviewEstimator
 
-        mock_path_config.get_suggestions_path.return_value = Path(
-            "/output/suggestions.json"
-        )
-        mock_path_config.get_approved_categories_path.return_value = Path(
-            "/output/approved.json"
-        )
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
 
         # 15 category suggestions
         mock_load_json.return_value = [{"category_id": f"cat_{i}"} for i in range(15)]
@@ -474,20 +461,14 @@ class TestPipelineEstimator:
         assert estimator is not None
 
     @patch("src.preview.estimators.PathConfig")
-    def test_pipeline_estimator_estimate_returns_pipeline_estimate(
-        self, mock_path_config
-    ):
+    def test_pipeline_estimator_estimate_returns_pipeline_estimate(self, mock_path_config):
         """Test that estimate() returns PipelineEstimate."""
         from src.preview.estimators import PipelineEstimate, PipelineEstimator
 
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
-        mock_path_config.get_suggestions_path.return_value = Path(
-            "/output/suggestions.json"
-        )
-        mock_path_config.get_approved_categories_path.return_value = Path(
-            "/output/approved.json"
-        )
+        mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
+        mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
 
         estimator = PipelineEstimator()
         args = argparse.Namespace(

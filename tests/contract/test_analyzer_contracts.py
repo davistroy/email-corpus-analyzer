@@ -7,6 +7,7 @@ input handling, and return type guarantees.
 
 Phase 4.2: Analyzer Contract Tests
 """
+
 from datetime import datetime, timedelta
 
 import pytest
@@ -180,8 +181,7 @@ class TestAnalyzerContract:
             list,  # SemanticAnalyzer/HierarchicalAnalyzer return list
         )
         assert isinstance(result, allowed_types), (
-            f"{analyzer_cls.__name__}.analyze() returned unexpected type: "
-            f"{type(result).__name__}"
+            f"{analyzer_cls.__name__}.analyze() returned unexpected type: {type(result).__name__}"
         )
 
     def test_empty_corpus_does_not_crash(self, analyzer_cls, empty_corpus):

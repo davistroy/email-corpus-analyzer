@@ -3,6 +3,7 @@ Command definitions for the TUI application.
 
 Defines keyboard commands and their associated actions.
 """
+
 from dataclasses import dataclass
 
 

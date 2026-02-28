@@ -6,6 +6,7 @@ Exports categories to CSV format with:
 - UTF-8 with BOM for Excel compatibility
 - Parent name resolution for hierarchical categories
 """
+
 import csv
 from pathlib import Path
 
@@ -64,7 +65,9 @@ def export_categories_to_csv(
                 "name": category.category_name,
                 "description": category.description,
                 "confidence": str(category.confidence),
-                "email_count": str(category.email_count) if category.email_count is not None else "",
+                "email_count": str(category.email_count)
+                if category.email_count is not None
+                else "",
                 "source": category.source.value,
                 "level": str(category.level),
                 "parent_name": parent_name,

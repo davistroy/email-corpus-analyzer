@@ -4,6 +4,7 @@ Shared pytest fixtures for Email Corpus Analyzer tests.
 Provides standardized test data builders and fixtures used across test modules.
 Per Phase 6 Track 6C specification.
 """
+
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -329,10 +330,10 @@ def temp_data_dir():
 
         # Create sample analysis file
         analysis_file = data_dir / "corpus_analysis_results.json"
-        analysis_file.write_text('{}')
+        analysis_file.write_text("{}")
 
         # Create sample suggestions file
         suggestions_file = data_dir / "category_suggestions.json"
-        suggestions_file.write_text('[]')
+        suggestions_file.write_text("[]")
 
         yield data_dir

@@ -7,6 +7,7 @@ Decoupled from CLI for independent use.
 Per Phase 7, Track 7B specification.
 Work Item 3.4: All critical JSON outputs use atomic writes.
 """
+
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -84,9 +85,7 @@ class PipelineService:
         # Step 1: Extraction
         if skip_extraction:
             if existing_corpus is None:
-                raise ValueError(
-                    "existing_corpus required when skip_extraction is True"
-                )
+                raise ValueError("existing_corpus required when skip_extraction is True")
             corpus = existing_corpus
             if progress_callback:
                 progress_callback("Using existing corpus, skipping extraction...")

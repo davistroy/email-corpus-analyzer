@@ -4,6 +4,7 @@ Unit tests for confidence score calculation.
 Tests the calculate_confidence function with various category
 properties and edge cases.
 """
+
 from src.generators.confidence_scorer import calculate_confidence
 from src.models.category import Category, CategorySource
 
@@ -21,7 +22,7 @@ class TestConfidenceScorer:
             email_count=150,
             percentage=15.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=["invoice", "payment"]
+            distinguishing_features=["invoice", "payment"],
         )
         total_emails = 1000
 
@@ -42,7 +43,7 @@ class TestConfidenceScorer:
             email_count=50,
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=["newsletter"]
+            distinguishing_features=["newsletter"],
         )
         total_emails = 1000
 
@@ -63,7 +64,7 @@ class TestConfidenceScorer:
             email_count=10,
             percentage=1.0,
             source=CategorySource.SENDER,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -84,7 +85,7 @@ class TestConfidenceScorer:
             email_count=2,
             percentage=0.2,
             source=CategorySource.CUSTOM,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -105,7 +106,7 @@ class TestConfidenceScorer:
             email_count=1000,
             percentage=100.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -125,7 +126,7 @@ class TestConfidenceScorer:
             email_count=500,
             percentage=50.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -145,7 +146,7 @@ class TestConfidenceScorer:
             email_count=0,
             percentage=0.0,
             source=CategorySource.CUSTOM,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -165,7 +166,7 @@ class TestConfidenceScorer:
             email_count=50,
             percentage=50.0,
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 100
 
@@ -185,7 +186,7 @@ class TestConfidenceScorer:
             "confidence": 0.0,
             "email_count": 50,
             "percentage": 5.0,
-            "distinguishing_features": []
+            "distinguishing_features": [],
         }
         total_emails = 1000
 
@@ -196,8 +197,14 @@ class TestConfidenceScorer:
             sources_and_scores[source] = score
 
         # Verify ordering: TEMPLATE > CONTENT_CLUSTER > SENDER > CUSTOM
-        assert sources_and_scores[CategorySource.TEMPLATE] > sources_and_scores[CategorySource.CONTENT_CLUSTER]
-        assert sources_and_scores[CategorySource.CONTENT_CLUSTER] > sources_and_scores[CategorySource.SENDER]
+        assert (
+            sources_and_scores[CategorySource.TEMPLATE]
+            > sources_and_scores[CategorySource.CONTENT_CLUSTER]
+        )
+        assert (
+            sources_and_scores[CategorySource.CONTENT_CLUSTER]
+            > sources_and_scores[CategorySource.SENDER]
+        )
         assert sources_and_scores[CategorySource.SENDER] > sources_and_scores[CategorySource.CUSTOM]
 
     def test_score_always_between_0_and_1(self):
@@ -216,7 +223,7 @@ class TestConfidenceScorer:
                 description="Test",
                 confidence=0.0,
                 distinguishing_features=[],
-                **case_data
+                **case_data,
             )
             score = calculate_confidence(category, 1000)
 
@@ -232,7 +239,7 @@ class TestConfidenceScorer:
             email_count=None,
             percentage=None,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -252,7 +259,7 @@ class TestConfidenceScorer:
             email_count=10,
             percentage=1.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         category2 = Category(
             category_id="test_10b",
@@ -262,7 +269,7 @@ class TestConfidenceScorer:
             email_count=20,
             percentage=2.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         total_emails = 1000
 
@@ -297,8 +304,12 @@ class TestConfidenceWeights:
 
         # Weights should sum to 1.0 for normalization
         total = (
-            weights.cohesion + weights.volume + weights.source +
-            weights.percentage + weights.name_quality + weights.distinctiveness
+            weights.cohesion
+            + weights.volume
+            + weights.source
+            + weights.percentage
+            + weights.name_quality
+            + weights.distinctiveness
         )
         assert 0.99 <= total <= 1.01  # Allow small float tolerance
 
@@ -312,7 +323,7 @@ class TestConfidenceWeights:
             source=0.2,
             percentage=0.15,
             name_quality=0.1,
-            distinctiveness=0.05
+            distinctiveness=0.05,
         )
 
         assert weights.cohesion == 0.3
@@ -339,7 +350,7 @@ class TestEnhancedConfidenceScorer:
             percentage=10.0,
             source=CategorySource.TEMPLATE,
             distinguishing_features=["invoice", "payment"],
-            name_quality_score=0.8
+            name_quality_score=0.8,
         )
 
         score, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
@@ -368,7 +379,7 @@ class TestEnhancedConfidenceScorer:
             email_count=50,
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         score, _ = calculate_confidence_enhanced(category, total_emails=1000)
@@ -387,7 +398,7 @@ class TestEnhancedConfidenceScorer:
             email_count=100,
             percentage=10.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=["feature1", "feature2"]
+            distinguishing_features=["feature1", "feature2"],
         )
 
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
@@ -410,7 +421,7 @@ class TestEnhancedConfidenceScorer:
             email_count=100,
             percentage=10.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         # Use custom weights that emphasize volume
@@ -420,12 +431,10 @@ class TestEnhancedConfidenceScorer:
             source=0.1,
             percentage=0.1,
             name_quality=0.1,
-            distinctiveness=0.1
+            distinctiveness=0.1,
         )
 
-        score, _ = calculate_confidence_enhanced(
-            category, total_emails=1000, weights=weights
-        )
+        score, _ = calculate_confidence_enhanced(category, total_emails=1000, weights=weights)
 
         assert 0.0 <= score <= 1.0
 
@@ -442,7 +451,7 @@ class TestEnhancedConfidenceScorer:
             email_count=50,
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=["f1", "f2", "f3", "f4", "f5"]
+            distinguishing_features=["f1", "f2", "f3", "f4", "f5"],
         )
 
         # Category with no features = low cohesion
@@ -454,7 +463,7 @@ class TestEnhancedConfidenceScorer:
             email_count=50,
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         _, high_breakdown = calculate_confidence_enhanced(high_cohesion, total_emails=1000)
@@ -476,7 +485,7 @@ class TestEnhancedConfidenceScorer:
             percentage=5.0,
             source=CategorySource.TEMPLATE,
             distinguishing_features=[],
-            name_quality_score=0.9
+            name_quality_score=0.9,
         )
 
         # Low quality name
@@ -489,7 +498,7 @@ class TestEnhancedConfidenceScorer:
             percentage=5.0,
             source=CategorySource.TEMPLATE,
             distinguishing_features=[],
-            name_quality_score=0.2
+            name_quality_score=0.2,
         )
 
         _, high_breakdown = calculate_confidence_enhanced(high_quality, total_emails=1000)
@@ -510,7 +519,7 @@ class TestEnhancedConfidenceScorer:
             percentage=5.0,
             source=CategorySource.TEMPLATE,
             distinguishing_features=[],
-            name_quality_score=None
+            name_quality_score=None,
         )
 
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
@@ -530,7 +539,7 @@ class TestEnhancedConfidenceScorer:
             email_count=50,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         # No overlap scores provided, should default to 1.0
@@ -550,7 +559,7 @@ class TestEnhancedConfidenceScorer:
             email_count=50,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         # Provide overlap scores - high overlap should reduce distinctiveness
@@ -584,8 +593,8 @@ class TestCategoryConfidenceBreakdown:
                 "source": 0.9,
                 "percentage": 0.05,
                 "name_quality": 0.7,
-                "distinctiveness": 0.8
-            }
+                "distinctiveness": 0.8,
+            },
         )
 
         assert category.confidence_breakdown is not None
@@ -602,7 +611,7 @@ class TestCategoryConfidenceBreakdown:
             email_count=50,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         assert category.confidence_breakdown is None
@@ -629,7 +638,7 @@ class TestPairwiseCategoryOverlap:
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["email1", "email2", "email3", "email4", "email5"]
+            example_email_ids=["email1", "email2", "email3", "email4", "email5"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -640,7 +649,7 @@ class TestPairwiseCategoryOverlap:
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["email3", "email4", "email6", "email7"]
+            example_email_ids=["email3", "email4", "email6", "email7"],
         )
 
         result = calculate_pairwise_overlap([cat1, cat2])
@@ -663,7 +672,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d"]
+            example_email_ids=["a", "b", "c", "d"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -674,7 +683,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["c", "d", "e", "f"]
+            example_email_ids=["c", "d", "e", "f"],
         )
 
         result = calculate_pairwise_overlap([cat1, cat2])
@@ -695,7 +704,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c"]
+            example_email_ids=["a", "b", "c"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -706,7 +715,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["d", "e", "f"]
+            example_email_ids=["d", "e", "f"],
         )
 
         result = calculate_pairwise_overlap([cat1, cat2])
@@ -727,7 +736,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c"]
+            example_email_ids=["a", "b", "c"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -738,7 +747,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c"]
+            example_email_ids=["a", "b", "c"],
         )
 
         result = calculate_pairwise_overlap([cat1, cat2])
@@ -760,7 +769,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d"]  # 4 emails
+            example_email_ids=["a", "b", "c", "d"],  # 4 emails
         )
         cat2 = Category(
             category_id="cat2",
@@ -771,7 +780,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["c", "d", "e", "f"]  # 4 emails, 2 shared
+            example_email_ids=["c", "d", "e", "f"],  # 4 emails, 2 shared
         )
 
         result = calculate_pairwise_overlap([cat1, cat2])
@@ -792,7 +801,7 @@ class TestPairwiseCategoryOverlap:
             percentage=0.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=[]
+            example_email_ids=[],
         )
         cat2 = Category(
             category_id="cat2",
@@ -803,7 +812,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b"]
+            example_email_ids=["a", "b"],
         )
 
         result = calculate_pairwise_overlap([cat1, cat2])
@@ -824,7 +833,7 @@ class TestPairwiseCategoryOverlap:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b"]
+            example_email_ids=["a", "b"],
         )
 
         result = calculate_pairwise_overlap([cat1])
@@ -849,7 +858,7 @@ class TestHighOverlapCategories:
             percentage=3.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]
+            example_email_ids=["a", "b", "c", "d", "e"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -860,7 +869,7 @@ class TestHighOverlapCategories:
             percentage=3.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "f"]  # High overlap
+            example_email_ids=["a", "b", "c", "d", "f"],  # High overlap
         )
 
         result = find_merge_candidates([cat1, cat2])
@@ -880,7 +889,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e", "f", "g", "h"]
+            example_email_ids=["a", "b", "c", "d", "e", "f", "g", "h"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -891,7 +900,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e", "f", "g", "i"]  # 7/9 = 0.778 overlap
+            example_email_ids=["a", "b", "c", "d", "e", "f", "g", "i"],  # 7/9 = 0.778 overlap
         )
 
         result = find_merge_candidates([cat1, cat2], threshold=0.5)
@@ -918,7 +927,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d"]
+            example_email_ids=["a", "b", "c", "d"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -929,7 +938,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["e", "f", "g", "h"]  # No overlap
+            example_email_ids=["e", "f", "g", "h"],  # No overlap
         )
 
         result = find_merge_candidates([cat1, cat2], threshold=0.5)
@@ -949,7 +958,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d"]
+            example_email_ids=["a", "b", "c", "d"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -960,7 +969,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["c", "d", "e", "f"]  # 50% overlap (2/6 = 0.33 Jaccard)
+            example_email_ids=["c", "d", "e", "f"],  # 50% overlap (2/6 = 0.33 Jaccard)
         )
 
         # With high threshold, should not flag
@@ -984,7 +993,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]
+            example_email_ids=["a", "b", "c", "d", "e"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -995,7 +1004,7 @@ class TestHighOverlapCategories:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]  # 100% overlap
+            example_email_ids=["a", "b", "c", "d", "e"],  # 100% overlap
         )
 
         result = find_merge_candidates([cat1, cat2], threshold=0.5)
@@ -1022,7 +1031,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c"]
+            example_email_ids=["a", "b", "c"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -1033,7 +1042,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["d", "e", "f"]
+            example_email_ids=["d", "e", "f"],
         )
 
         result = calculate_distinctiveness_scores([cat1, cat2])
@@ -1055,7 +1064,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d"]
+            example_email_ids=["a", "b", "c", "d"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -1066,7 +1075,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["c", "d", "e", "f"]
+            example_email_ids=["c", "d", "e", "f"],
         )
 
         result = calculate_distinctiveness_scores([cat1, cat2])
@@ -1087,7 +1096,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c"]
+            example_email_ids=["a", "b", "c"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -1098,7 +1107,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["d", "e", "f"]
+            example_email_ids=["d", "e", "f"],
         )
 
         result = calculate_distinctiveness_scores([cat1, cat2])
@@ -1119,7 +1128,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]
+            example_email_ids=["a", "b", "c", "d", "e"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -1130,7 +1139,7 @@ class TestDistinctivenessScoring:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]  # 100% overlap
+            example_email_ids=["a", "b", "c", "d", "e"],  # 100% overlap
         )
 
         result = calculate_distinctiveness_scores([cat1, cat2])
@@ -1160,7 +1169,7 @@ class TestLogarithmicVolumeScaling:
             email_count=100,
             percentage=10.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
 
@@ -1179,7 +1188,7 @@ class TestLogarithmicVolumeScaling:
             email_count=10,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=200)
 
@@ -1198,7 +1207,7 @@ class TestLogarithmicVolumeScaling:
             email_count=1,
             percentage=0.5,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=200)
 
@@ -1217,7 +1226,7 @@ class TestLogarithmicVolumeScaling:
             email_count=0,
             percentage=0.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=200)
 
@@ -1236,7 +1245,7 @@ class TestLogarithmicVolumeScaling:
             email_count=1000,
             percentage=50.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=2000)
 
@@ -1258,7 +1267,7 @@ class TestPercentageScoring:
             email_count=100,
             percentage=10.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
 
@@ -1276,7 +1285,7 @@ class TestPercentageScoring:
             email_count=50,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
 
@@ -1294,7 +1303,7 @@ class TestPercentageScoring:
             email_count=10,
             percentage=1.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
 
@@ -1312,7 +1321,7 @@ class TestPercentageScoring:
             email_count=500,
             percentage=50.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
         _, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
 
@@ -1334,7 +1343,7 @@ class TestMeanOverlapDistinctiveness:
             email_count=50,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         # One high overlap, one low overlap
@@ -1360,7 +1369,7 @@ class TestMeanOverlapDistinctiveness:
             email_count=50,
             percentage=5.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         overlap_scores = {"other": 0.6}
@@ -1386,7 +1395,7 @@ class TestMeanOverlapDistinctiveness:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]
+            example_email_ids=["a", "b", "c", "d", "e"],
         )
         cat2 = Category(
             category_id="cat2",
@@ -1397,7 +1406,7 @@ class TestMeanOverlapDistinctiveness:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["a", "b", "c", "d", "e"]  # 100% overlap with cat1
+            example_email_ids=["a", "b", "c", "d", "e"],  # 100% overlap with cat1
         )
         cat3 = Category(
             category_id="cat3",
@@ -1408,7 +1417,7 @@ class TestMeanOverlapDistinctiveness:
             percentage=1.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=[],
-            example_email_ids=["f", "g", "h", "i", "j"]  # 0% overlap with cat1
+            example_email_ids=["f", "g", "h", "i", "j"],  # 0% overlap with cat1
         )
 
         result = calculate_distinctiveness_scores([cat1, cat2, cat3])
@@ -1439,7 +1448,7 @@ class TestSmallCorpusReasonableConfidence:
             email_count=10,
             percentage=5.0,  # 10/200 = 5%
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=["feature1", "feature2"]
+            distinguishing_features=["feature1", "feature2"],
         )
 
         score = calculate_confidence(category, total_emails=200)
@@ -1449,7 +1458,9 @@ class TestSmallCorpusReasonableConfidence:
         # source = 0.8 (content cluster)
         # percentage = min(1.0, 5/10) = 0.5
         # avg ≈ 0.607
-        assert score > 0.30, f"Score {score} is unreasonably low for a 10-email / 200-corpus category"
+        assert score > 0.30, (
+            f"Score {score} is unreasonably low for a 10-email / 200-corpus category"
+        )
         assert score < 1.0
 
     def test_small_corpus_20_emails_total(self):
@@ -1462,7 +1473,7 @@ class TestSmallCorpusReasonableConfidence:
             email_count=5,
             percentage=25.0,  # 5/20 = 25%
             source=CategorySource.SENDER,
-            distinguishing_features=["f1"]
+            distinguishing_features=["f1"],
         )
 
         score = calculate_confidence(category, total_emails=20)
@@ -1483,7 +1494,7 @@ class TestSmallCorpusReasonableConfidence:
             email_count=30,
             percentage=6.0,
             source=CategorySource.CONTENT_CLUSTER,
-            distinguishing_features=["f1", "f2", "f3"]
+            distinguishing_features=["f1", "f2", "f3"],
         )
 
         score = calculate_confidence(category, total_emails=500)
@@ -1504,7 +1515,7 @@ class TestSmallCorpusReasonableConfidence:
             email_count=100,
             percentage=2.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=["f1", "f2"]
+            distinguishing_features=["f1", "f2"],
         )
 
         score = calculate_confidence(category, total_emails=5000)
@@ -1528,7 +1539,7 @@ class TestSmallCorpusReasonableConfidence:
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=["f1", "f2", "f3"],
-            name_quality_score=0.7
+            name_quality_score=0.7,
         )
 
         score, breakdown = calculate_confidence_enhanced(category, total_emails=200)
@@ -1578,7 +1589,7 @@ class TestConfigurableWeights:
             percentage=5.0,
             source=CategorySource.CONTENT_CLUSTER,
             distinguishing_features=["f1", "f2"],
-            name_quality_score=0.7
+            name_quality_score=0.7,
         )
 
         # Default weights
@@ -1638,11 +1649,11 @@ class TestConfigurableWeights:
 
         thresholds = GeneratorThresholds()
         total = (
-            thresholds.confidence_weight_cohesion +
-            thresholds.confidence_weight_volume +
-            thresholds.confidence_weight_source +
-            thresholds.confidence_weight_percentage +
-            thresholds.confidence_weight_name_quality +
-            thresholds.confidence_weight_distinctiveness
+            thresholds.confidence_weight_cohesion
+            + thresholds.confidence_weight_volume
+            + thresholds.confidence_weight_source
+            + thresholds.confidence_weight_percentage
+            + thresholds.confidence_weight_name_quality
+            + thresholds.confidence_weight_distinctiveness
         )
         assert 0.99 <= total <= 1.01

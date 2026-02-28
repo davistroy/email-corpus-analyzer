@@ -16,6 +16,7 @@ Temporal decay: each occurrence is weighted by exp(-days_old / half_life_days).
 A decision that is `half_life_days` old contributes 50% of a brand-new decision's
 weight.  Decisions older than ~4 half-lives contribute negligible weight.
 """
+
 import math
 from collections import defaultdict
 from dataclasses import dataclass
@@ -165,10 +166,7 @@ class PatternDetector:
         logger.info(f"Detected {len(patterns)} patterns from {len(decisions)} decisions")
         return patterns
 
-    def get_high_confidence_patterns(
-        self,
-        min_confidence: float = 0.8
-    ) -> list[DetectedPattern]:
+    def get_high_confidence_patterns(self, min_confidence: float = 0.8) -> list[DetectedPattern]:
         """
         Get only patterns with high confidence.
 
@@ -284,12 +282,14 @@ class PatternDetector:
         for (old_name, new_name), group_decisions in groups.items():
             weighted = self._weighted_count(group_decisions, now)
             if weighted >= self.min_occurrences - self._WEIGHT_TOLERANCE:
-                patterns.append(DetectedPattern(
-                    pattern_type=PatternType.RENAME,
-                    parameters={"old_name": old_name, "new_name": new_name},
-                    occurrences=len(group_decisions),
-                    confidence=self._calculate_confidence(weighted),
-                ))
+                patterns.append(
+                    DetectedPattern(
+                        pattern_type=PatternType.RENAME,
+                        parameters={"old_name": old_name, "new_name": new_name},
+                        occurrences=len(group_decisions),
+                        confidence=self._calculate_confidence(weighted),
+                    )
+                )
 
         return patterns
 
@@ -321,12 +321,14 @@ class PatternDetector:
         for (source, target), group_decisions in groups.items():
             weighted = self._weighted_count(group_decisions, now)
             if weighted >= self.min_occurrences - self._WEIGHT_TOLERANCE:
-                patterns.append(DetectedPattern(
-                    pattern_type=PatternType.MERGE,
-                    parameters={"source": source, "target": target},
-                    occurrences=len(group_decisions),
-                    confidence=self._calculate_confidence(weighted),
-                ))
+                patterns.append(
+                    DetectedPattern(
+                        pattern_type=PatternType.MERGE,
+                        parameters={"source": source, "target": target},
+                        occurrences=len(group_decisions),
+                        confidence=self._calculate_confidence(weighted),
+                    )
+                )
 
         return patterns
 
@@ -364,16 +366,16 @@ class PatternDetector:
         weighted = self._weighted_count(low_conf_decisions, now)
 
         if weighted >= self.min_occurrences - self._WEIGHT_TOLERANCE:
-            avg_threshold = (
-                sum(low_conf_values) / len(low_conf_values) if low_conf_values else 0.3
-            )
+            avg_threshold = sum(low_conf_values) / len(low_conf_values) if low_conf_values else 0.3
 
-            return [DetectedPattern(
-                pattern_type=PatternType.DELETE_LOW_CONFIDENCE,
-                parameters={"threshold": round(avg_threshold + 0.05, 2)},
-                occurrences=len(low_conf_decisions),
-                confidence=self._calculate_confidence(weighted),
-            )]
+            return [
+                DetectedPattern(
+                    pattern_type=PatternType.DELETE_LOW_CONFIDENCE,
+                    parameters={"threshold": round(avg_threshold + 0.05, 2)},
+                    occurrences=len(low_conf_decisions),
+                    confidence=self._calculate_confidence(weighted),
+                )
+            ]
 
         return []
 
@@ -402,11 +404,13 @@ class PatternDetector:
         for category_name, group_decisions in groups.items():
             weighted = self._weighted_count(group_decisions, now)
             if weighted >= self.min_occurrences - self._WEIGHT_TOLERANCE:
-                patterns.append(DetectedPattern(
-                    pattern_type=PatternType.ALWAYS_ACCEPT,
-                    parameters={"category_name": category_name},
-                    occurrences=len(group_decisions),
-                    confidence=self._calculate_confidence(weighted),
-                ))
+                patterns.append(
+                    DetectedPattern(
+                        pattern_type=PatternType.ALWAYS_ACCEPT,
+                        parameters={"category_name": category_name},
+                        occurrences=len(group_decisions),
+                        confidence=self._calculate_confidence(weighted),
+                    )
+                )
 
         return patterns

@@ -3,6 +3,7 @@ Temporal pattern analyzer for email corpus.
 
 Per analyzer_contract.md lines 225-278.
 """
+
 import logging
 from collections import defaultdict
 from collections.abc import Callable
@@ -31,6 +32,7 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
         """
         if thresholds is None:
             from ..config.models import AnalyzerThresholds
+
             thresholds = AnalyzerThresholds()
         self.thresholds = thresholds
 
@@ -39,10 +41,8 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
         """Return human-readable analyzer name."""
         return "Temporal Analyzer"
 
-    def analyze(
-        self,
-        corpus: Corpus,
-        progress_callback: Callable[[int, int], None] | None = None
+    def analyze(  # type: ignore[override]
+        self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> TemporalPatterns:
         """
         Analyze temporal email patterns.
@@ -84,7 +84,7 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
             "daily": 0,
             "weekly": 0,
             "monthly": 0,
-            "occasional": 0
+            "occasional": 0,
         }
 
         sender_frequencies: dict[str, dict] = {}
@@ -97,20 +97,17 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
                 "type": frequency_type,
                 "count": len(dates),
                 "first": dates[0].isoformat(),
-                "last": dates[-1].isoformat()
+                "last": dates[-1].isoformat(),
             }
 
         # Final progress callback
         if progress_callback:
             progress_callback(len(corpus.emails), len(corpus.emails))
 
-        logger.debug(
-            f"Temporal analysis complete. Distribution: {frequency_distribution}"
-        )
+        logger.debug(f"Temporal analysis complete. Distribution: {frequency_distribution}")
 
         return TemporalPatterns(
-            frequency_distribution=frequency_distribution,
-            sender_frequencies=sender_frequencies
+            frequency_distribution=frequency_distribution, sender_frequencies=sender_frequencies
         )
 
     def classify_frequency(self, dates: list[datetime]) -> str:
@@ -139,7 +136,9 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
 
         # Need sufficient emails for frequency classification
         if email_count < self.thresholds.min_emails_for_frequency:
-            logger.debug(f"Classified as occasional: {email_count} emails (< {self.thresholds.min_emails_for_frequency})")
+            logger.debug(
+                f"Classified as occasional: {email_count} emails (< {self.thresholds.min_emails_for_frequency})"
+            )
             return "occasional"
 
         # Calculate average interval between emails
@@ -153,10 +152,7 @@ class TemporalAnalyzer(BaseAnalyzer[TemporalPatterns]):
 
         avg_interval_days = total_span / intervals / 86400  # seconds to days
 
-        logger.debug(
-            f"Average interval: {avg_interval_days:.2f} days "
-            f"({email_count} emails)"
-        )
+        logger.debug(f"Average interval: {avg_interval_days:.2f} days ({email_count} emails)")
 
         # Apply classification thresholds
         if avg_interval_days < self.thresholds.frequency_daily_threshold_days:

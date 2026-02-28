@@ -9,6 +9,7 @@ Provides YAML configuration loading with resolution order:
 
 Per Task 1A.2 specification.
 """
+
 import os
 import platform
 from pathlib import Path
@@ -22,7 +23,6 @@ from src.config.models import AppConfig, merge_configs
 
 class ConfigLoadError(Exception):
     """Raised when configuration loading fails."""
-
 
 
 def get_global_config_path() -> Path:
@@ -81,7 +81,8 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
             # Handle empty files or files with only comments
             if content is None:
                 return {}
-            return content
+            result: dict[str, Any] = content
+            return result
     except yaml.YAMLError as e:
         raise ConfigLoadError(f"Invalid YAML in {path}: {e}") from e
     except PermissionError as e:
@@ -109,10 +110,7 @@ def _dict_to_config(data: dict[str, Any]) -> AppConfig:
         raise ConfigLoadError(f"Configuration validation error: {e}") from e
 
 
-def load_config(
-    config_path: Path | None = None,
-    project_dir: Path | None = None
-) -> AppConfig:
+def load_config(config_path: Path | None = None, project_dir: Path | None = None) -> AppConfig:
     """
     Load configuration from all sources with proper precedence.
 

@@ -3,6 +3,7 @@ Unit tests for data models.
 
 Tests the Category model, hierarchical extensions, and Email model.
 """
+
 from datetime import datetime
 
 import pytest

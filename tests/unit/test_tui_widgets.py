@@ -16,7 +16,7 @@ def create_test_category(
     percentage: float = 25.0,
     source: CategorySource = CategorySource.CONTENT_CLUSTER,
     example_email_ids: list[str] | None = None,
-    distinguishing_features: list[str] | None = None
+    distinguishing_features: list[str] | None = None,
 ) -> Category:
     """Helper to create test Category objects."""
     return Category(
@@ -29,7 +29,7 @@ def create_test_category(
         source=source,
         source_id="test_source",
         example_email_ids=example_email_ids or [],
-        distinguishing_features=distinguishing_features or []
+        distinguishing_features=distinguishing_features or [],
     )
 
 
@@ -142,7 +142,7 @@ class TestCategoryTableNavigation:
         table.selected_row = 0
 
         # Mock move_cursor to avoid app context requirement
-        with patch.object(table, 'move_cursor'):
+        with patch.object(table, "move_cursor"):
             initial_row = table.selected_row
             table.move_down()
 
@@ -161,7 +161,7 @@ class TestCategoryTableNavigation:
         table = CategoryTable(categories=categories)
         table.selected_row = 1  # Start at second row
 
-        with patch.object(table, 'move_cursor'):
+        with patch.object(table, "move_cursor"):
             table.move_up()
 
             assert table.selected_row == 0
@@ -179,7 +179,7 @@ class TestCategoryTableNavigation:
         table = CategoryTable(categories=categories)
         table.selected_row = 1  # At last row
 
-        with patch.object(table, 'move_cursor'):
+        with patch.object(table, "move_cursor"):
             table.move_down()
 
             # Should wrap to 0
@@ -198,7 +198,7 @@ class TestCategoryTableNavigation:
         table = CategoryTable(categories=categories)
         table.selected_row = 0  # At first row
 
-        with patch.object(table, 'move_cursor'):
+        with patch.object(table, "move_cursor"):
             table.move_up()
 
             # Should wrap to last row (1)
@@ -219,7 +219,7 @@ class TestCategoryTableRemove:
         table = CategoryTable(categories=[cat1, cat2])
 
         # Mock _populate_rows which requires app context
-        with patch.object(table, '_populate_rows'):
+        with patch.object(table, "_populate_rows"):
             table.remove_category(cat1)
 
             assert len(table.categories) == 1
@@ -236,7 +236,7 @@ class TestCategoryTableRemove:
         table = CategoryTable(categories=[cat1, cat2])
         table.selected_row = 1
 
-        with patch.object(table, '_populate_rows'):
+        with patch.object(table, "_populate_rows"):
             table.remove_category(cat2)
 
             # Selection should be valid after removal
@@ -625,7 +625,7 @@ class TestHierarchicalCategoryTable:
         table = CategoryTable(categories=[parent])
 
         # Should have is_expanded method or attribute
-        assert hasattr(table, 'is_expanded') or hasattr(table, '_expanded_ids')
+        assert hasattr(table, "is_expanded") or hasattr(table, "_expanded_ids")
 
     def test_table_toggle_expand_collapse(self):
         """Test expanding/collapsing categories with subcategories."""
@@ -649,10 +649,10 @@ class TestHierarchicalCategoryTable:
         table = CategoryTable(categories=[parent])
 
         # Should have toggle method
-        if hasattr(table, 'toggle_expand'):
+        if hasattr(table, "toggle_expand"):
             initial = table.is_expanded(parent.category_id)
             # Mock _populate_rows to avoid DataTable column requirements
-            with patch.object(table, '_populate_rows'):
+            with patch.object(table, "_populate_rows"):
                 table.toggle_expand(parent.category_id)
             assert table.is_expanded(parent.category_id) != initial
 
@@ -676,7 +676,7 @@ class TestHierarchicalCategoryTable:
         table = CategoryTable(categories=[parent])
 
         # Should have method to get visible rows
-        if hasattr(table, 'get_visible_categories'):
+        if hasattr(table, "get_visible_categories"):
             visible = table.get_visible_categories()
             assert len(visible) >= 1
 
@@ -761,8 +761,8 @@ class TestHierarchicalCategoryActions:
         table = CategoryTable(categories=[parent])
 
         # Should have promote method
-        if hasattr(table, 'promote_to_top_level'):
-            with patch.object(table, '_populate_rows'):
+        if hasattr(table, "promote_to_top_level"):
+            with patch.object(table, "_populate_rows"):
                 table.promote_to_top_level(child)
                 # Child should become top level
                 assert child.level == 0 or child in table.categories
@@ -787,8 +787,8 @@ class TestHierarchicalCategoryActions:
         table = CategoryTable(categories=[cat1, cat2])
 
         # Should have demote method
-        if hasattr(table, 'demote_to_subcategory'):
-            with patch.object(table, '_populate_rows'):
+        if hasattr(table, "demote_to_subcategory"):
+            with patch.object(table, "_populate_rows"):
                 table.demote_to_subcategory(cat2, cat1)
                 # cat2 should become subcategory of cat1
                 assert cat2.level == 1 or cat2 in cat1.subcategories
@@ -821,8 +821,8 @@ class TestConfidenceBreakdownDisplay:
                 "source": 0.9,
                 "percentage": 0.1,
                 "name_quality": 0.7,
-                "distinctiveness": 0.85
-            }
+                "distinctiveness": 0.85,
+            },
         )
 
         panel = DetailPanel(category=category)
@@ -846,7 +846,7 @@ class TestConfidenceBreakdownDisplay:
             percentage=10.0,
             source=CategorySource.TEMPLATE,
             distinguishing_features=[],
-            confidence_breakdown=None
+            confidence_breakdown=None,
         )
 
         panel = DetailPanel(category=category)
@@ -874,8 +874,8 @@ class TestConfidenceBreakdownDisplay:
                 "source": 0.9,
                 "percentage": 0.1,
                 "name_quality": 0.7,
-                "distinctiveness": 0.85
-            }
+                "distinctiveness": 0.85,
+            },
         )
 
         panel = DetailPanel(category=category)
@@ -976,8 +976,8 @@ class TestCategoryReviewConfidenceDisplay:
                 "source": 0.9,
                 "percentage": 0.1,
                 "name_quality": 0.7,
-                "distinctiveness": 0.85
-            }
+                "distinctiveness": 0.85,
+            },
         )
 
         display = format_confidence_display(category)
@@ -998,7 +998,7 @@ class TestCategoryReviewConfidenceDisplay:
             email_count=100,
             percentage=10.0,
             source=CategorySource.TEMPLATE,
-            distinguishing_features=[]
+            distinguishing_features=[],
         )
 
         display = format_confidence_display(category)

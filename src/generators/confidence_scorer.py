@@ -8,6 +8,7 @@ Enhanced with Task 5A.1: Weighted confidence factors and breakdown.
 Work Item 4.1: Improved scoring with logarithmic volume, percentage/10 scaling,
 mean-overlap distinctiveness, and configurable weights via GeneratorThresholds.
 """
+
 import logging
 import math
 from dataclasses import dataclass
@@ -40,8 +41,8 @@ class ConfidenceWeights:
     """
 
     cohesion: float = 0.15  # Based on distinguishing features
-    volume: float = 0.20    # Based on email count
-    source: float = 0.25    # Based on source type reliability
+    volume: float = 0.20  # Based on email count
+    source: float = 0.25  # Based on source type reliability
     percentage: float = 0.15  # Based on corpus percentage
     name_quality: float = 0.10  # Based on name quality score
     distinctiveness: float = 0.15  # Based on overlap with other categories
@@ -91,7 +92,7 @@ def calculate_confidence(category: Category, total_emails: int) -> float:
         category.source,
         category.email_count,
         category.percentage,
-        total_emails
+        total_emails,
     )
 
     # Calculate volume score: logarithmic scaling so 100 emails = 1.0, 10 ≈ 0.5
@@ -114,11 +115,7 @@ def calculate_confidence(category: Category, total_emails: int) -> float:
     # Ensure result is in range [0.0, 1.0] per FR-025
     confidence = max(0.0, min(1.0, confidence))
 
-    logger.debug(
-        "  final confidence: %.3f for category '%s'",
-        confidence,
-        category.category_name
-    )
+    logger.debug("  final confidence: %.3f for category '%s'", confidence, category.category_name)
 
     return confidence
 
@@ -127,7 +124,7 @@ def calculate_confidence_enhanced(
     category: Category,
     total_emails: int,
     weights: ConfidenceWeights | None = None,
-    overlap_scores: dict[str, float] | None = None
+    overlap_scores: dict[str, float] | None = None,
 ) -> tuple[float, dict[str, float]]:
     """
     Calculate enhanced confidence score with weighted factors and breakdown.
@@ -155,10 +152,7 @@ def calculate_confidence_enhanced(
     if weights is None:
         weights = ConfidenceWeights()
 
-    logger.debug(
-        "Calculating enhanced confidence for category '%s'",
-        category.category_name
-    )
+    logger.debug("Calculating enhanced confidence for category '%s'", category.category_name)
 
     # Calculate cohesion score (based on distinguishing features)
     # More features = higher cohesion (max at 5 features)
@@ -181,7 +175,9 @@ def calculate_confidence_enhanced(
     logger.debug("  percentage_score: %.3f (percentage=%.2f%%)", percentage_score, percentage)
 
     # Calculate name quality score (use field value or default to 0.5)
-    name_quality_score = category.name_quality_score if category.name_quality_score is not None else 0.5
+    name_quality_score = (
+        category.name_quality_score if category.name_quality_score is not None else 0.5
+    )
     logger.debug("  name_quality_score: %.3f", name_quality_score)
 
     # Calculate distinctiveness score (penalize based on mean overlap with other categories)
@@ -201,26 +197,24 @@ def calculate_confidence_enhanced(
         "source": source_score,
         "percentage": percentage_score,
         "name_quality": name_quality_score,
-        "distinctiveness": distinctiveness_score
+        "distinctiveness": distinctiveness_score,
     }
 
     # Calculate weighted confidence
     confidence = (
-        weights.cohesion * cohesion_score +
-        weights.volume * volume_score +
-        weights.source * source_score +
-        weights.percentage * percentage_score +
-        weights.name_quality * name_quality_score +
-        weights.distinctiveness * distinctiveness_score
+        weights.cohesion * cohesion_score
+        + weights.volume * volume_score
+        + weights.source * source_score
+        + weights.percentage * percentage_score
+        + weights.name_quality * name_quality_score
+        + weights.distinctiveness * distinctiveness_score
     )
 
     # Ensure result is in range [0.0, 1.0]
     confidence = max(0.0, min(1.0, confidence))
 
     logger.debug(
-        "  final enhanced confidence: %.3f for category '%s'",
-        confidence,
-        category.category_name
+        "  final enhanced confidence: %.3f for category '%s'", confidence, category.category_name
     )
 
     return confidence, breakdown
@@ -248,7 +242,7 @@ def calculate_pairwise_overlap(categories: list[Category]) -> dict[str, dict[str
     for i, cat1 in enumerate(categories):
         set1 = set(cat1.example_email_ids)
 
-        for cat2 in categories[i + 1:]:
+        for cat2 in categories[i + 1 :]:
             set2 = set(cat2.example_email_ids)
 
             # Calculate Jaccard similarity
@@ -267,15 +261,14 @@ def calculate_pairwise_overlap(categories: list[Category]) -> dict[str, dict[str
                 "Overlap between '%s' and '%s': %.3f",
                 cat1.category_name,
                 cat2.category_name,
-                overlap
+                overlap,
             )
 
     return result
 
 
 def find_merge_candidates(
-    categories: list[Category],
-    threshold: float = 0.5
+    categories: list[Category], threshold: float = 0.5
 ) -> list[tuple[str, str, float]]:
     """
     Find category pairs that are candidates for merging due to high overlap.
@@ -293,7 +286,7 @@ def find_merge_candidates(
     candidates = []
 
     # Track pairs we've already added (avoid duplicates)
-    seen_pairs: set[tuple[str, str]] = set()
+    seen_pairs: set[tuple[str, ...]] = set()
 
     for cat_id, others in overlaps.items():
         for other_id, overlap in others.items():
@@ -304,10 +297,7 @@ def find_merge_candidates(
                 candidates.append((cat_id, other_id, overlap))
                 seen_pairs.add(pair_key)
                 logger.info(
-                    "Merge candidate: '%s' and '%s' (overlap=%.2f)",
-                    cat_id,
-                    other_id,
-                    overlap
+                    "Merge candidate: '%s' and '%s' (overlap=%.2f)", cat_id, other_id, overlap
                 )
 
     return candidates
@@ -339,10 +329,6 @@ def calculate_distinctiveness_scores(categories: list[Category]) -> dict[str, fl
             mean_overlap = sum(others.values()) / len(others)
             scores[cat_id] = 1.0 - mean_overlap
 
-        logger.debug(
-            "Distinctiveness score for '%s': %.3f",
-            cat_id,
-            scores[cat_id]
-        )
+        logger.debug("Distinctiveness score for '%s': %.3f", cat_id, scores[cat_id])
 
     return scores

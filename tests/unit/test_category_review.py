@@ -4,6 +4,7 @@ Unit tests for the interactive category review CLI module.
 Tests the CategoryReview class and related functions with mocked
 user input and file I/O operations.
 """
+
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -22,7 +23,7 @@ def create_test_category(
     percentage: float = 25.0,
     source: CategorySource = CategorySource.CONTENT_CLUSTER,
     example_email_ids: list[str] | None = None,
-    distinguishing_features: list[str] | None = None
+    distinguishing_features: list[str] | None = None,
 ) -> Category:
     """Helper to create test Category objects."""
     return Category(
@@ -35,7 +36,7 @@ def create_test_category(
         source=source,
         source_id="test_source",
         example_email_ids=example_email_ids or [],
-        distinguishing_features=distinguishing_features or []
+        distinguishing_features=distinguishing_features or [],
     )
 
 
@@ -44,7 +45,7 @@ def create_test_email(
     sender_email: str = "sender@example.com",
     sender_name: str = "Test Sender",
     subject: str = "Test Subject",
-    body_text: str = "Test body content"
+    body_text: str = "Test body content",
 ) -> Email:
     """Helper to create test Email objects."""
     return Email(
@@ -55,7 +56,7 @@ def create_test_email(
         subject=subject,
         body_text=body_text,
         received_date=datetime(2024, 1, 15, 10, 30, 0),
-        has_attachments=False
+        has_attachments=False,
     )
 
 
@@ -135,7 +136,7 @@ class TestReviewCategoryAccept:
             description="High priority messages",
             confidence=0.95,
             email_count=50,
-            percentage=12.5
+            percentage=12.5,
         )
         reviewer = CategoryReview([category])
         mock_input.return_value = "A"
@@ -212,13 +213,13 @@ class TestReviewCategoryMerge:
             category_id="target",
             name="Target Category",
             email_count=20,
-            example_email_ids=["email_1", "email_2"]
+            example_email_ids=["email_1", "email_2"],
         )
         source_category = create_test_category(
             category_id="source",
             name="Source Category",
             email_count=15,
-            example_email_ids=["email_3", "email_4"]
+            example_email_ids=["email_3", "email_4"],
         )
 
         reviewer = CategoryReview([target_category, source_category])
@@ -404,7 +405,7 @@ class TestReviewCategorySampleDisplay:
         """Test fallback to distinguishing features when no email lookup."""
         category = create_test_category(
             example_email_ids=["email_1"],
-            distinguishing_features=["Contains invoice data", "Monthly billing"]
+            distinguishing_features=["Contains invoice data", "Monthly billing"],
         )
         reviewer = CategoryReview([category], {})  # Empty email lookup
 
@@ -423,8 +424,7 @@ class TestReviewCategorySampleDisplay:
         """Test that long distinguishing features are truncated."""
         long_feature = "A" * 100  # 100 characters
         category = create_test_category(
-            example_email_ids=[],
-            distinguishing_features=[long_feature]
+            example_email_ids=[], distinguishing_features=[long_feature]
         )
         reviewer = CategoryReview([category])
 
@@ -539,9 +539,11 @@ class TestAddCustomCategories:
 
         mock_input.side_effect = [
             "y",  # Yes to custom
-            "First Custom", "First desc",
-            "Second Custom", "Second desc",
-            ""  # Empty to finish
+            "First Custom",
+            "First desc",
+            "Second Custom",
+            "Second desc",
+            "",  # Empty to finish
         ]
         approved = reviewer.run_interactive_review()
 
@@ -593,10 +595,7 @@ class TestSaveApprovedCategories:
     def test_save_with_custom_categories(self, mock_save_json):
         """Test that custom categories are counted correctly in stats."""
         original_cat = create_test_category(category_id="cat1")
-        custom_cat = create_test_category(
-            category_id="custom_1",
-            source=CategorySource.CUSTOM
-        )
+        custom_cat = create_test_category(category_id="custom_1", source=CategorySource.CUSTOM)
 
         reviewer = CategoryReview([original_cat])
         reviewer.approved = [original_cat, custom_cat]
@@ -657,7 +656,7 @@ class TestReviewCategoriesFunction:
                     "subject": "Test",
                     "body_text": "Body",
                     "received_date": "2024-01-15T10:30:00",
-                    "has_attachments": False
+                    "has_attachments": False,
                 }
             ]
         }
@@ -779,9 +778,7 @@ class TestCleanupIntermediateFiles:
     @patch("builtins.input")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.unlink")
-    def test_cleanup_handles_delete_error(
-        self, mock_unlink, mock_exists, mock_input, mock_print
-    ):
+    def test_cleanup_handles_delete_error(self, mock_unlink, mock_exists, mock_input, mock_print):
         """Test cleanup handles file deletion errors gracefully."""
         mock_input.side_effect = ["y", "y"]
         mock_exists.return_value = True
@@ -798,9 +795,7 @@ class TestCleanupIntermediateFiles:
     @patch("builtins.input")
     @patch("pathlib.Path.exists")
     @patch("pathlib.Path.unlink")
-    def test_cleanup_deletes_correct_files(
-        self, mock_unlink, mock_exists, mock_input, mock_print
-    ):
+    def test_cleanup_deletes_correct_files(self, mock_unlink, mock_exists, mock_input, mock_print):
         """Test that only intermediate files are deleted."""
         mock_input.side_effect = ["y", "y"]
         mock_exists.return_value = True
@@ -854,12 +849,11 @@ class TestCategoryReviewEdgeCases:
     def test_merge_combines_example_email_ids(self, mock_input, mock_print):
         """Test that merge combines example_email_ids correctly."""
         target = create_test_category(
-            category_id="target",
-            example_email_ids=["email_1", "email_2", "email_3"]
+            category_id="target", example_email_ids=["email_1", "email_2", "email_3"]
         )
         source = create_test_category(
             category_id="source",
-            example_email_ids=["email_2", "email_4", "email_5"]  # email_2 is duplicate
+            example_email_ids=["email_2", "email_4", "email_5"],  # email_2 is duplicate
         )
 
         reviewer = CategoryReview([target, source])
@@ -901,7 +895,7 @@ class TestCategoryReviewEdgeCases:
         reviewer = CategoryReview([])
         reviewer.approved = [
             create_test_category(category_id="existing_1"),
-            create_test_category(category_id="existing_2")
+            create_test_category(category_id="existing_2"),
         ]
 
         # Add one custom category
@@ -930,18 +924,21 @@ class TestCategoryReviewStateCounting:
 
         # Sequence: Accept cat1, Rename cat2, Delete cat3, Accept cat5 (for merge), Merge cat4
         mock_input.side_effect = [
-            "A",              # Accept cat1
-            "R", "New Name",  # Rename cat2
-            "D", "y",         # Delete cat3
-            "A",              # Accept cat5 (for merge target)
-            "M", "2",         # Merge cat4 into cat5 (index 2 in approved list)
-            "n"               # No custom categories
+            "A",  # Accept cat1
+            "R",
+            "New Name",  # Rename cat2
+            "D",
+            "y",  # Delete cat3
+            "A",  # Accept cat5 (for merge target)
+            "M",
+            "2",  # Merge cat4 into cat5 (index 2 in approved list)
+            "n",  # No custom categories
         ]
 
         approved = reviewer.run_interactive_review()
 
         assert reviewer.modified_count == 1  # cat2 renamed
-        assert reviewer.deleted_count == 1   # cat3 deleted
-        assert reviewer.merged_count == 1    # cat4 merged
+        assert reviewer.deleted_count == 1  # cat3 deleted
+        assert reviewer.merged_count == 1  # cat4 merged
         # Approved: cat1, cat2, cat5 (cat4 was merged into cat5)
         assert len(approved) == 3

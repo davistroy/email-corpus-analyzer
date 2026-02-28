@@ -6,6 +6,7 @@ using elbow method and silhouette analysis.
 
 Per Phase 2, Track 2A requirements.
 """
+
 import logging
 import math
 from collections.abc import Callable
@@ -50,9 +51,7 @@ def compute_max_k(n_emails: int, min_k: int = 3, max_k_cap: int = 25) -> int:
     if n_emails < 2:
         raise ValueError(f"n_emails must be >= 2, got {n_emails}")
     if min_k > max_k_cap:
-        raise ValueError(
-            f"min_k ({min_k}) must be <= max_k_cap ({max_k_cap})"
-        )
+        raise ValueError(f"min_k ({min_k}) must be <= max_k_cap ({max_k_cap})")
 
     raw = int(math.sqrt(n_emails / 5))
     clamped = max(min_k, min(raw, max_k_cap))
@@ -142,7 +141,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         self.max_k = max_k
         logger.debug(f"ElbowOptimizer initialized with max_k={max_k}")
 
-    def analyze(self, emails, **kwargs) -> ClusterOptimizationResult:
+    def analyze(self, data, **kwargs) -> ClusterOptimizationResult:
         """
         Analyze embeddings to find optimal cluster count.
 
@@ -156,14 +155,12 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         Returns:
             ClusterOptimizationResult with optimal k and confidence
         """
-        embeddings = emails  # For optimizers, we accept embeddings directly
-        progress_callback = kwargs.get('progress_callback')
+        embeddings = data  # For optimizers, we accept embeddings directly
+        progress_callback = kwargs.get("progress_callback")
         return self.find_optimal_k(embeddings, progress_callback)
 
     def find_optimal_k(
-        self,
-        embeddings: np.ndarray,
-        progress_callback: Callable[[int, int], None] | None = None
+        self, embeddings: np.ndarray, progress_callback: Callable[[int, int], None] | None = None
     ) -> ClusterOptimizationResult:
         """
         Find optimal k using elbow method.
@@ -218,10 +215,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         logger.info(f"Elbow method found optimal k={optimal_k} with confidence={confidence:.2f}")
 
         return ClusterOptimizationResult(
-            optimal_k=optimal_k,
-            confidence_score=confidence,
-            method="elbow",
-            k_scores=k_scores
+            optimal_k=optimal_k, confidence_score=confidence, method="elbow", k_scores=k_scores
         )
 
     def _detect_elbow(self, k_values: list[int], inertias: list[float]) -> int:
@@ -283,10 +277,7 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         return k_values[max_idx]
 
     def _calculate_confidence(
-        self,
-        k_values: list[int],
-        inertias: list[float],
-        elbow_k: int
+        self, k_values: list[int], inertias: list[float], elbow_k: int
     ) -> float:
         """
         Calculate confidence score for the detected elbow point.
@@ -403,7 +394,9 @@ class ElbowOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         # If most reduction happens before the elbow, it's a good stopping point
         # e.g., reduction_at_elbow=0.7, total_reduction=0.8 → quality=0.875 (good!)
         #       reduction_at_elbow=0.3, total_reduction=0.8 → quality=0.375 (poor)
-        elbow_quality = reduction_at_elbow / (total_reduction + 1e-10) if total_reduction > 0 else 0.5
+        elbow_quality = (
+            reduction_at_elbow / (total_reduction + 1e-10) if total_reduction > 0 else 0.5
+        )
 
         # --- COMBINE SIGNALS ---
 
@@ -438,28 +431,26 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
         self.max_k = max_k
         logger.debug(f"SilhouetteOptimizer initialized with max_k={max_k}")
 
-    def analyze(self, emails, **kwargs) -> ClusterOptimizationResult:
+    def analyze(self, data, **kwargs) -> ClusterOptimizationResult:
         """
         Analyze embeddings to find optimal cluster count.
 
         This method wraps find_optimal_k for BaseAnalyzer compatibility.
-        The 'emails' parameter should be embeddings (numpy array) in this case.
+        The 'data' parameter should be embeddings (numpy array) in this case.
 
         Args:
-            emails: Embeddings array (not email list for this optimizer)
+            data: Embeddings array (not email list for this optimizer)
             **kwargs: Additional arguments including progress_callback
 
         Returns:
             ClusterOptimizationResult with optimal k and confidence
         """
-        embeddings = emails  # For optimizers, we accept embeddings directly
-        progress_callback = kwargs.get('progress_callback')
+        embeddings = data  # For optimizers, we accept embeddings directly
+        progress_callback = kwargs.get("progress_callback")
         return self.find_optimal_k(embeddings, progress_callback)
 
     def find_optimal_k(
-        self,
-        embeddings: np.ndarray,
-        progress_callback: Callable[[int, int], None] | None = None
+        self, embeddings: np.ndarray, progress_callback: Callable[[int, int], None] | None = None
     ) -> ClusterOptimizationResult:
         """
         Find optimal k using silhouette analysis with parallel evaluation.
@@ -517,7 +508,7 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
                 logger.debug(f"k={k}, silhouette_score={score:.4f}")
 
         # Find optimal k (highest silhouette score)
-        optimal_k = max(k_scores, key=k_scores.get)
+        optimal_k = max(k_scores, key=lambda k: k_scores[k])
         max_score = k_scores[optimal_k]
 
         # Calculate per-cluster silhouette scores for the optimal k
@@ -554,10 +545,10 @@ class SilhouetteOptimizer(BaseAnalyzer[ClusterOptimizationResult]):
 
 # Export classes and functions
 __all__ = [
-    'ClusterOptimizationResult',
-    'ElbowOptimizer',
-    'SilhouetteOptimizer',
-    'compute_max_k',
-    'interpret_silhouette',
-    'silhouette_to_confidence',
+    "ClusterOptimizationResult",
+    "ElbowOptimizer",
+    "SilhouetteOptimizer",
+    "compute_max_k",
+    "interpret_silhouette",
+    "silhouette_to_confidence",
 ]

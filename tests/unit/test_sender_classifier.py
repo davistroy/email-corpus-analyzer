@@ -5,6 +5,7 @@ Tests the classify_sender_type method from sender_analyzer with
 various sender patterns and domains, including configurable keyword
 overrides (Phase 3.3).
 """
+
 from datetime import datetime
 
 import pytest
@@ -33,7 +34,7 @@ class TestSenderClassifier:
             type=SenderType.PERSONAL,
             frequency_count=15,
             sample_subjects=["Special Offer! Click to unsubscribe"],
-            email_ids=["email1"]
+            email_ids=["email1"],
         )
         sender_type = analyzer.classify_sender_type(sender)
         assert sender_type == SenderType.MARKETING
@@ -44,7 +45,7 @@ class TestSenderClassifier:
             "Limited Time Offer!",
             "Flash Sale Today Only",
             "Discount Inside - Save Now",
-            "Special Promotion Just For You"
+            "Special Promotion Just For You",
         ]
         for subject in subjects:
             sender = Sender(
@@ -54,20 +55,16 @@ class TestSenderClassifier:
                 type=SenderType.PERSONAL,
                 frequency_count=15,
                 sample_subjects=[subject],
-                email_ids=["email1"]
+                email_ids=["email1"],
             )
             sender_type = analyzer.classify_sender_type(sender)
             assert sender_type == SenderType.MARKETING
 
     def test_service_noreply_email(self, analyzer):
         """Test service classification for noreply addresses."""
-        noreply_addresses = [
-            "noreply@service.com",
-            "no-reply@example.com",
-            "donotreply@system.com"
-        ]
+        noreply_addresses = ["noreply@service.com", "no-reply@example.com", "donotreply@system.com"]
         for email in noreply_addresses:
-            domain = email.split('@')[1]
+            domain = email.split("@")[1]
             sender = Sender(
                 email=email,
                 name="Service",
@@ -75,7 +72,7 @@ class TestSenderClassifier:
                 type=SenderType.PERSONAL,
                 frequency_count=5,
                 sample_subjects=["System Notification"],
-                email_ids=["email1"]
+                email_ids=["email1"],
             )
             sender_type = analyzer.classify_sender_type(sender)
             assert sender_type == SenderType.SERVICE
@@ -91,7 +88,7 @@ class TestSenderClassifier:
             type=SenderType.PERSONAL,
             frequency_count=5,
             sample_subjects=["Password Reset Request"],
-            email_ids=["email1"]
+            email_ids=["email1"],
         )
         # Will be PERSONAL unless domain has service indicators
         sender_type = analyzer.classify_sender_type(sender)
@@ -106,7 +103,7 @@ class TestSenderClassifier:
             type=SenderType.PERSONAL,
             frequency_count=10,
             sample_subjects=["Meeting Tomorrow"],
-            email_ids=["email1"]
+            email_ids=["email1"],
         )
         sender_type = analyzer.classify_sender_type(sender)
         # Current implementation may return WORK or PERSONAL
@@ -123,7 +120,7 @@ class TestSenderClassifier:
                 type=SenderType.PERSONAL,
                 frequency_count=5,
                 sample_subjects=["Hey, how are you?"],
-                email_ids=["email1"]
+                email_ids=["email1"],
             )
             sender_type = analyzer.classify_sender_type(sender)
             assert sender_type == SenderType.PERSONAL
@@ -137,7 +134,7 @@ class TestSenderClassifier:
             type=SenderType.PERSONAL,
             frequency_count=3,
             sample_subjects=["Random subject"],
-            email_ids=["email1"]
+            email_ids=["email1"],
         )
         sender_type = analyzer.classify_sender_type(sender)
         assert sender_type == SenderType.PERSONAL
@@ -151,7 +148,7 @@ class TestSenderClassifier:
             type=SenderType.PERSONAL,
             frequency_count=15,
             sample_subjects=["Limited Offer - Your Invoice Inside"],
-            email_ids=["email1"]
+            email_ids=["email1"],
         )
         sender_type = analyzer.classify_sender_type(sender)
         # Should be MARKETING due to "offer"
@@ -162,7 +159,7 @@ class TestSenderClassifier:
         notification_domains = [
             "notifications.github.com",
             "notify.twitter.com",
-            "alerts.system.com"
+            "alerts.system.com",
         ]
         for domain in notification_domains:
             sender = Sender(
@@ -172,7 +169,7 @@ class TestSenderClassifier:
                 type=SenderType.PERSONAL,
                 frequency_count=10,
                 sample_subjects=["New Activity"],
-                email_ids=["email1"]
+                email_ids=["email1"],
             )
             sender_type = analyzer.classify_sender_type(sender)
             # Check if domain contains "notification" (partial match)
@@ -188,7 +185,7 @@ class TestSenderClassifier:
             type=SenderType.PERSONAL,
             frequency_count=1,
             sample_subjects=[""],
-            email_ids=["email1"]
+            email_ids=["email1"],
         )
         sender_type = analyzer.classify_sender_type(sender)
         assert sender_type == SenderType.PERSONAL
@@ -207,7 +204,7 @@ class TestSenderClassifier:
                 type=SenderType.PERSONAL,
                 frequency_count=15,  # >10 for marketing check
                 sample_subjects=[subject],
-                email_ids=["email1"]
+                email_ids=["email1"],
             )
             sender_type = analyzer.classify_sender_type(sender)
             assert sender_type == expected_type
@@ -226,7 +223,7 @@ class TestSenderClassifier:
                 subject="Password Reset",
                 body_text="Click here to reset",
                 received_date=datetime(2024, 1, 1, 10, 0),
-                has_attachments=False
+                has_attachments=False,
             ),
             Email(
                 id="2",
@@ -238,7 +235,7 @@ class TestSenderClassifier:
                 subject="50% Off Sale!",
                 body_text="Unsubscribe at bottom",
                 received_date=datetime(2024, 1, 2, 10, 0),
-                has_attachments=False
+                has_attachments=False,
             ),
             Email(
                 id="3",
@@ -250,8 +247,8 @@ class TestSenderClassifier:
                 subject="Hey there",
                 body_text="How are you?",
                 received_date=datetime(2024, 1, 3, 10, 0),
-                has_attachments=False
-            )
+                has_attachments=False,
+            ),
         ]
 
         corpus = Corpus(
@@ -259,9 +256,9 @@ class TestSenderClassifier:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="M365",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
-            emails=emails
+            emails=emails,
         )
 
         result = analyzer.analyze(corpus)
@@ -522,11 +519,14 @@ class TestConfigurableClassificationKeywords:
         test_senders = [
             self._make_sender(email="noreply@alerts.com", domain="alerts.com"),
             self._make_sender(
-                email="deals@store.com", domain="store.com",
-                frequency_count=100, sample_subjects=["Big Sale!"],
+                email="deals@store.com",
+                domain="store.com",
+                frequency_count=100,
+                sample_subjects=["Big Sale!"],
             ),
             self._make_sender(
-                email="boss@corp.com", domain="corp.com",
+                email="boss@corp.com",
+                domain="corp.com",
                 sample_subjects=["Team Meeting"],
             ),
         ]

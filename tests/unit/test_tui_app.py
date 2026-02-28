@@ -4,6 +4,7 @@ Unit tests for the TUI application foundation.
 Tests the ReviewApp class, theme configuration, basic app lifecycle,
 exception handling specifics, is_tui_supported, and TUI fallback behavior.
 """
+
 from unittest.mock import patch
 
 import pytest
@@ -20,7 +21,7 @@ def create_test_category(
     percentage: float = 25.0,
     source: CategorySource = CategorySource.CONTENT_CLUSTER,
     example_email_ids: list[str] | None = None,
-    distinguishing_features: list[str] | None = None
+    distinguishing_features: list[str] | None = None,
 ) -> Category:
     """Helper to create test Category objects."""
     return Category(
@@ -33,7 +34,7 @@ def create_test_category(
         source=source,
         source_id="test_source",
         example_email_ids=example_email_ids or [],
-        distinguishing_features=distinguishing_features or []
+        distinguishing_features=distinguishing_features or [],
     )
 
 
@@ -554,13 +555,14 @@ class TestIsTuiSupported:
         """Test that is_tui_supported returns False when textual can't be imported."""
         from src.ui.category_review import is_tui_supported
 
-        with patch("sys.stdin") as mock_stdin, \
-             patch("sys.stdout") as mock_stdout:
+        with patch("sys.stdin") as mock_stdin, patch("sys.stdout") as mock_stdout:
             mock_stdin.isatty.return_value = True
             mock_stdout.isatty.return_value = True
 
             # Patch builtins.__import__ to raise ImportError for textual
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+            original_import = (
+                __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+            )
 
             def mock_import(name, *args, **kwargs):
                 if name == "textual.app":

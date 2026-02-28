@@ -8,6 +8,7 @@ Provides structured exceptions with:
 
 Per Phase 6 Track 6A specification.
 """
+
 from typing import Any
 
 
@@ -25,10 +26,7 @@ class EmailAnalyzerError(Exception):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize the exception.
@@ -61,11 +59,7 @@ class CorpusNotFoundError(EmailAnalyzerError):
     without first running extract.
     """
 
-    def __init__(
-        self,
-        path: str,
-        recovery_hint: str | None = None
-    ):
+    def __init__(self, path: str, recovery_hint: str | None = None):
         """
         Initialize corpus not found error.
 
@@ -78,11 +72,7 @@ class CorpusNotFoundError(EmailAnalyzerError):
             "Run 'extract' command first to create the corpus file, "
             "or specify a valid path with --corpus"
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context={"path": path}
-        )
+        super().__init__(message=message, recovery_hint=hint, context={"path": path})
 
 
 class CorpusParseError(EmailAnalyzerError):
@@ -93,12 +83,7 @@ class CorpusParseError(EmailAnalyzerError):
     invalid data that cannot be deserialized.
     """
 
-    def __init__(
-        self,
-        path: str,
-        parse_error: str,
-        recovery_hint: str | None = None
-    ):
+    def __init__(self, path: str, parse_error: str, recovery_hint: str | None = None):
         """
         Initialize corpus parse error.
 
@@ -113,9 +98,7 @@ class CorpusParseError(EmailAnalyzerError):
             "to regenerate it, or check the file contents manually."
         )
         super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context={"path": path, "parse_error": parse_error}
+            message=message, recovery_hint=hint, context={"path": path, "parse_error": parse_error}
         )
 
 
@@ -132,10 +115,7 @@ class ConfigurationError(EmailAnalyzerError):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize configuration error.
@@ -148,11 +128,7 @@ class ConfigurationError(EmailAnalyzerError):
         hint = recovery_hint or (
             "Check your configuration file or run 'config init' to generate a template"
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context=context or {}
-        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
 
 
 class ConfigValidationError(ConfigurationError):
@@ -163,13 +139,7 @@ class ConfigValidationError(ConfigurationError):
     doesn't meet requirements (e.g., path doesn't exist).
     """
 
-    def __init__(
-        self,
-        field: str,
-        value: Any,
-        reason: str,
-        recovery_hint: str | None = None
-    ):
+    def __init__(self, field: str, value: Any, reason: str, recovery_hint: str | None = None):
         """
         Initialize configuration validation error.
 
@@ -187,7 +157,7 @@ class ConfigValidationError(ConfigurationError):
         super().__init__(
             message=message,
             recovery_hint=hint,
-            context={"field": field, "value": value, "reason": reason}
+            context={"field": field, "value": value, "reason": reason},
         )
 
 
@@ -204,10 +174,7 @@ class AnalysisError(EmailAnalyzerError):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize analysis error.
@@ -220,11 +187,7 @@ class AnalysisError(EmailAnalyzerError):
         hint = recovery_hint or (
             "Check the corpus data and try again. Use --verbose for more details."
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context=context or {}
-        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
 
 
 class ClusteringError(AnalysisError):
@@ -236,10 +199,7 @@ class ClusteringError(AnalysisError):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize clustering error.
@@ -253,11 +213,7 @@ class ClusteringError(AnalysisError):
             "Try adjusting --num-clusters or use --auto-clusters to "
             "automatically determine the optimal number of clusters."
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context=context or {}
-        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
 
 
 # =============================================================================
@@ -273,10 +229,7 @@ class ExtractionError(EmailAnalyzerError):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize extraction error.
@@ -287,14 +240,9 @@ class ExtractionError(EmailAnalyzerError):
             context: Additional context
         """
         hint = recovery_hint or (
-            "Check your network connection and try again. "
-            "Use --verbose for more details."
+            "Check your network connection and try again. Use --verbose for more details."
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context=context or {}
-        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
 
 
 class RateLimitError(ExtractionError):
@@ -334,10 +282,7 @@ class M365AuthError(ExtractionError):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize M365 authentication error.
@@ -351,11 +296,7 @@ class M365AuthError(ExtractionError):
             "Re-authenticate with your M365 account. "
             "Ensure you have granted the necessary permissions to access your emails."
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context=context or {}
-        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
 
 
 # =============================================================================
@@ -372,10 +313,7 @@ class ExportError(EmailAnalyzerError):
     """
 
     def __init__(
-        self,
-        message: str,
-        recovery_hint: str | None = None,
-        context: dict[str, Any] | None = None
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
     ):
         """
         Initialize export error.
@@ -386,11 +324,6 @@ class ExportError(EmailAnalyzerError):
             context: Additional context (e.g., template path, output path)
         """
         hint = recovery_hint or (
-            "Check the export configuration and try again. "
-            "Use --verbose for more details."
+            "Check the export configuration and try again. Use --verbose for more details."
         )
-        super().__init__(
-            message=message,
-            recovery_hint=hint,
-            context=context or {}
-        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})

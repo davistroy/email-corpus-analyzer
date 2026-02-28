@@ -3,6 +3,7 @@ Rename dialog for the TUI application.
 
 Modal text input dialog for renaming a category with validation.
 """
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container

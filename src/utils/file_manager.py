@@ -13,6 +13,7 @@ to prevent corruption from interrupted writes. The pattern is:
   2. os.replace(path.tmp, path) on success (atomic on all platforms)
   3. Clean up .tmp file on failure via try/finally
 """
+
 import json
 import os
 from pathlib import Path
@@ -119,10 +120,7 @@ def ensure_output_dir(output_dir: Path | str | None = None) -> Path:
 
 
 def save_json(
-    data: Any,
-    file_path: Path | str,
-    indent: int = 2,
-    ensure_parents: bool = True
+    data: Any, file_path: Path | str, indent: int = 2, ensure_parents: bool = True
 ) -> None:
     """
     Save data to JSON file atomically with UTF-8 encoding and 0600 permissions.
@@ -171,7 +169,7 @@ def load_json(file_path: Path | str) -> Any:
     if not path.exists():
         raise FileNotFoundError(f"JSON file not found: {path}")
 
-    with open(path, encoding='utf-8') as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     logger.debug(f"Loaded JSON from {path}")

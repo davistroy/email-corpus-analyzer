@@ -5,6 +5,7 @@ Per Phase 8 Track 8B.3 specification.
 Exports approved categories as email rules that can be imported
 into Outlook (XML) or Gmail (Atom XML format).
 """
+
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from xml.dom import minidom
@@ -69,7 +70,9 @@ class OutlookRuleExporter:
 
         # Rule description
         description = ET.SubElement(rule, "description")
-        description.text = category.description or f"Auto-generated rule for {category.category_name}"
+        description.text = (
+            category.description or f"Auto-generated rule for {category.category_name}"
+        )
 
         # Conditions
         conditions = ET.SubElement(rule, "conditions")
@@ -143,11 +146,7 @@ class OutlookRuleExporter:
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="  ")
 
-    def export_to_file(
-        self,
-        categories: list[Category],
-        output_path: Path | str
-    ) -> Path:
+    def export_to_file(self, categories: list[Category], output_path: Path | str) -> Path:
         """
         Export categories to an Outlook rules XML file.
 
@@ -293,11 +292,7 @@ class GmailFilterExporter:
         reparsed = minidom.parseString(rough_string)
         return reparsed.toprettyxml(indent="  ")
 
-    def export_to_file(
-        self,
-        categories: list[Category],
-        output_path: Path | str
-    ) -> Path:
+    def export_to_file(self, categories: list[Category], output_path: Path | str) -> Path:
         """
         Export categories to a Gmail filter XML file.
 

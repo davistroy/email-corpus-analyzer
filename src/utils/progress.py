@@ -4,6 +4,7 @@ Progress tracking utility module.
 Per Constitution Principle VII (Performance Transparency),
 provides progress indicators for operations >10 seconds.
 """
+
 from collections.abc import Callable
 
 from tqdm import tqdm
@@ -12,13 +13,7 @@ from tqdm import tqdm
 class ProgressTracker:
     """Progress tracking wrapper with tqdm integration."""
 
-    def __init__(
-        self,
-        total: int,
-        desc: str = "",
-        unit: str = "item",
-        show_bar: bool = True
-    ):
+    def __init__(self, total: int, desc: str = "", unit: str = "item", show_bar: bool = True):
         """
         Initialize progress tracker.
 
@@ -41,7 +36,7 @@ class ProgressTracker:
                 desc=desc,
                 unit=unit,
                 ncols=80,
-                bar_format='{desc}: [{bar}] {n_fmt}/{total_fmt} ({percentage:3.1f}%)'
+                bar_format="{desc}: [{bar}] {n_fmt}/{total_fmt} ({percentage:3.1f}%)",
             )
 
     def update(self, n: int = 1) -> None:
@@ -76,8 +71,7 @@ class ProgressTracker:
 
 
 def create_progress_callback(
-    total: int,
-    desc: str = "Processing"
+    total: int, desc: str = "Processing"
 ) -> tuple[Callable[[int, int], None], Callable[[], None]]:
     """
     Create a progress callback function and cleanup function.
@@ -102,13 +96,7 @@ def create_progress_callback(
     return callback, cleanup
 
 
-def wrap_with_progress(
-    func: Callable,
-    total: int,
-    desc: str = "Processing",
-    *args,
-    **kwargs
-):
+def wrap_with_progress(func: Callable, total: int, desc: str = "Processing", *args, **kwargs):
     """
     Wrapper function to execute a callable with progress tracking.
 
@@ -136,7 +124,7 @@ def wrap_with_progress(
     callback, cleanup = create_progress_callback(total, desc)
 
     try:
-        kwargs['progress_callback'] = callback
+        kwargs["progress_callback"] = callback
         return func(*args, **kwargs)
     finally:
         cleanup()

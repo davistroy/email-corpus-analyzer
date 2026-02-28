@@ -8,6 +8,7 @@ Task 5B.3: Integrates with feedback learning to apply learned patterns
 to generated categories.
 Task 2.2: Externalized magic numbers to GeneratorThresholds config.
 """
+
 from __future__ import annotations
 
 from difflib import SequenceMatcher
@@ -55,6 +56,7 @@ class CategoryGenerator:
         """
         if thresholds is None:
             from src.config.models import GeneratorThresholds
+
             thresholds = GeneratorThresholds()
         self.thresholds = thresholds
         self._name_generator = TfidfNameGenerator()
@@ -65,7 +67,7 @@ class CategoryGenerator:
         self,
         analysis_results: AnalysisResults,
         min_cluster_percentage: float = 5.0,
-        min_sender_count: int = 20
+        min_sender_count: int = 20,
     ) -> list[Category]:
         """
         Generate category suggestions from analysis.
@@ -86,12 +88,16 @@ class CategoryGenerator:
         self._corpus_texts = self._build_corpus_texts(analysis_results)
 
         # FR-022: Generate from content clusters
-        logger.debug(f"Generating categories from {len(analysis_results.content_clusters)} clusters")
+        logger.debug(
+            f"Generating categories from {len(analysis_results.content_clusters)} clusters"
+        )
         for cluster in analysis_results.content_clusters:
             if cluster.percentage >= min_cluster_percentage:
                 category = self._category_from_cluster(cluster, total_emails)
                 all_categories.append(category)
-                logger.debug(f"Created cluster-based category: {category.category_name} ({cluster.percentage:.1f}%)")
+                logger.debug(
+                    f"Created cluster-based category: {category.category_name} ({cluster.percentage:.1f}%)"
+                )
 
         # FR-023: Generate from high-volume senders
         max_senders = self.thresholds.max_senders_for_categories
@@ -100,7 +106,9 @@ class CategoryGenerator:
             if sender.frequency_count >= min_sender_count:
                 category = self._category_from_sender(sender, total_emails)
                 all_categories.append(category)
-                logger.debug(f"Created sender-based category: {category.category_name} ({sender.frequency_count} emails)")
+                logger.debug(
+                    f"Created sender-based category: {category.category_name} ({sender.frequency_count} emails)"
+                )
 
         # FR-024: Apply templates
         logger.debug("Applying predefined templates")
@@ -134,11 +142,7 @@ class CategoryGenerator:
         # Task 5B.3: Apply learned rename patterns to improve category names
         return self._apply_learned_patterns(all_categories)
 
-
-    def _apply_learned_patterns(
-        self,
-        categories: list[Category]
-    ) -> list[Category]:
+    def _apply_learned_patterns(self, categories: list[Category]) -> list[Category]:
         """
         Apply learned patterns to improve category names.
 
@@ -162,19 +166,15 @@ class CategoryGenerator:
             return categories
 
         # Apply rename patterns to improve category names
-        rename_patterns = [
-            p for p in patterns if p.pattern_type == PatternType.RENAME
-        ]
+        rename_patterns = [p for p in patterns if p.pattern_type == PatternType.RENAME]
 
         for category in categories:
             for pattern in rename_patterns:
                 old_name = pattern.parameters.get("old_name")
                 new_name = pattern.parameters.get("new_name")
                 if category.category_name == old_name:
-                    logger.debug(
-                        f"Applying learned rename: '{old_name}' -> '{new_name}'"
-                    )
-                    category.category_name = new_name
+                    logger.debug(f"Applying learned rename: '{old_name}' -> '{new_name}'")
+                    category.category_name = str(new_name or "")
                     category.user_modified = True
                     break
 
@@ -220,9 +220,9 @@ class CategoryGenerator:
     def _category_from_sender(self, sender, total_emails: int) -> Category:
         """Create category from high-volume sender."""
         # Use sender domain or name for category
-        name = strip_domain_suffix(sender.domain).replace('.', ' ').title()
+        name = strip_domain_suffix(sender.domain).replace(".", " ").title()
         if not name:
-            name = sender.email.split('@')[0].replace('.', ' ').title()
+            name = sender.email.split("@")[0].replace(".", " ").title()
 
         percentage = (sender.frequency_count / total_emails) * 100 if total_emails > 0 else 0
 
@@ -267,14 +267,14 @@ class CategoryGenerator:
         """Generate descriptive name for cluster."""
         # Try to use common domain
         if domains:
-            domain_name = strip_domain_suffix(domains[0][0]).replace('.', ' ').title()
+            domain_name = strip_domain_suffix(domains[0][0]).replace(".", " ").title()
             return f"{domain_name} Related"
 
         # Fallback to common words in subjects
-        words = ' '.join(subjects).lower().split()
+        words = " ".join(subjects).lower().split()
         common_words = [w for w in words if len(w) > 4][:2]
         if common_words:
-            return ' '.join(common_words).title() + " Category"
+            return " ".join(common_words).title() + " Category"
 
         return "Miscellaneous"
 
@@ -297,14 +297,12 @@ class CategoryGenerator:
 
             # Collect similar categories
             similar = [cat1]
-            for j, cat2 in enumerate(categories[i + 1:], start=i + 1):
+            for j, cat2 in enumerate(categories[i + 1 :], start=i + 1):
                 if j in merged_indices:
                     continue
 
                 # Calculate name similarity ratio
-                name_ratio = self._name_similarity_ratio(
-                    cat1.category_name, cat2.category_name
-                )
+                name_ratio = self._name_similarity_ratio(cat1.category_name, cat2.category_name)
 
                 if name_ratio > 0.9:
                     # Very high name similarity: use count ratio instead of
@@ -324,8 +322,7 @@ class CategoryGenerator:
                 elif name_ratio >= self.thresholds.merge_name_similarity:
                     # Normal path: check email overlap against configurable threshold
                     overlap = self._calculate_overlap(
-                        set(cat1.example_email_ids),
-                        set(cat2.example_email_ids)
+                        set(cat1.example_email_ids), set(cat2.example_email_ids)
                     )
                     if overlap > self.thresholds.merge_email_overlap:
                         similar.append(cat2)
@@ -349,12 +346,7 @@ class CategoryGenerator:
             return 1.0
         return SequenceMatcher(None, n1, n2).ratio()
 
-    def _names_similar(
-        self,
-        name1: str,
-        name2: str,
-        threshold: float = 0.8
-    ) -> bool:
+    def _names_similar(self, name1: str, name2: str, threshold: float = 0.8) -> bool:
         """
         Check if two category names are similar using SequenceMatcher.
 
@@ -420,7 +412,9 @@ class CategoryGenerator:
         if not hierarchical_clusters:
             return []
 
-        logger.info(f"Generating hierarchical suggestions from {len(hierarchical_clusters)} clusters")
+        logger.info(
+            f"Generating hierarchical suggestions from {len(hierarchical_clusters)} clusters"
+        )
         categories: list[Category] = []
 
         for cluster in hierarchical_clusters:
@@ -433,7 +427,7 @@ class CategoryGenerator:
             )
 
             # Generate child categories from subclusters
-            if hasattr(cluster, 'subclusters') and cluster.subclusters:
+            if hasattr(cluster, "subclusters") and cluster.subclusters:
                 for subcluster in cluster.subclusters:
                     child_category = self._hierarchical_cluster_to_category(
                         subcluster,
@@ -547,7 +541,7 @@ class CategoryGenerator:
             domain = cluster.common_domains[0][0]
             # Extract company name from domain
             name = strip_domain_suffix(domain)
-            name = name.split('.')[-1]  # Get last part
+            name = name.split(".")[-1]  # Get last part
             return name.title() + " Related"
 
         # Fall back to extracting common theme from samples
@@ -565,18 +559,18 @@ class CategoryGenerator:
         if cluster.common_domains:
             domain = cluster.common_domains[0][0]
             domain_name = strip_domain_suffix(domain)
-            domain_name = domain_name.split('.')[-1].title()
+            domain_name = domain_name.split(".")[-1].title()
 
             # Try to add more context from samples
             if cluster.representative_samples:
                 subject = cluster.representative_samples[0].subject.lower()
-                if 'order' in subject:
+                if "order" in subject:
                     return f"{domain_name} Orders"
-                if 'ship' in subject or 'deliver' in subject:
+                if "ship" in subject or "deliver" in subject:
                     return f"{domain_name} Shipping"
-                if 'invoice' in subject or 'payment' in subject:
+                if "invoice" in subject or "payment" in subject:
                     return f"{domain_name} Billing"
-                if 'newsletter' in subject or 'news' in subject:
+                if "newsletter" in subject or "news" in subject:
                     return f"{domain_name} Newsletter"
                 return f"{domain_name} Updates"
 
@@ -598,7 +592,7 @@ class CategoryGenerator:
 
         word_counts: Counter[str] = Counter()
         for text in texts:
-            words = re.findall(r'\b[a-z]+\b', text.lower())
+            words = re.findall(r"\b[a-z]+\b", text.lower())
             for word in words:
                 if len(word) > 3 and word not in STOP_WORDS:
                     word_counts[word] += 1
@@ -613,9 +607,7 @@ class CategoryGenerator:
     def score_confidence(self, category: Category, total_emails: int) -> float:
         """Calculate confidence score for category using enhanced scorer."""
         weights = ConfidenceWeights.from_thresholds(self.thresholds)
-        confidence, _ = calculate_confidence_enhanced(
-            category, total_emails, weights=weights
-        )
+        confidence, _ = calculate_confidence_enhanced(category, total_emails, weights=weights)
         return confidence
 
     def generate_report(self, categories: list[Category]) -> str:
@@ -635,7 +627,7 @@ class CategoryGenerator:
             f"**Generated**: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "",
             "---",
-            ""
+            "",
         ]
 
         for i, category in enumerate(categories, 1):
@@ -643,7 +635,9 @@ class CategoryGenerator:
             lines.append("")
             lines.append(f"**Description**: {category.description}")
             lines.append(f"**Confidence**: {category.confidence * 100:.1f}%")
-            lines.append(f"**Email Count**: {category.email_count} ({category.percentage:.1f}% of inbox)")
+            lines.append(
+                f"**Email Count**: {category.email_count} ({category.percentage:.1f}% of inbox)"
+            )
             lines.append(f"**Source**: {category.source.value}")
             lines.append("")
 
@@ -656,4 +650,4 @@ class CategoryGenerator:
             lines.append("---")
             lines.append("")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)

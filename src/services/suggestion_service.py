@@ -6,6 +6,7 @@ Decoupled from CLI for independent use.
 
 Per Phase 7, Track 7B specification.
 """
+
 import logging
 from collections.abc import Callable
 

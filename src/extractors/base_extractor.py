@@ -12,6 +12,7 @@ Consolidates shared logic from EmailExtractor (M365) and GmailExtractor:
 
 Subclasses implement only API-specific behavior via abstract methods.
 """
+
 import hashlib
 import time
 from abc import ABC, abstractmethod
@@ -20,6 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from pydantic import ValidationError
 
 from src.exceptions import RateLimitError
 from src.extractors.checkpoint_manager import CheckpointManager
@@ -39,6 +42,7 @@ logger = get_logger(__name__)
 @dataclass
 class ExtractionError:
     """Details of a failed email extraction."""
+
     email_id: str
     error_type: str  # "rate_limit", "timeout", "malformed", "unknown"
     error_message: str
@@ -48,6 +52,7 @@ class ExtractionError:
 @dataclass
 class ExtractionResult:
     """Result of email extraction operation."""
+
     corpus: Corpus
     failed_emails: list[ExtractionError]
     success_count: int
@@ -63,6 +68,7 @@ class ExtractionResult:
 @dataclass
 class IncrementalExtractionResult:
     """Result of incremental email extraction operation (Task 4B.2)."""
+
     corpus: Corpus
     failed_emails: list[ExtractionError]
     new_emails_count: int  # Number of newly added emails
@@ -232,13 +238,19 @@ class BaseExtractor(ABC):
 
         all_emails: list[Email] = []
         failed_emails: list[ExtractionError] = []
+        error_counts: dict[str, int] = {}
 
         # For full extraction, get total count; for incremental, loop until empty
         total_emails = EMAIL_COUNT_SENTINEL
         if existing_ids is None:
             try:
                 total_emails = self._get_total_email_count()
-                self.logger.info(f"Found {total_emails} total emails to process")
+                if total_emails == EMAIL_COUNT_SENTINEL:
+                    self.logger.info(
+                        "Fetching emails (total count unknown, will paginate until complete)"
+                    )
+                else:
+                    self.logger.info(f"Found {total_emails:,} emails to process")
             except Exception as e:
                 source_name = self._get_source_name()
                 self.logger.error(f"Failed to get email count: {e}")
@@ -250,9 +262,7 @@ class BaseExtractor(ABC):
             batch_start = current_batch * max_batch_size
             batch_end = min(batch_start + max_batch_size, total_emails)
 
-            self.logger.debug(
-                f"Processing batch {current_batch + 1}: starting at {batch_start}"
-            )
+            self.logger.debug(f"Processing batch {current_batch + 1}: starting at {batch_start}")
 
             try:
                 # Call the appropriate fetch function
@@ -298,17 +308,44 @@ class BaseExtractor(ABC):
                         if progress_callback:
                             progress_callback(emails_processed, len(all_emails))
 
+                    except ValidationError as e:
+                        emails_processed += 1
+                        email_id = email_data.get("id", "unknown")
+                        short_id = email_id[:12]
+                        first = e.errors()[0]
+                        field = first.get("loc", ("unknown",))[-1]
+                        msg = first.get("msg", str(e))
+                        self.logger.warning(f"Skipped email {short_id}: {field} - {msg}")
+                        error_type = "ValidationError"
+                        error_counts[error_type] = error_counts.get(error_type, 0) + 1
+                        failed_emails.append(
+                            ExtractionError(
+                                email_id=email_id,
+                                error_type="malformed",
+                                error_message=str(e),
+                                timestamp=datetime.now(),
+                            )
+                        )
                     except Exception as e:
-                        self.logger.warning(f"Failed to process email: {e}")
-                        failed_emails.append(ExtractionError(
-                            email_id=email_data.get("id", "unknown"),
-                            error_type="malformed",
-                            error_message=str(e),
-                            timestamp=datetime.now(),
-                        ))
+                        emails_processed += 1
+                        email_id = email_data.get("id", "unknown")
+                        short_id = email_id[:12]
+                        error_type = type(e).__name__
+                        self.logger.warning(f"Skipped email {short_id}: {error_type}: {e}")
+                        error_counts[error_type] = error_counts.get(error_type, 0) + 1
+                        failed_emails.append(
+                            ExtractionError(
+                                email_id=email_id,
+                                error_type="malformed",
+                                error_message=str(e),
+                                timestamp=datetime.now(),
+                            )
+                        )
 
                 # Fewer than requested = end of inbox
-                requested_size = max_batch_size if existing_ids is not None else (batch_end - batch_start)
+                requested_size = (
+                    max_batch_size if existing_ids is not None else (batch_end - batch_start)
+                )
                 if len(batch_emails) < requested_size:
                     self.logger.info(
                         f"Received {len(batch_emails)} emails "
@@ -321,15 +358,22 @@ class BaseExtractor(ABC):
                 self._handle_rate_limit(current_batch, retry_after=e.retry_after)
             except Exception as e:
                 self.logger.error(f"Batch fetch failed: {e}")
-                failed_emails.append(ExtractionError(
-                    email_id=f"batch_{current_batch}",
-                    error_type="timeout",
-                    error_message=str(e),
-                    timestamp=datetime.now(),
-                ))
+                failed_emails.append(
+                    ExtractionError(
+                        email_id=f"batch_{current_batch}",
+                        error_type="timeout",
+                        error_message=str(e),
+                        timestamp=datetime.now(),
+                    )
+                )
                 break  # Stop on non-rate-limit errors
 
             current_batch += 1
+
+        # Log error summary if any emails were skipped
+        if error_counts:
+            summary = ", ".join(f"{count} {etype}" for etype, count in error_counts.items())
+            self.logger.info(f"Skipped {sum(error_counts.values())} emails ({summary})")
 
         return all_emails, failed_emails
 
@@ -500,7 +544,7 @@ class BaseExtractor(ABC):
         if retry_after is not None and retry_after > 0:
             backoff_seconds = min(retry_after, MAX_BACKOFF_SECONDS)
         else:
-            backoff_seconds = min(2 ** attempt, MAX_BACKOFF_SECONDS)
+            backoff_seconds = min(2**attempt, MAX_BACKOFF_SECONDS)
         self.logger.warning(f"Rate limited, backing off for {backoff_seconds} seconds")
         time.sleep(backoff_seconds)
 

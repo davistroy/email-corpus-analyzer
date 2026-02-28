@@ -16,6 +16,7 @@ Setup:
     4. Create OAuth 2.0 credentials (Desktop application)
     5. Download client_secret JSON → save as ~/.email-analyzer/gmail_credentials.json
 """
+
 import base64
 from pathlib import Path
 from typing import Any
@@ -70,9 +71,7 @@ class GmailClient:
 
         # Load cached token
         if self.token_path.exists():
-            creds = Credentials.from_authorized_user_file(
-                str(self.token_path), SCOPES
-            )
+            creds = Credentials.from_authorized_user_file(str(self.token_path), SCOPES)
 
         # Refresh or get new credentials
         if creds and creds.valid:
@@ -102,9 +101,7 @@ class GmailClient:
         print("A browser window will open for Google sign-in.")
         print("=" * 60 + "\n")
 
-        flow = InstalledAppFlow.from_client_secrets_file(
-            str(self.credentials_path), SCOPES
-        )
+        flow = InstalledAppFlow.from_client_secrets_file(str(self.credentials_path), SCOPES)
         creds = flow.run_local_server(port=0)
 
         self._save_token(creds)
@@ -114,9 +111,11 @@ class GmailClient:
     def _save_token(self, creds) -> None:
         """Save credentials to token file with restrictive permissions."""
         import os
+
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
         self.token_path.write_text(creds.to_json())
         import contextlib
+
         with contextlib.suppress(OSError):
             os.chmod(self.token_path, 0o600)  # Windows may not support chmod
 
@@ -241,12 +240,7 @@ class GmailClient:
         The normalized format matches Microsoft Graph API structure so the
         existing Email model and _process_email() work without changes.
         """
-        msg = (
-            service.users()
-            .messages()
-            .get(userId="me", id=message_id, format="full")
-            .execute()
-        )
+        msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
 
         headers = {h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])}
 
@@ -295,10 +289,7 @@ class GmailClient:
             "bodyPreview": msg.get("snippet", ""),
             "hasAttachments": bool(
                 msg.get("payload", {}).get("parts", [])
-                and any(
-                    p.get("filename")
-                    for p in msg.get("payload", {}).get("parts", [])
-                )
+                and any(p.get("filename") for p in msg.get("payload", {}).get("parts", []))
             ),
             "conversationId": thread_id,
             # Extra fields for thread analysis
@@ -389,7 +380,7 @@ class GmailClient:
             return (email, name)
 
         # Try bare email
-        match = re.match(r'^<?([^@\s]+@[^>\s]+)>?$', header.strip())
+        match = re.match(r"^<?([^@\s]+@[^>\s]+)>?$", header.strip())
         if match:
             email = match.group(1)
             return (email, "")
@@ -423,9 +414,7 @@ class GmailClient:
         # Fallback to internalDate
         if internal_date_ms:
             try:
-                dt = datetime.fromtimestamp(
-                    int(internal_date_ms) / 1000, tz=timezone.utc
-                )
+                dt = datetime.fromtimestamp(int(internal_date_ms) / 1000, tz=timezone.utc)
                 return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             except Exception:
                 pass
@@ -470,10 +459,7 @@ class GmailClient:
         service = self._get_service()
         try:
             msg = (
-                service.users()
-                .messages()
-                .get(userId="me", id=message_id, format="full")
-                .execute()
+                service.users().messages().get(userId="me", id=message_id, format="full").execute()
             )
             return self._extract_body(msg.get("payload", {}))
         except Exception as e:

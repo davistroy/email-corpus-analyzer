@@ -4,6 +4,7 @@ Bulk action confirmation dialog for TUI.
 Per Phase 8 Track 8B.1 specification.
 Shows confirmation for bulk operations on multiple categories.
 """
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container
@@ -26,14 +27,7 @@ class BulkActionDialog(ModalScreen[bool]):
         Binding("escape", "cancel", "Cancel"),
     ]
 
-    def __init__(
-        self,
-        action: str,
-        count: int,
-        categories: list[Category],
-        *args,
-        **kwargs
-    ):
+    def __init__(self, action: str, count: int, categories: list[Category], *args, **kwargs):
         """
         Initialize bulk action dialog.
 

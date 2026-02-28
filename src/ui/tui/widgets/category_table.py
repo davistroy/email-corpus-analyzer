@@ -6,6 +6,7 @@ Supports hierarchical categories with expand/collapse functionality (Task 4A.4).
 Phase 8 Track 8B.1: Added multi-select and bulk operations.
 Phase 8 Track 8B.2: Added search/filter functionality.
 """
+
 import re
 
 from textual.reactive import reactive
@@ -126,12 +127,7 @@ class CategoryTable(DataTable):
 
     selected_row: reactive[int] = reactive(0)
 
-    def __init__(
-        self,
-        categories: list[Category],
-        *args,
-        **kwargs
-    ):
+    def __init__(self, categories: list[Category], *args, **kwargs):
         """
         Initialize the category table.
 
@@ -203,9 +199,7 @@ class CategoryTable(DataTable):
         """
         # Use filtered list if filter is active
         base_categories = (
-            self._filtered_categories
-            if self._filtered_categories is not None
-            else self.categories
+            self._filtered_categories if self._filtered_categories is not None else self.categories
         )
 
         visible = []
@@ -365,11 +359,7 @@ class CategoryTable(DataTable):
         self.categories.append(category)
         self._populate_rows()
 
-    def demote_to_subcategory(
-        self,
-        category: Category,
-        new_parent: Category
-    ) -> None:
+    def demote_to_subcategory(self, category: Category, new_parent: Category) -> None:
         """
         Demote a top-level category to subcategory of another.
 
@@ -486,15 +476,13 @@ class CategoryTable(DataTable):
 
         # Remove from categories list
         self.categories = [
-            cat for cat in self.categories
-            if cat.category_id not in self.selected_ids
+            cat for cat in self.categories if cat.category_id not in self.selected_ids
         ]
 
         # Also remove from subcategories
         for cat in self.categories:
             cat.subcategories = [
-                sub for sub in cat.subcategories
-                if sub.category_id not in self.selected_ids
+                sub for sub in cat.subcategories if sub.category_id not in self.selected_ids
             ]
 
         # Clear selection

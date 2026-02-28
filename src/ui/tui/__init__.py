@@ -3,6 +3,7 @@ TUI package for Category Review.
 
 Provides a terminal-based user interface for reviewing email category suggestions.
 """
+
 from src.ui.tui.app import ReviewApp
 from src.ui.tui.commands import (
     Command,

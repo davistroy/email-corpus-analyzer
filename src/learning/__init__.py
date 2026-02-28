@@ -6,6 +6,7 @@ This module provides functionality for:
 - Detecting patterns in user decisions (Task 5B.2)
 - Applying learned preferences to new suggestions (Task 5B.3)
 """
+
 from src.learning.decision_logger import (
     DecisionAction,
     DecisionLogger,

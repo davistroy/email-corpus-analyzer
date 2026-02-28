@@ -1,4 +1,5 @@
 """Tests for GraphAPIClient - Microsoft Graph API integration."""
+
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -111,9 +112,7 @@ class TestGraphAPIClientAuth:
             "user_code": "ABC123",
             "message": "Go to https://...",
         }
-        mock_app.acquire_token_by_device_flow.return_value = {
-            "access_token": "new_token"
-        }
+        mock_app.acquire_token_by_device_flow.return_value = {"access_token": "new_token"}
         mock_app.token_cache = MagicMock()
         mock_app.token_cache.has_state_changed = False
 
@@ -130,9 +129,7 @@ class TestGraphAPIClientAuth:
             "user_code": "ABC",
             "message": "Go to...",
         }
-        mock_app.acquire_token_by_device_flow.return_value = {
-            "error_description": "Timeout"
-        }
+        mock_app.acquire_token_by_device_flow.return_value = {"error_description": "Timeout"}
         mock_app.token_cache = MagicMock()
         mock_app.token_cache.has_state_changed = False
 
@@ -264,9 +261,7 @@ class TestGraphAPIClientGetMessageBody:
         client._access_token = "test_token"
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "body": {"content": "<p>Full email body</p>"}
-        }
+        mock_response.json.return_value = {"body": {"content": "<p>Full email body</p>"}}
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
 

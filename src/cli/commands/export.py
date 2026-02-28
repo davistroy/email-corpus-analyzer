@@ -1,4 +1,5 @@
 """Export command: export categories to various formats."""
+
 import argparse
 import time
 from pathlib import Path
@@ -41,27 +42,23 @@ Examples:
 Import Instructions:
   Outlook: File -> Manage Rules & Alerts -> Options -> Import Rules
   Gmail: Settings -> See all settings -> Filters -> Import filters
-        """
+        """,
     )
     export_parser.add_argument(
         "--format",
         type=str,
         required=True,
         choices=["csv", "html", "outlook-rules", "gmail-filters"],
-        help="Export format: csv, html, outlook-rules, or gmail-filters"
+        help="Export format: csv, html, outlook-rules, or gmail-filters",
     )
     export_parser.add_argument(
-        "--output",
-        type=Path,
-        help="Custom output path (default: auto-generated in output dir)"
+        "--output", type=Path, help="Custom output path (default: auto-generated in output dir)"
     )
     export_parser.add_argument(
-        "--input",
-        type=Path,
-        help="Input categories file (default: approved_categories.json)"
+        "--input", type=Path, help="Input categories file (default: approved_categories.json)"
     )
 
-    return export_parser
+    return export_parser  # type: ignore[no-any-return]
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -104,12 +101,14 @@ def cmd_export(args: argparse.Namespace) -> int:
             f"Run the full pipeline ('extract' -> 'analyze' -> 'suggest' -> 'review') first, "
             f"or specify a valid input file with --input."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "export",
-                "status": "error",
-                "error": f"Categories file not found: {input_path}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "export",
+                    "status": "error",
+                    "error": f"Categories file not found: {input_path}",
+                }
+            )
         return 1
     except Exception as e:
         logger.error(
@@ -117,12 +116,8 @@ def cmd_export(args: argparse.Namespace) -> int:
             f"The file may be corrupted or contain invalid data. "
             f"Try re-running 'review' to regenerate approved categories."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "export",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "export", "status": "error", "error": str(e)})
         return 1
 
     # Determine output path
@@ -149,23 +144,25 @@ def cmd_export(args: argparse.Namespace) -> int:
         elif args.format == "html":
             result_path = export_categories_to_html(categories, output_path)
         elif args.format == "outlook-rules":
-            exporter = OutlookRuleExporter()
-            result_path = exporter.export_to_file(categories, output_path)
+            outlook_exporter = OutlookRuleExporter()
+            result_path = outlook_exporter.export_to_file(categories, output_path)
         else:  # gmail-filters
-            exporter = GmailFilterExporter()
-            result_path = exporter.export_to_file(categories, output_path)
+            gmail_exporter = GmailFilterExporter()
+            result_path = gmail_exporter.export_to_file(categories, output_path)
 
         duration = time.time() - start_time
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "export",
-                "status": "success",
-                "format": args.format,
-                "duration_seconds": round(duration, 2),
-                "output_file": str(result_path),
-                "categories_exported": len(categories)
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "export",
+                    "status": "success",
+                    "format": args.format,
+                    "duration_seconds": round(duration, 2),
+                    "output_file": str(result_path),
+                    "categories_exported": len(categories),
+                }
+            )
         else:
             logger.info(f"Export complete: {result_path}")
             logger.info(f"Exported {len(categories)} categories to {args.format.upper()}")
@@ -186,10 +183,6 @@ def cmd_export(args: argparse.Namespace) -> int:
             f"Check that the output directory exists and is writable.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "export",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "export", "status": "error", "error": str(e)})
         return 1

@@ -4,6 +4,7 @@ Unit tests for HierarchicalAnalyzer module.
 Tests agglomerative clustering for hierarchical email category generation.
 Per Task 4A.2 requirements.
 """
+
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -156,10 +157,14 @@ class TestHierarchicalClustering:
 
         # Create emails with distinct patterns for clear clustering
         emails = [
-            create_email(email_id=f"shopping_{i}", subject=f"Amazon order {i}", body_text="Order shipped")
+            create_email(
+                email_id=f"shopping_{i}", subject=f"Amazon order {i}", body_text="Order shipped"
+            )
             for i in range(10)
         ] + [
-            create_email(email_id=f"finance_{i}", subject=f"Bank statement {i}", body_text="Account balance")
+            create_email(
+                email_id=f"finance_{i}", subject=f"Bank statement {i}", body_text="Account balance"
+            )
             for i in range(10)
         ]
         corpus = create_corpus(emails)
@@ -454,7 +459,8 @@ class TestOptimalCutPoint:
         z = linkage(data, method="ward")
 
         cut_distance = analyzer._select_optimal_cut_point(
-            z, target_clusters=7  # Within range
+            z,
+            target_clusters=7,  # Within range
         )
 
         assert cut_distance > 0

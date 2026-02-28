@@ -9,6 +9,7 @@ Phase 7: Track 7A - Added BaseAnalyzer abstract base class for all analyzers.
 Phase 8: Track 8A.1 - Added ThreadAnalyzer for email thread/conversation detection.
 Task 2.2: Externalized magic numbers to AnalyzerThresholds config.
 """
+
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -91,7 +92,9 @@ def run_full_analysis(
     sender_analyzer = SenderAnalyzer(thresholds=thresholds)
     sender_analysis = sender_analyzer.analyze(
         corpus,
-        progress_callback=lambda c, t: progress_callback("sender", c, t) if progress_callback else None
+        progress_callback=lambda c, t: progress_callback("sender", c, t)
+        if progress_callback
+        else None,
     )
     logger.debug(f"Sender analysis complete: {sender_analysis.unique_senders} unique senders")
 
@@ -100,9 +103,13 @@ def run_full_analysis(
     subject_analyzer = SubjectAnalyzer(thresholds=thresholds)
     subject_patterns = subject_analyzer.analyze(
         corpus,
-        progress_callback=lambda c, t: progress_callback("subject", c, t) if progress_callback else None
+        progress_callback=lambda c, t: progress_callback("subject", c, t)
+        if progress_callback
+        else None,
     )
-    logger.debug(f"Subject analysis complete: {subject_patterns.total_subjects_analyzed} subjects analyzed")
+    logger.debug(
+        f"Subject analysis complete: {subject_patterns.total_subjects_analyzed} subjects analyzed"
+    )
 
     # FR-015: Semantic analysis
     semantic_analyzer = SemanticAnalyzer(
@@ -113,6 +120,7 @@ def run_full_analysis(
 
     if incremental:
         logger.info("Running incremental semantic analysis...")
+        assert embedding_cache is not None
         incremental_result = semantic_analyzer.analyze_incremental(
             corpus,
             embedding_cache=embedding_cache,
@@ -121,7 +129,9 @@ def run_full_analysis(
             cluster_method=cluster_method,
             auto_cluster_min=auto_cluster_min,
             auto_cluster_max=auto_cluster_max,
-            progress_callback=lambda c, t: progress_callback("semantic", c, t) if progress_callback else None
+            progress_callback=lambda c, t: progress_callback("semantic", c, t)
+            if progress_callback
+            else None,
         )
         content_clusters = incremental_result.clusters
         incremental_stats = incremental_result.stats
@@ -139,7 +149,9 @@ def run_full_analysis(
             cluster_method=cluster_method,
             auto_cluster_min=auto_cluster_min,
             auto_cluster_max=auto_cluster_max,
-            progress_callback=lambda c, t: progress_callback("semantic", c, t) if progress_callback else None
+            progress_callback=lambda c, t: progress_callback("semantic", c, t)
+            if progress_callback
+            else None,
         )
         logger.debug(f"Semantic analysis complete: {len(content_clusters)} clusters created")
 
@@ -148,16 +160,22 @@ def run_full_analysis(
     temporal_analyzer = TemporalAnalyzer(thresholds=thresholds)
     temporal_patterns = temporal_analyzer.analyze(
         corpus,
-        progress_callback=lambda c, t: progress_callback("temporal", c, t) if progress_callback else None
+        progress_callback=lambda c, t: progress_callback("temporal", c, t)
+        if progress_callback
+        else None,
     )
-    logger.debug(f"Temporal analysis complete: {len(temporal_patterns.frequency_distribution)} frequency types")
+    logger.debug(
+        f"Temporal analysis complete: {len(temporal_patterns.frequency_distribution)} frequency types"
+    )
 
     # FR-019: Volume statistics
     logger.info("Running volume analysis...")
     volume_analyzer = VolumeAnalyzer()
     volume_stats = volume_analyzer.analyze(
         corpus,
-        progress_callback=lambda c, t: progress_callback("volume", c, t) if progress_callback else None
+        progress_callback=lambda c, t: progress_callback("volume", c, t)
+        if progress_callback
+        else None,
     )
     logger.debug(f"Volume analysis complete: {volume_stats.total_emails} total emails")
 
@@ -167,7 +185,7 @@ def run_full_analysis(
         subject_patterns=subject_patterns,
         content_clusters=content_clusters,
         temporal_patterns=temporal_patterns,
-        volume_stats=volume_stats
+        volume_stats=volume_stats,
     )
 
     logger.info(f"{mode_label.capitalize()} analysis complete!")
@@ -176,20 +194,20 @@ def run_full_analysis(
 
 # Export all analyzers for direct access
 __all__ = [
-    'run_full_analysis',
-    'BaseAnalyzer',
-    'AnalysisError',
-    'SenderAnalyzer',
-    'SubjectAnalyzer',
-    'SemanticAnalyzer',
-    'TemporalAnalyzer',
-    'VolumeAnalyzer',
-    'ThreadAnalyzer',
-    'ElbowOptimizer',
-    'SilhouetteOptimizer',
-    'ClusterOptimizationResult',
-    'compute_max_k',
-    'interpret_silhouette',
-    'silhouette_to_confidence',
-    'generate_cluster_visualization',
+    "run_full_analysis",
+    "BaseAnalyzer",
+    "AnalysisError",
+    "SenderAnalyzer",
+    "SubjectAnalyzer",
+    "SemanticAnalyzer",
+    "TemporalAnalyzer",
+    "VolumeAnalyzer",
+    "ThreadAnalyzer",
+    "ElbowOptimizer",
+    "SilhouetteOptimizer",
+    "ClusterOptimizationResult",
+    "compute_max_k",
+    "interpret_silhouette",
+    "silhouette_to_confidence",
+    "generate_cluster_visualization",
 ]
