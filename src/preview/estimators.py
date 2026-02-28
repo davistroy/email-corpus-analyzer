@@ -9,6 +9,7 @@ Each estimator follows a consistent pattern:
 2. Returns an Estimate dataclass with predictions
 3. Can be formatted for human-readable output
 """
+
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
@@ -459,24 +460,28 @@ def format_analyze_preview(estimate: AnalyzeEstimate) -> str:
     ]
 
     if not estimate.corpus_exists:
-        lines.extend([
-            f"Input:  {estimate.corpus_path}",
-            "        (file does not exist)",
-            f"Output: {estimate.output_path}",
-            "",
-            "WARNING: Corpus file not found. Run 'extract' first.",
-        ])
+        lines.extend(
+            [
+                f"Input:  {estimate.corpus_path}",
+                "        (file does not exist)",
+                f"Output: {estimate.output_path}",
+                "",
+                "WARNING: Corpus file not found. Run 'extract' first.",
+            ]
+        )
     else:
         corpus_info = f"{estimate.corpus_path}"
         if estimate.corpus_size_bytes and estimate.email_count:
             corpus_info += f" ({format_bytes(estimate.corpus_size_bytes)}, {format_count(estimate.email_count)} emails)"
 
-        lines.extend([
-            f"Input:  {corpus_info}",
-            f"Output: {estimate.output_path}",
-            "",
-            "Estimated:",
-        ])
+        lines.extend(
+            [
+                f"Input:  {corpus_info}",
+                f"Output: {estimate.output_path}",
+                "",
+                "Estimated:",
+            ]
+        )
 
         if estimate.email_count and estimate.embedding_time_estimate_seconds:
             lines.append(
@@ -515,20 +520,24 @@ def format_suggest_preview(estimate: SuggestEstimate) -> str:
     ]
 
     if not estimate.analysis_exists:
-        lines.extend([
-            "        (file does not exist)",
-            f"Output: {estimate.output_path}",
-            "",
-            "WARNING: Analysis file not found. Run 'analyze' first.",
-        ])
+        lines.extend(
+            [
+                "        (file does not exist)",
+                f"Output: {estimate.output_path}",
+                "",
+                "WARNING: Analysis file not found. Run 'analyze' first.",
+            ]
+        )
     else:
-        lines.extend([
-            f"Output: {estimate.output_path}",
-            "",
-            "Estimated:",
-            f"  - Duration: {format_duration(estimate.duration_estimate_seconds)}",
-            f"  - Output file size: ~{format_bytes(estimate.output_size_estimate_bytes)}",
-        ])
+        lines.extend(
+            [
+                f"Output: {estimate.output_path}",
+                "",
+                "Estimated:",
+                f"  - Duration: {format_duration(estimate.duration_estimate_seconds)}",
+                f"  - Output file size: ~{format_bytes(estimate.output_size_estimate_bytes)}",
+            ]
+        )
 
     lines.extend(["", "No changes will be made."])
     return "\n".join(lines)
@@ -551,21 +560,25 @@ def format_review_preview(estimate: ReviewEstimate) -> str:
     ]
 
     if not estimate.suggestions_exists:
-        lines.extend([
-            "        (file does not exist)",
-            f"Output: {estimate.output_path}",
-            "",
-            "WARNING: Suggestions file not found. Run 'suggest' first.",
-        ])
+        lines.extend(
+            [
+                "        (file does not exist)",
+                f"Output: {estimate.output_path}",
+                "",
+                "WARNING: Suggestions file not found. Run 'suggest' first.",
+            ]
+        )
     else:
-        lines.extend([
-            f"Output: {estimate.output_path} (approved categories)",
-            "",
-            "Info:",
-            f"  - Categories to review: {format_count(estimate.category_count)}",
-            "",
-            "Interactive review will be required.",
-        ])
+        lines.extend(
+            [
+                f"Output: {estimate.output_path} (approved categories)",
+                "",
+                "Info:",
+                f"  - Categories to review: {format_count(estimate.category_count)}",
+                "",
+                "Interactive review will be required.",
+            ]
+        )
 
     lines.extend(["", "No changes will be made."])
     return "\n".join(lines)
@@ -598,19 +611,21 @@ def format_pipeline_preview(estimate: PipelineEstimate) -> str:
     else:
         lines.append("  (corpus will be created in Step 1)")
 
-    lines.extend([
-        f"  Output: {estimate.analyze.output_path}",
-        "",
-        "Step 3: Suggest",
-        f"  Input: {estimate.suggest.analysis_path}",
-        f"  Output: {estimate.suggest.output_path}",
-        "",
-        "Step 4: Review",
-        f"  Input: {estimate.review.suggestions_path}",
-        f"  Output: {estimate.review.output_path}",
-        "",
-        "=" * 50,
-        "No changes will be made.",
-    ])
+    lines.extend(
+        [
+            f"  Output: {estimate.analyze.output_path}",
+            "",
+            "Step 3: Suggest",
+            f"  Input: {estimate.suggest.analysis_path}",
+            f"  Output: {estimate.suggest.output_path}",
+            "",
+            "Step 4: Review",
+            f"  Input: {estimate.review.suggestions_path}",
+            f"  Output: {estimate.review.output_path}",
+            "",
+            "=" * 50,
+            "No changes will be made.",
+        ]
+    )
 
     return "\n".join(lines)

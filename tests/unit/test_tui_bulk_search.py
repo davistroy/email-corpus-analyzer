@@ -9,6 +9,7 @@ Tests the TUI enhancements including:
 
 Uses TDD approach - tests written first before implementation.
 """
+
 import pytest
 
 from src.models.category import Category, CategorySource

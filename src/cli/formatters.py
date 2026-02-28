@@ -1,4 +1,5 @@
 """Output formatting helpers for CLI commands."""
+
 import json
 from pathlib import Path
 
@@ -39,14 +40,10 @@ def _show_cluster_analysis(corpus, args) -> int:
     analyzer._ensure_model_loaded()
 
     texts = [email.combined_text_with_limit() for email in corpus.emails]
-    embeddings = analyzer.model.encode(
-        texts,
-        show_progress_bar=True,
-        convert_to_numpy=True
-    )
+    embeddings = analyzer.model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
 
     # Run both optimization methods
-    cluster_method = getattr(args, 'cluster_method', 'silhouette')
+    cluster_method = getattr(args, "cluster_method", "silhouette")
     max_k = min(15, len(corpus.emails) - 1)
 
     if max_k < 2:
@@ -70,27 +67,29 @@ def _show_cluster_analysis(corpus, args) -> int:
         recommended_k = silhouette_result.optimal_k
         confidence = silhouette_result.confidence_score
 
-    if getattr(args, 'json', False):
-        output_json({
-            "command": "analyze",
-            "cluster_analysis": True,
-            "elbow_method": {
-                "optimal_k": elbow_result.optimal_k,
-                "confidence": elbow_result.confidence_score,
-                "k_scores": elbow_result.k_scores
-            },
-            "silhouette_method": {
-                "optimal_k": silhouette_result.optimal_k,
-                "confidence": silhouette_result.confidence_score,
-                "interpretation": silhouette_result.interpretation,
-                "k_scores": silhouette_result.k_scores
-            },
-            "recommendation": {
-                "method": cluster_method,
-                "optimal_k": recommended_k,
-                "confidence": confidence
+    if getattr(args, "json", False):
+        output_json(
+            {
+                "command": "analyze",
+                "cluster_analysis": True,
+                "elbow_method": {
+                    "optimal_k": elbow_result.optimal_k,
+                    "confidence": elbow_result.confidence_score,
+                    "k_scores": elbow_result.k_scores,
+                },
+                "silhouette_method": {
+                    "optimal_k": silhouette_result.optimal_k,
+                    "confidence": silhouette_result.confidence_score,
+                    "interpretation": silhouette_result.interpretation,
+                    "k_scores": silhouette_result.k_scores,
+                },
+                "recommendation": {
+                    "method": cluster_method,
+                    "optimal_k": recommended_k,
+                    "confidence": confidence,
+                },
             }
-        })
+        )
     else:
         # Print k vs score tables
         print("\n" + "=" * 60)
@@ -138,8 +137,10 @@ def _show_cluster_analysis(corpus, args) -> int:
         if elbow_result.optimal_k == silhouette_result.optimal_k:
             print("\nBoth methods agree on the optimal k!")
         else:
-            print(f"\nNote: Elbow suggests k={elbow_result.optimal_k}, "
-                  f"Silhouette suggests k={silhouette_result.optimal_k}")
+            print(
+                f"\nNote: Elbow suggests k={elbow_result.optimal_k}, "
+                f"Silhouette suggests k={silhouette_result.optimal_k}"
+            )
 
         print()
 
@@ -213,8 +214,7 @@ def _generate_cluster_viz(corpus, results) -> Path | None:
         import matplotlib  # noqa: F401
     except ImportError:
         logger.warning(
-            "matplotlib required for visualization. "
-            "Install with: pip install matplotlib"
+            "matplotlib required for visualization. Install with: pip install matplotlib"
         )
         return None
 
@@ -227,11 +227,7 @@ def _generate_cluster_viz(corpus, results) -> Path | None:
     analyzer._ensure_model_loaded()
 
     texts = [email.combined_text_with_limit() for email in corpus.emails]
-    embeddings = analyzer.model.encode(
-        texts,
-        show_progress_bar=False,
-        convert_to_numpy=True
-    )
+    embeddings = analyzer.model.encode(texts, show_progress_bar=False, convert_to_numpy=True)
 
     # Run KMeans with the same cluster count used in analysis
     n_clusters = len(results.content_clusters)

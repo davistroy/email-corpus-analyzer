@@ -4,6 +4,7 @@ Category detail panel widget for the TUI application.
 Displays detailed information about the selected category.
 Task 5A.3: Enhanced confidence breakdown display with visual bars.
 """
+
 from textual.reactive import reactive
 from textual.widgets import Static
 
@@ -82,11 +83,7 @@ class DetailPanel(Static):
     collapsed: reactive[bool] = reactive(False)
 
     def __init__(
-        self,
-        category: Category | None = None,
-        email_lookup: dict | None = None,
-        *args,
-        **kwargs
+        self, category: Category | None = None, email_lookup: dict | None = None, *args, **kwargs
     ):
         """
         Initialize the detail panel.
@@ -155,9 +152,17 @@ class DetailPanel(Static):
         # Confidence
         confidence_pct = cat.confidence * 100
         confidence_level = get_confidence_level(cat.confidence)
-        confidence_color = "green" if confidence_level == "high" else "yellow" if confidence_level == "medium" else "red"
+        confidence_color = (
+            "green"
+            if confidence_level == "high"
+            else "yellow"
+            if confidence_level == "medium"
+            else "red"
+        )
         lines.append("[dim]Confidence:[/dim]")
-        lines.append(f"  [{confidence_color}]{confidence_pct:.1f}%[/{confidence_color}] ({confidence_level})")
+        lines.append(
+            f"  [{confidence_color}]{confidence_pct:.1f}%[/{confidence_color}] ({confidence_level})"
+        )
         lines.append("")
 
         # Confidence breakdown (if available)

@@ -1,4 +1,5 @@
 """Tests for GmailClient and GmailExtractor."""
+
 import base64
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -47,9 +48,7 @@ def sample_gmail_message():
             "parts": [
                 {
                     "mimeType": "text/plain",
-                    "body": {
-                        "data": base64.urlsafe_b64encode(b"Hello from Gmail").decode()
-                    },
+                    "body": {"data": base64.urlsafe_b64encode(b"Hello from Gmail").decode()},
                 },
                 {
                     "mimeType": "text/html",
@@ -137,17 +136,13 @@ class TestGmailClientExtractBody:
                         {
                             "mimeType": "text/plain",
                             "body": {
-                                "data": base64.urlsafe_b64encode(
-                                    plain_content.encode()
-                                ).decode()
+                                "data": base64.urlsafe_b64encode(plain_content.encode()).decode()
                             },
                         },
                         {
                             "mimeType": "text/html",
                             "body": {
-                                "data": base64.urlsafe_b64encode(
-                                    html_content.encode()
-                                ).decode()
+                                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
                             },
                         },
                     ],
@@ -255,9 +250,7 @@ class TestGmailClientExtractBody:
         # Build a chain 15 levels deep -- only leaf at depth 15 has content
         leaf = {
             "mimeType": "text/html",
-            "body": {
-                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
-            },
+            "body": {"data": base64.urlsafe_b64encode(html_content.encode()).decode()},
         }
         node = leaf
         for _ in range(14):
@@ -276,9 +269,7 @@ class TestGmailClientExtractBody:
         html_content = "<p>At depth limit</p>"
         leaf = {
             "mimeType": "text/html",
-            "body": {
-                "data": base64.urlsafe_b64encode(html_content.encode()).decode()
-            },
+            "body": {"data": base64.urlsafe_b64encode(html_content.encode()).decode()},
         }
         # Build chain of depth 9 wrappings -> leaf at depth 10 (0-indexed: root=0, leaf=10)
         node = leaf
@@ -302,19 +293,11 @@ class TestGmailClientExtractBody:
             "parts": [
                 {
                     "mimeType": "text/plain",
-                    "body": {
-                        "data": base64.urlsafe_b64encode(
-                            plain_content.encode()
-                        ).decode()
-                    },
+                    "body": {"data": base64.urlsafe_b64encode(plain_content.encode()).decode()},
                 },
                 {
                     "mimeType": "text/html",
-                    "body": {
-                        "data": base64.urlsafe_b64encode(
-                            html_content.encode()
-                        ).decode()
-                    },
+                    "body": {"data": base64.urlsafe_b64encode(html_content.encode()).decode()},
                 },
             ],
         }
@@ -328,9 +311,7 @@ class TestGmailClientGetMessage:
         with patch.object(gmail_client, "_get_service") as mock_svc:
             mock_service = MagicMock()
             mock_svc.return_value = mock_service
-            mock_service.users().messages().get().execute.return_value = (
-                sample_gmail_message
-            )
+            mock_service.users().messages().get().execute.return_value = sample_gmail_message
 
             result = gmail_client._get_message(mock_service, "gmail_001")
 
@@ -500,9 +481,7 @@ class TestGmailExtractorExtractAll:
         # Should handle the error gracefully
         assert result.failure_count >= 0  # May or may not fail depending on validation
 
-    def test_extract_all_with_progress_callback(
-        self, gmail_extractor, normalized_gmail_messages
-    ):
+    def test_extract_all_with_progress_callback(self, gmail_extractor, normalized_gmail_messages):
         gmail_extractor.gmail_client.fetch_emails.side_effect = [
             normalized_gmail_messages,
             [],
@@ -528,12 +507,8 @@ class TestGmailExtractorProcessEmail:
         msg = {
             "id": "gmail_003",
             "subject": "Re: Discussion",
-            "from": {
-                "emailAddress": {"address": "a@b.com", "name": "A"}
-            },
-            "toRecipients": [
-                {"emailAddress": {"address": "test@gmail.com", "name": "Test"}}
-            ],
+            "from": {"emailAddress": {"address": "a@b.com", "name": "A"}},
+            "toRecipients": [{"emailAddress": {"address": "test@gmail.com", "name": "Test"}}],
             "receivedDateTime": "2025-01-17T10:00:00Z",
             "body": {"content": "<p>Reply</p>"},
             "hasAttachments": False,
@@ -550,9 +525,7 @@ class TestGmailExtractorProcessEmail:
 
 
 class TestGmailExtractorIncremental:
-    def test_incremental_deduplicates(
-        self, gmail_extractor, normalized_gmail_messages
-    ):
+    def test_incremental_deduplicates(self, gmail_extractor, normalized_gmail_messages):
         # Existing corpus with one email
         existing_email = Email(
             id="gmail_001",

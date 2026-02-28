@@ -4,6 +4,7 @@ Subject Analyzer module.
 Implements FR-014: Subject line pattern analysis.
 Per analyzer_contract.md lines 104-149.
 """
+
 import logging
 import re
 from collections import Counter
@@ -33,6 +34,7 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
         """
         if thresholds is None:
             from ..config.models import AnalyzerThresholds
+
             thresholds = AnalyzerThresholds()
         self.thresholds = thresholds
 
@@ -46,20 +48,18 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
 
     # Common prefixes to extract (case-insensitive)
     PREFIX_PATTERNS = [
-        r'^re:\s*',
-        r'^fwd:\s*',
+        r"^re:\s*",
+        r"^fwd:\s*",
     ]
 
     # Numbered pattern regex: (\w+)\s*[#№]\s*\d+
-    NUMBERED_PATTERN = re.compile(r'(\w+)\s*[#№]\s*\d+', re.IGNORECASE)
+    NUMBERED_PATTERN = re.compile(r"(\w+)\s*[#№]\s*\d+", re.IGNORECASE)
 
     # Bracket tags regex: [\[\(]([^\]\)]+)[\]\)]
-    BRACKET_TAG_PATTERN = re.compile(r'[\[\(]([^\]\)]+)[\]\)]')
+    BRACKET_TAG_PATTERN = re.compile(r"[\[\(]([^\]\)]+)[\]\)]")
 
     def analyze(
-        self,
-        corpus: Corpus,
-        progress_callback: Callable[[int, int], None] | None = None
+        self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> SubjectPatterns:
         """
         Analyze subject line patterns.
@@ -110,10 +110,13 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
 
         # Filter stop words and get top 50 keywords
         filtered_words = {
-            word: count for word, count in all_words.items()
+            word: count
+            for word, count in all_words.items()
             if word.lower() not in self.STOP_WORDS and len(word) > 1
         }
-        top_keywords = sorted(filtered_words.items(), key=lambda x: x[1], reverse=True)[:self.thresholds.top_keywords]
+        top_keywords = sorted(filtered_words.items(), key=lambda x: x[1], reverse=True)[
+            : self.thresholds.top_keywords
+        ]
 
         # Get top bracket tags (sorted by frequency)
         top_tags = sorted(bracket_tags.items(), key=lambda x: x[1], reverse=True)
@@ -129,7 +132,7 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
             numbered_patterns=dict(numbered_patterns),
             top_keywords=top_keywords,
             bracket_tags=top_tags,
-            total_subjects_analyzed=total
+            total_subjects_analyzed=total,
         )
 
     def _extract_prefixes(self, subject: str, counter: Counter) -> None:
@@ -139,8 +142,8 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
             if match:
                 # Normalize to uppercase for counting
                 prefix = match.group().strip().upper()
-                if not prefix.endswith(':'):
-                    prefix += ':'
+                if not prefix.endswith(":"):
+                    prefix += ":"
                 counter[prefix] += 1
 
     def _extract_numbered_patterns(self, subject: str, counter: Counter) -> None:
@@ -156,16 +159,16 @@ class SubjectAnalyzer(BaseAnalyzer[SubjectPatterns]):
         # Remove prefixes
         cleaned = subject
         for pattern in self.PREFIX_PATTERNS:
-            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
 
         # Remove bracket tags
-        cleaned = self.BRACKET_TAG_PATTERN.sub('', cleaned)
+        cleaned = self.BRACKET_TAG_PATTERN.sub("", cleaned)
 
         # Remove numbered patterns (the entire match)
-        cleaned = self.NUMBERED_PATTERN.sub('', cleaned)
+        cleaned = self.NUMBERED_PATTERN.sub("", cleaned)
 
         # Extract words (alphanumeric sequences)
-        words = re.findall(r'\b[a-zA-Z]+\b', cleaned.lower())
+        words = re.findall(r"\b[a-zA-Z]+\b", cleaned.lower())
         counter.update(words)
 
     def _extract_bracket_tags(self, subject: str, counter: Counter) -> None:

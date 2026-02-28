@@ -4,6 +4,7 @@ Corpus data model.
 Per data-model.md lines 132-150.
 Enhanced with Task 4B.1 metadata fields for incremental processing.
 """
+
 from datetime import datetime
 from typing import Any
 
@@ -28,16 +29,13 @@ class CorpusMetadata(BaseModel):
 
     # Task 4B.1: Enhanced metadata fields for incremental processing
     last_extraction_date: datetime | None = Field(
-        default=None,
-        description="Date of last extraction (for incremental extraction)"
+        default=None, description="Date of last extraction (for incremental extraction)"
     )
     email_ids_hash: str | None = Field(
-        default=None,
-        description="Hash of all email IDs for change detection"
+        default=None, description="Hash of all email IDs for change detection"
     )
     extraction_params: dict[str, Any] | None = Field(
-        default=None,
-        description="Parameters used for extraction (batch_size, etc.)"
+        default=None, description="Parameters used for extraction (batch_size, etc.)"
     )
 
 
@@ -53,7 +51,7 @@ class Corpus(BaseModel):
         if not self.emails:
             return (
                 self.extraction_metadata.extraction_date,
-                self.extraction_metadata.extraction_date
+                self.extraction_metadata.extraction_date,
             )
         dates = [e.received_date for e in self.emails]
         return (min(dates), max(dates))

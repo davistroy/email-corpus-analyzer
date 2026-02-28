@@ -3,6 +3,7 @@ AnalysisResults data model.
 
 Per data-model.md lines 217-253.
 """
+
 from pydantic import BaseModel
 
 from .content_cluster import ContentCluster
@@ -11,6 +12,7 @@ from .sender import Sender
 
 class DomainCount(BaseModel):
     """Domain frequency count."""
+
     domain: str
     count: int
 

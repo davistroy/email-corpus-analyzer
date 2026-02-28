@@ -7,6 +7,7 @@ with pagination, retry logic, and checkpoint support.
 Task 4B.1/4B.2: Enhanced with incremental extraction support and metadata tracking.
 Refactored in Work Item 1.3: Now inherits from BaseExtractor.
 """
+
 from datetime import datetime
 
 from src.exceptions import RateLimitError
@@ -89,14 +90,13 @@ class EmailExtractor(BaseExtractor):
 
         try:
             # Use MCP client to fetch emails with pagination
-            emails = self.graph_client.fetch_emails(
-                max_results=batch_size,
-                skip=start
-            )
+            emails = self.graph_client.fetch_emails(max_results=batch_size, skip=start)
 
             # If we get fewer emails than requested, we've reached the end
             if len(emails) < batch_size:
-                self.logger.info(f"Fetched {len(emails)} emails (fewer than requested {batch_size}), reached end of inbox")
+                self.logger.info(
+                    f"Fetched {len(emails)} emails (fewer than requested {batch_size}), reached end of inbox"
+                )
 
             return emails
 
@@ -151,7 +151,9 @@ class EmailExtractor(BaseExtractor):
             recipient_name=recipient_name,
             subject=email_data.get("subject", ""),
             body_text=body_text,
-            received_date=datetime.fromisoformat(email_data.get("receivedDateTime", "").replace("Z", "+00:00")),
+            received_date=datetime.fromisoformat(
+                email_data.get("receivedDateTime", "").replace("Z", "+00:00")
+            ),
             has_attachments=email_data.get("hasAttachments", False),
         )
 
@@ -201,9 +203,7 @@ class EmailExtractor(BaseExtractor):
         """
         since_date = existing_corpus.extraction_metadata.last_extraction_date
         if since_date:
-            self.logger.info(
-                f"Fetching M365 messages received after: {since_date.isoformat()}"
-            )
+            self.logger.info(f"Fetching M365 messages received after: {since_date.isoformat()}")
             return {"filter_after": since_date}
         return {}
 
@@ -224,7 +224,9 @@ class EmailExtractor(BaseExtractor):
             # Microsoft Graph doesn't provide total count directly
             # We'll need to estimate by fetching batches until we get fewer than max_results
             # For now, return a large number and rely on pagination to handle actual count
-            self.logger.info("M365 doesn't provide total count upfront, will paginate until exhausted")
+            self.logger.info(
+                "M365 doesn't provide total count upfront, will paginate until exhausted"
+            )
 
             # Return a large sentinel value that will be updated during pagination
             # This ensures we don't prematurely stop fetching

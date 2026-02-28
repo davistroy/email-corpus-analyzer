@@ -1,4 +1,5 @@
 """Review command: interactive category review and approval."""
+
 import argparse
 import time
 
@@ -38,42 +39,39 @@ Examples:
 
 Note: --headless and --no-tui are mutually exclusive in practice.
       --headless bypasses all interactive review.
-        """
+        """,
     )
     review_parser.add_argument(
         "--suggestions",
         type=Path,
-        help="Path to suggestions JSON (default: {output-dir}/category_suggestions.json)"
+        help="Path to suggestions JSON (default: {output-dir}/category_suggestions.json)",
     )
     review_parser.add_argument(
         "--approved-file",
         type=Path,
-        help="Custom path for approved categories (default: {output-dir}/approved_categories.json)"
+        help="Custom path for approved categories (default: {output-dir}/approved_categories.json)",
     )
     review_parser.add_argument(
-        "--no-cleanup",
-        action="store_true",
-        help="Skip optional cleanup of intermediate files"
+        "--no-cleanup", action="store_true", help="Skip optional cleanup of intermediate files"
     )
     review_parser.add_argument(
-        "-n", "--dry-run",
+        "-n",
+        "--dry-run",
         action="store_true",
-        help="Show what would be done without actually executing"
+        help="Show what would be done without actually executing",
     )
     review_parser.add_argument(
-        "--no-tui",
-        action="store_true",
-        help="Use legacy CLI interface instead of TUI"
+        "--no-tui", action="store_true", help="Use legacy CLI interface instead of TUI"
     )
     review_parser.add_argument(
         "--headless",
         action="store_true",
-        help="Auto-approve all suggestions without interactive review (for automation)"
+        help="Auto-approve all suggestions without interactive review (for automation)",
     )
     review_parser.add_argument(
         "--no-learning",
         action="store_true",
-        help="Disable feedback learning (don't log decisions or apply learned patterns)"
+        help="Disable feedback learning (don't log decisions or apply learned patterns)",
     )
 
     return review_parser
@@ -90,22 +88,24 @@ def cmd_review(args: argparse.Namespace) -> int:
         Exit code (0 = success, non-zero = error)
     """
     # Handle dry-run mode
-    if getattr(args, 'dry_run', False):
+    if getattr(args, "dry_run", False):
         from src.preview.estimators import ReviewEstimator, format_review_preview
 
         estimator = ReviewEstimator()
         estimate = estimator.estimate(args)
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "review",
-                "dry_run": True,
-                "status": "preview",
-                "suggestions_path": str(estimate.suggestions_path),
-                "suggestions_exists": estimate.suggestions_exists,
-                "category_count": estimate.category_count,
-                "output_path": str(estimate.output_path),
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "review",
+                    "dry_run": True,
+                    "status": "preview",
+                    "suggestions_path": str(estimate.suggestions_path),
+                    "suggestions_exists": estimate.suggestions_exists,
+                    "category_count": estimate.category_count,
+                    "output_path": str(estimate.output_path),
+                }
+            )
         else:
             print(format_review_preview(estimate))
 
@@ -120,7 +120,7 @@ def cmd_review(args: argparse.Namespace) -> int:
     start_time = time.time()
 
     # Handle headless mode (auto-approve all)
-    if getattr(args, 'headless', False):
+    if getattr(args, "headless", False):
         return auto_approve_categories(args)
 
     logger.info("=== CATEGORY REVIEW ===")
@@ -141,24 +141,22 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Run 'suggest' first to generate category suggestions, "
             f"or specify a valid path with --suggestions."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "review",
-                "status": "error",
-                "error": f"Suggestions file not found: {suggestions_path}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "review",
+                    "status": "error",
+                    "error": f"Suggestions file not found: {suggestions_path}",
+                }
+            )
         return 1
     except Exception as e:
         logger.error(
             f"Failed to load suggestions from {suggestions_path}: {e}. "
             f"The file may be corrupted. Try re-running 'suggest' to regenerate it."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "review",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "review", "status": "error", "error": str(e)})
         return 1
 
     # Determine approved output path
@@ -167,10 +165,10 @@ def cmd_review(args: argparse.Namespace) -> int:
     logger.info(f"Approved categories output: {approved_path}")
 
     # Determine whether to use TUI
-    use_tui = not getattr(args, 'no_tui', False)
+    use_tui = not getattr(args, "no_tui", False)
 
     # Determine whether to use learning (Task 5B.3)
-    enable_learning = not getattr(args, 'no_learning', False)
+    enable_learning = not getattr(args, "no_learning", False)
 
     # Run interactive review
     try:
@@ -183,17 +181,19 @@ def cmd_review(args: argparse.Namespace) -> int:
 
         duration = time.time() - start_time
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "review",
-                "status": "success",
-                "duration_seconds": round(duration, 2),
-                "output_file": str(approved_path),
-                "stats": {
-                    "categories_reviewed": len(categories),
-                    "categories_approved": len(approved)
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "review",
+                    "status": "success",
+                    "duration_seconds": round(duration, 2),
+                    "output_file": str(approved_path),
+                    "stats": {
+                        "categories_reviewed": len(categories),
+                        "categories_approved": len(approved),
+                    },
                 }
-            })
+            )
         else:
             logger.info(f"Approved {len(approved)} categories")
 
@@ -210,12 +210,8 @@ def cmd_review(args: argparse.Namespace) -> int:
             f"Use --verbose for full traceback.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "review",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "review", "status": "error", "error": str(e)})
         return 1
 
 
@@ -234,13 +230,13 @@ def auto_approve_categories(args: argparse.Namespace) -> int:
     logger.info("=== AUTO-APPROVE CATEGORIES ===")
 
     # Determine suggestions path
-    if hasattr(args, 'suggestions') and args.suggestions:
+    if hasattr(args, "suggestions") and args.suggestions:
         suggestions_path = args.suggestions
     else:
         suggestions_path = PathConfig.get_suggestions_path()
 
     # Determine approved output path
-    if hasattr(args, 'approved_file') and args.approved_file:
+    if hasattr(args, "approved_file") and args.approved_file:
         approved_path = args.approved_file
     else:
         approved_path = PathConfig.get_approved_categories_path()
@@ -257,16 +253,16 @@ def auto_approve_categories(args: argparse.Namespace) -> int:
 
         duration = time.time() - start_time
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "auto_approve",
-                "status": "success",
-                "duration_seconds": round(duration, 2),
-                "output_file": str(approved_path),
-                "stats": {
-                    "categories_approved": len(suggestions_data)
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "auto_approve",
+                    "status": "success",
+                    "duration_seconds": round(duration, 2),
+                    "output_file": str(approved_path),
+                    "stats": {"categories_approved": len(suggestions_data)},
                 }
-            })
+            )
         else:
             logger.info(f"Auto-approved {len(suggestions_data)} categories")
 
@@ -277,12 +273,14 @@ def auto_approve_categories(args: argparse.Namespace) -> int:
             f"Suggestions file not found: {suggestions_path}. "
             f"Run 'suggest' first to generate category suggestions."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "auto_approve",
-                "status": "error",
-                "error": f"Suggestions file not found: {suggestions_path}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "auto_approve",
+                    "status": "error",
+                    "error": f"Suggestions file not found: {suggestions_path}",
+                }
+            )
         return 1
     except Exception as e:
         logger.error(
@@ -290,10 +288,6 @@ def auto_approve_categories(args: argparse.Namespace) -> int:
             f"Error: {e}. Use --verbose for full traceback.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "auto_approve",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "auto_approve", "status": "error", "error": str(e)})
         return 1

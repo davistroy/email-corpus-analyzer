@@ -7,6 +7,7 @@ Tests the export functionality for:
 
 Uses TDD approach - tests written first before implementation.
 """
+
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path

@@ -4,6 +4,7 @@ Template matcher for category generation.
 Implements FR-024: Template Application
 Per generator_contract.md lines 32-45 and 79-82.
 """
+
 import logging
 import re
 
@@ -27,9 +28,7 @@ def _get_keyword_pattern(keyword: str) -> re.Pattern:
     """
     kw_lower = keyword.lower()
     if kw_lower not in _compiled_keyword_patterns:
-        _compiled_keyword_patterns[kw_lower] = re.compile(
-            r'\b' + re.escape(kw_lower) + r'\b'
-        )
+        _compiled_keyword_patterns[kw_lower] = re.compile(r"\b" + re.escape(kw_lower) + r"\b")
     return _compiled_keyword_patterns[kw_lower]
 
 
@@ -42,15 +41,11 @@ def _domain_matches(sender_domain: str, template_domain: str) -> bool:
     This prevents 'notamazon.com' from matching 'amazon.com' while
     still allowing 'mail.amazon.com' to match.
     """
-    return (
-        sender_domain == template_domain
-        or sender_domain.endswith('.' + template_domain)
-    )
+    return sender_domain == template_domain or sender_domain.endswith("." + template_domain)
 
 
 def match_templates(
-    analysis_results: AnalysisResults,
-    templates: list[CategoryTemplate] = None
+    analysis_results: AnalysisResults, templates: list[CategoryTemplate] = None
 ) -> list[Category]:
     """
     Apply predefined category templates to analysis results.
@@ -80,16 +75,10 @@ def match_templates(
         matching_email_ids = set()
 
         # Match by keywords in subject/body through clusters
-        matching_email_ids.update(_match_by_keywords(
-            analysis_results,
-            template.keywords
-        ))
+        matching_email_ids.update(_match_by_keywords(analysis_results, template.keywords))
 
         # Match by domains through senders
-        matching_email_ids.update(_match_by_domains(
-            analysis_results,
-            template.domains
-        ))
+        matching_email_ids.update(_match_by_domains(analysis_results, template.domains))
 
         # If we have matches, create a category
         if matching_email_ids:
@@ -118,7 +107,7 @@ def match_templates(
                 source_id=template.name,
                 user_modified=False,
                 distinguishing_features=template.keywords[:5],  # Top 5 keywords as features
-                example_email_ids=example_ids
+                example_email_ids=example_ids,
             )
 
             categories.append(category)
@@ -133,10 +122,7 @@ def match_templates(
     return categories
 
 
-def _match_by_keywords(
-    analysis_results: AnalysisResults,
-    keywords: list[str]
-) -> set:
+def _match_by_keywords(analysis_results: AnalysisResults, keywords: list[str]) -> set:
     """
     Match emails by keywords in subject lines and cluster samples.
 
@@ -187,10 +173,7 @@ def _match_by_keywords(
     return matching_ids
 
 
-def _match_by_domains(
-    analysis_results: AnalysisResults,
-    domains: list[str]
-) -> set:
+def _match_by_domains(analysis_results: AnalysisResults, domains: list[str]) -> set:
     """
     Match emails by sender domains using suffix-based matching.
 
@@ -213,8 +196,7 @@ def _match_by_domains(
         sender_domain_lower = sender.domain.lower()
 
         # Check if sender domain matches any template domain (exact or subdomain)
-        if any(_domain_matches(sender_domain_lower, domain)
-               for domain in domains_lower):
+        if any(_domain_matches(sender_domain_lower, domain) for domain in domains_lower):
             matching_ids.update(sender.email_ids)
             logger.debug(
                 f"Sender domain '{sender.domain}' matches template domains "
@@ -226,8 +208,7 @@ def _match_by_domains(
         for domain_tuple in cluster.common_domains:
             cluster_domain_lower = domain_tuple[0].lower()
 
-            if any(_domain_matches(cluster_domain_lower, domain)
-                   for domain in domains_lower):
+            if any(_domain_matches(cluster_domain_lower, domain) for domain in domains_lower):
                 matching_ids.update(cluster.email_ids)
                 logger.debug(
                     f"Cluster domain '{domain_tuple[0]}' matches template domains "

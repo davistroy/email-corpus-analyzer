@@ -5,6 +5,7 @@ Tests cover:
 - src/cli.py - Main CLI with argparse, commands (extract, analyze, suggest, review, pipeline)
 Uses mocking to avoid real file I/O, network calls, and external dependencies.
 """
+
 import argparse
 import contextlib
 import sys
@@ -40,7 +41,9 @@ class TestCreateParser:
         parser = create_parser()
 
         # Parse with output-dir
-        args = parser.parse_args(["--output-dir", "/tmp/test", "extract", "--user-email", "test@test.com"])
+        args = parser.parse_args(
+            ["--output-dir", "/tmp/test", "extract", "--user-email", "test@test.com"]
+        )
         assert args.output_dir == Path("/tmp/test")
 
     def test_create_parser_has_verbose_option(self):
@@ -92,7 +95,9 @@ class TestCreateParser:
         args = parser.parse_args(["extract", "--user-email", "test@test.com"])
         assert args.batch_size == 500
 
-        args = parser.parse_args(["extract", "--user-email", "test@test.com", "--batch-size", "100"])
+        args = parser.parse_args(
+            ["extract", "--user-email", "test@test.com", "--batch-size", "100"]
+        )
         assert args.batch_size == 100
 
     def test_extract_command_has_checkpoint_interval_option(self):
@@ -104,7 +109,9 @@ class TestCreateParser:
         args = parser.parse_args(["extract", "--user-email", "test@test.com"])
         assert args.checkpoint_interval == 100
 
-        args = parser.parse_args(["extract", "--user-email", "test@test.com", "--checkpoint-interval", "50"])
+        args = parser.parse_args(
+            ["extract", "--user-email", "test@test.com", "--checkpoint-interval", "50"]
+        )
         assert args.checkpoint_interval == 50
 
     def test_extract_command_has_corpus_file_option(self):
@@ -113,7 +120,9 @@ class TestCreateParser:
 
         parser = create_parser()
 
-        args = parser.parse_args(["extract", "--user-email", "test@test.com", "--corpus-file", "/custom/corpus.json"])
+        args = parser.parse_args(
+            ["extract", "--user-email", "test@test.com", "--corpus-file", "/custom/corpus.json"]
+        )
         assert args.corpus_file == Path("/custom/corpus.json")
 
     def test_create_parser_has_analyze_command(self):
@@ -321,7 +330,9 @@ class TestCmdExtract:
     @patch("src.cli.commands.extract.PathConfig")
     @patch("src.cli.commands.extract.logger")
     @patch("src.extractors.m365_extractor.EmailExtractor")
-    def test_cmd_extract_success(self, mock_extractor_class, mock_logger, mock_path_config, mock_save_json):
+    def test_cmd_extract_success(
+        self, mock_extractor_class, mock_logger, mock_path_config, mock_save_json
+    ):
         """Test successful email extraction."""
         from src.cli import cmd_extract
 
@@ -329,10 +340,7 @@ class TestCmdExtract:
         mock_path_config.get_output_dir.return_value = Path("/output")
 
         args = argparse.Namespace(
-            user_email="test@example.com",
-            corpus_file=None,
-            batch_size=500,
-            checkpoint_interval=100
+            user_email="test@example.com", corpus_file=None, batch_size=500, checkpoint_interval=100
         )
 
         # Mock the EmailExtractor
@@ -350,15 +358,16 @@ class TestCmdExtract:
         assert result == 0
         mock_save_json.assert_called_once()
         mock_extractor.extract_all.assert_called_once_with(
-            max_batch_size=500,
-            checkpoint_interval=100
+            max_batch_size=500, checkpoint_interval=100
         )
 
     @patch("src.cli.commands.extract.save_json")
     @patch("src.cli.commands.extract.PathConfig")
     @patch("src.cli.commands.extract.logger")
     @patch("src.extractors.m365_extractor.EmailExtractor")
-    def test_cmd_extract_with_custom_corpus_path(self, mock_extractor_class, mock_logger, mock_path_config, mock_save):
+    def test_cmd_extract_with_custom_corpus_path(
+        self, mock_extractor_class, mock_logger, mock_path_config, mock_save
+    ):
         """Test extraction with custom corpus file path."""
         from src.cli import cmd_extract
 
@@ -368,7 +377,7 @@ class TestCmdExtract:
             user_email="test@example.com",
             corpus_file=Path("/custom/corpus.json"),
             batch_size=500,
-            checkpoint_interval=100
+            checkpoint_interval=100,
         )
 
         mock_extractor = MagicMock()
@@ -390,17 +399,16 @@ class TestCmdExtract:
     @patch("src.cli.commands.extract.PathConfig")
     @patch("src.cli.commands.extract.logger")
     @patch("src.extractors.m365_extractor.EmailExtractor")
-    def test_cmd_extract_initialization_failure(self, mock_extractor_class, mock_logger, mock_path_config):
+    def test_cmd_extract_initialization_failure(
+        self, mock_extractor_class, mock_logger, mock_path_config
+    ):
         """Test extraction fails on extractor initialization error."""
         from src.cli import cmd_extract
 
         mock_path_config.get_output_dir.return_value = Path("/output")
 
         args = argparse.Namespace(
-            user_email="test@example.com",
-            corpus_file=None,
-            batch_size=500,
-            checkpoint_interval=100
+            user_email="test@example.com", corpus_file=None, batch_size=500, checkpoint_interval=100
         )
 
         mock_extractor_class.side_effect = Exception("Init failed")
@@ -412,7 +420,9 @@ class TestCmdExtract:
     @patch("src.cli.commands.extract.PathConfig")
     @patch("src.cli.commands.extract.logger")
     @patch("src.extractors.m365_extractor.EmailExtractor")
-    def test_cmd_extract_extraction_failure(self, mock_extractor_class, mock_logger, mock_path_config):
+    def test_cmd_extract_extraction_failure(
+        self, mock_extractor_class, mock_logger, mock_path_config
+    ):
         """Test extraction fails during extraction."""
         from src.cli import cmd_extract
 
@@ -420,10 +430,7 @@ class TestCmdExtract:
         mock_path_config.get_output_dir.return_value = Path("/output")
 
         args = argparse.Namespace(
-            user_email="test@example.com",
-            corpus_file=None,
-            batch_size=500,
-            checkpoint_interval=100
+            user_email="test@example.com", corpus_file=None, batch_size=500, checkpoint_interval=100
         )
 
         mock_extractor = MagicMock()
@@ -438,7 +445,9 @@ class TestCmdExtract:
     @patch("src.cli.commands.extract.PathConfig")
     @patch("src.cli.commands.extract.logger")
     @patch("src.extractors.m365_extractor.EmailExtractor")
-    def test_cmd_extract_with_failed_emails(self, mock_extractor_class, mock_logger, mock_path_config, mock_save_json):
+    def test_cmd_extract_with_failed_emails(
+        self, mock_extractor_class, mock_logger, mock_path_config, mock_save_json
+    ):
         """Test extraction with some failed emails."""
         from src.cli import cmd_extract
 
@@ -446,10 +455,7 @@ class TestCmdExtract:
         mock_path_config.get_output_dir.return_value = Path("/output")
 
         args = argparse.Namespace(
-            user_email="test@example.com",
-            corpus_file=None,
-            batch_size=500,
-            checkpoint_interval=100
+            user_email="test@example.com", corpus_file=None, batch_size=500, checkpoint_interval=100
         )
 
         mock_extractor = MagicMock()
@@ -481,7 +487,15 @@ class TestCmdAnalyze:
     @patch("src.cli.commands.analyze.logger")
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_success(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_analyze_success(
+        self,
+        mock_corpus_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
+    ):
         """Test successful corpus analysis."""
         from src.cli import cmd_analyze
 
@@ -492,16 +506,12 @@ class TestCmdAnalyze:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
-        args = argparse.Namespace(
-            corpus=None,
-            num_clusters=10,
-            analysis_file=None
-        )
+        args = argparse.Namespace(corpus=None, num_clusters=10, analysis_file=None)
 
         mock_corpus = MagicMock()
         mock_corpus.emails = []
@@ -527,7 +537,15 @@ class TestCmdAnalyze:
     @patch("src.cli.commands.analyze.logger")
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_with_custom_corpus_path(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_analyze_with_custom_corpus_path(
+        self,
+        mock_corpus_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
+    ):
         """Test analysis with custom corpus path."""
         from src.cli import cmd_analyze
 
@@ -537,15 +555,13 @@ class TestCmdAnalyze:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 0,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
         args = argparse.Namespace(
-            corpus=Path("/custom/corpus.json"),
-            num_clusters=10,
-            analysis_file=None
+            corpus=Path("/custom/corpus.json"), num_clusters=10, analysis_file=None
         )
 
         mock_corpus = MagicMock()
@@ -575,11 +591,7 @@ class TestCmdAnalyze:
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_load_json.side_effect = FileNotFoundError("Corpus not found")
 
-        args = argparse.Namespace(
-            corpus=None,
-            num_clusters=10,
-            analysis_file=None
-        )
+        args = argparse.Namespace(corpus=None, num_clusters=10, analysis_file=None)
 
         result = cmd_analyze(args)
 
@@ -590,7 +602,9 @@ class TestCmdAnalyze:
     @patch("src.cli.commands.analyze.logger")
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_analysis_failure(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_analyze_analysis_failure(
+        self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test analysis fails during processing."""
         from src.cli import cmd_analyze
 
@@ -601,16 +615,12 @@ class TestCmdAnalyze:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 0,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
-        args = argparse.Namespace(
-            corpus=None,
-            num_clusters=10,
-            analysis_file=None
-        )
+        args = argparse.Namespace(corpus=None, num_clusters=10, analysis_file=None)
 
         mock_corpus = MagicMock()
         mock_corpus.emails = []
@@ -632,7 +642,9 @@ class TestCmdSuggest:
     @patch("src.cli.commands.suggest.load_json")
     @patch("src.cli.commands.suggest.PathConfig")
     @patch("src.cli.commands.suggest.logger")
-    def test_cmd_suggest_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json, mock_atomic_write_text):
+    def test_cmd_suggest_success(
+        self, mock_logger, mock_path_config, mock_load_json, mock_save_json, mock_atomic_write_text
+    ):
         """Test successful category suggestion generation."""
         from src.cli import cmd_suggest
 
@@ -647,20 +659,17 @@ class TestCmdSuggest:
                 "top_senders": [],
                 "top_domains": [],
                 "unique_senders": 10,
-                "unique_domains": 5
+                "unique_domains": 5,
             },
             "subject_patterns": {
                 "common_prefixes": {},
                 "numbered_patterns": {},
                 "top_keywords": [],
                 "bracket_tags": [],
-                "total_subjects_analyzed": 100
+                "total_subjects_analyzed": 100,
             },
             "content_clusters": [],
-            "temporal_patterns": {
-                "frequency_distribution": {},
-                "sender_frequencies": {}
-            },
+            "temporal_patterns": {"frequency_distribution": {}, "sender_frequencies": {}},
             "volume_stats": {
                 "total_emails": 100,
                 "unique_senders": 10,
@@ -668,15 +677,12 @@ class TestCmdSuggest:
                 "with_attachments": 20,
                 "attachment_percentage": 20.0,
                 "avg_body_length_chars": 500,
-                "emails_per_day": 3.3
-            }
+                "emails_per_day": 3.3,
+            },
         }
 
         args = argparse.Namespace(
-            analysis=None,
-            min_cluster_percentage=5.0,
-            min_sender_count=20,
-            suggestions_file=None
+            analysis=None, min_cluster_percentage=5.0, min_sender_count=20, suggestions_file=None
         )
 
         with (
@@ -709,10 +715,7 @@ class TestCmdSuggest:
         mock_load_json.side_effect = FileNotFoundError("Analysis not found")
 
         args = argparse.Namespace(
-            analysis=None,
-            min_cluster_percentage=5.0,
-            min_sender_count=20,
-            suggestions_file=None
+            analysis=None, min_cluster_percentage=5.0, min_sender_count=20, suggestions_file=None
         )
 
         result = cmd_suggest(args)
@@ -726,7 +729,16 @@ class TestCmdSuggest:
     @patch("src.cli.commands.suggest.logger")
     @patch("src.generators.category_generator.CategoryGenerator")
     @patch("src.models.analysis_results.AnalysisResults")
-    def test_cmd_suggest_with_custom_paths(self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json, mock_save, mock_atomic_write_text):
+    def test_cmd_suggest_with_custom_paths(
+        self,
+        mock_results_class,
+        mock_gen_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save,
+        mock_atomic_write_text,
+    ):
         """Test suggestion with custom analysis and output paths."""
         from src.cli import cmd_suggest
 
@@ -738,20 +750,17 @@ class TestCmdSuggest:
                 "top_senders": [],
                 "top_domains": [],
                 "unique_senders": 10,
-                "unique_domains": 5
+                "unique_domains": 5,
             },
             "subject_patterns": {
                 "common_prefixes": {},
                 "numbered_patterns": {},
                 "top_keywords": [],
                 "bracket_tags": [],
-                "total_subjects_analyzed": 100
+                "total_subjects_analyzed": 100,
             },
             "content_clusters": [],
-            "temporal_patterns": {
-                "frequency_distribution": {},
-                "sender_frequencies": {}
-            },
+            "temporal_patterns": {"frequency_distribution": {}, "sender_frequencies": {}},
             "volume_stats": {
                 "total_emails": 100,
                 "unique_senders": 10,
@@ -759,15 +768,15 @@ class TestCmdSuggest:
                 "with_attachments": 20,
                 "attachment_percentage": 20.0,
                 "avg_body_length_chars": 500,
-                "emails_per_day": 3.3
-            }
+                "emails_per_day": 3.3,
+            },
         }
 
         args = argparse.Namespace(
             analysis=Path("/custom/analysis.json"),
             min_cluster_percentage=10.0,
             min_sender_count=30,
-            suggestions_file=Path("/custom/suggestions.json")
+            suggestions_file=Path("/custom/suggestions.json"),
         )
 
         mock_results = MagicMock()
@@ -790,7 +799,9 @@ class TestCmdSuggest:
     @patch("src.cli.commands.suggest.logger")
     @patch("src.generators.category_generator.CategoryGenerator")
     @patch("src.models.analysis_results.AnalysisResults")
-    def test_cmd_suggest_generation_failure(self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_suggest_generation_failure(
+        self, mock_results_class, mock_gen_class, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test suggestion fails during generation."""
         from src.cli import cmd_suggest
 
@@ -798,18 +809,34 @@ class TestCmdSuggest:
         mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
 
         mock_load_json.return_value = {
-            "sender_analysis": {"top_senders": [], "top_domains": [], "unique_senders": 0, "unique_domains": 0},
-            "subject_patterns": {"common_prefixes": {}, "numbered_patterns": {}, "top_keywords": [], "bracket_tags": [], "total_subjects_analyzed": 0},
+            "sender_analysis": {
+                "top_senders": [],
+                "top_domains": [],
+                "unique_senders": 0,
+                "unique_domains": 0,
+            },
+            "subject_patterns": {
+                "common_prefixes": {},
+                "numbered_patterns": {},
+                "top_keywords": [],
+                "bracket_tags": [],
+                "total_subjects_analyzed": 0,
+            },
             "content_clusters": [],
             "temporal_patterns": {"frequency_distribution": {}, "sender_frequencies": {}},
-            "volume_stats": {"total_emails": 0, "unique_senders": 0, "date_range": {}, "with_attachments": 0, "attachment_percentage": 0, "avg_body_length_chars": 0, "emails_per_day": 0}
+            "volume_stats": {
+                "total_emails": 0,
+                "unique_senders": 0,
+                "date_range": {},
+                "with_attachments": 0,
+                "attachment_percentage": 0,
+                "avg_body_length_chars": 0,
+                "emails_per_day": 0,
+            },
         }
 
         args = argparse.Namespace(
-            analysis=None,
-            min_cluster_percentage=5.0,
-            min_sender_count=20,
-            suggestions_file=None
+            analysis=None, min_cluster_percentage=5.0, min_sender_count=20, suggestions_file=None
         )
 
         mock_results = MagicMock()
@@ -833,7 +860,15 @@ class TestCmdReview:
     @patch("src.ui.category_review.review_categories")
     @patch("src.ui.category_review.cleanup_intermediate_files")
     @patch("src.models.category.Category")
-    def test_cmd_review_success(self, mock_category_class, mock_cleanup, mock_review, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_review_success(
+        self,
+        mock_category_class,
+        mock_cleanup,
+        mock_review,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+    ):
         """Test successful category review."""
         from src.cli import cmd_review
 
@@ -841,19 +876,17 @@ class TestCmdReview:
         mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
         mock_path_config.get_output_dir.return_value = Path("/output")
 
-        mock_load_json.return_value = [{
-            "category_id": "cat1",
-            "category_name": "Test Category",
-            "description": "Test description",
-            "confidence": 0.8,
-            "source": "content_cluster"
-        }]
+        mock_load_json.return_value = [
+            {
+                "category_id": "cat1",
+                "category_name": "Test Category",
+                "description": "Test description",
+                "confidence": 0.8,
+                "source": "content_cluster",
+            }
+        ]
 
-        args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=False
-        )
+        args = argparse.Namespace(suggestions=None, approved_file=None, no_cleanup=False)
 
         mock_category = MagicMock()
         mock_category_class.return_value = mock_category
@@ -870,7 +903,9 @@ class TestCmdReview:
     @patch("src.cli.commands.review.logger")
     @patch("src.ui.category_review.review_categories")
     @patch("src.ui.category_review.cleanup_intermediate_files")
-    def test_cmd_review_with_no_cleanup(self, mock_cleanup, mock_review, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_review_with_no_cleanup(
+        self, mock_cleanup, mock_review, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test review with --no-cleanup flag."""
         from src.cli import cmd_review
 
@@ -879,11 +914,7 @@ class TestCmdReview:
 
         mock_load_json.return_value = []
 
-        args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=True
-        )
+        args = argparse.Namespace(suggestions=None, approved_file=None, no_cleanup=True)
 
         mock_review.return_value = []
 
@@ -895,18 +926,16 @@ class TestCmdReview:
     @patch("src.cli.commands.review.load_json")
     @patch("src.cli.commands.review.PathConfig")
     @patch("src.cli.commands.review.logger")
-    def test_cmd_review_suggestions_load_failure(self, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_review_suggestions_load_failure(
+        self, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test review fails when suggestions cannot be loaded."""
         from src.cli import cmd_review
 
         mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
         mock_load_json.side_effect = FileNotFoundError("Suggestions not found")
 
-        args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=False
-        )
+        args = argparse.Namespace(suggestions=None, approved_file=None, no_cleanup=False)
 
         result = cmd_review(args)
 
@@ -917,7 +946,9 @@ class TestCmdReview:
     @patch("src.cli.commands.review.logger")
     @patch("src.ui.category_review.review_categories")
     @patch("src.models.category.Category")
-    def test_cmd_review_review_failure(self, mock_category_class, mock_review, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_review_review_failure(
+        self, mock_category_class, mock_review, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test review fails during review process."""
         from src.cli import cmd_review
 
@@ -926,11 +957,7 @@ class TestCmdReview:
 
         mock_load_json.return_value = []
 
-        args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=False
-        )
+        args = argparse.Namespace(suggestions=None, approved_file=None, no_cleanup=False)
 
         mock_review.side_effect = Exception("Review error")
 
@@ -1194,6 +1221,7 @@ class TestCliMain:
 # Tests for config command integration in cli.py
 # =============================================================================
 
+
 class TestConfigCommand:
     """Test cases for config subcommand in cli.py."""
 
@@ -1261,10 +1289,7 @@ class TestCmdConfigInit:
         """Test config init generates template file."""
         from src.cli import cmd_config_init
 
-        args = argparse.Namespace(
-            config_output=None,
-            config_global=False
-        )
+        args = argparse.Namespace(config_output=None, config_global=False)
 
         with (
             patch("src.cli.commands.config.generate_template") as mock_gen,
@@ -1285,10 +1310,7 @@ class TestCmdConfigInit:
         """Test config init with custom output path."""
         from src.cli import cmd_config_init
 
-        args = argparse.Namespace(
-            config_output=Path("/custom/config.yaml"),
-            config_global=False
-        )
+        args = argparse.Namespace(config_output=Path("/custom/config.yaml"), config_global=False)
 
         with (
             patch("src.cli.commands.config.generate_template") as mock_gen,
@@ -1299,19 +1321,14 @@ class TestCmdConfigInit:
             result = cmd_config_init(args)
 
             assert result == 0
-            mock_file.assert_called_once_with(
-                Path("/custom/config.yaml"), "w", encoding="utf-8"
-            )
+            mock_file.assert_called_once_with(Path("/custom/config.yaml"), "w", encoding="utf-8")
 
     @patch("src.cli.commands.config.logger")
     def test_cmd_config_init_global_creates_in_global_path(self, mock_logger):
         """Test config init --global creates in global config directory."""
         from src.cli import cmd_config_init
 
-        args = argparse.Namespace(
-            config_output=None,
-            config_global=True
-        )
+        args = argparse.Namespace(config_output=None, config_global=True)
 
         with (
             patch("src.cli.commands.config.generate_template") as mock_gen,
@@ -1332,10 +1349,7 @@ class TestCmdConfigInit:
         """Test config init handles file write errors."""
         from src.cli import cmd_config_init
 
-        args = argparse.Namespace(
-            config_output=Path("/readonly/config.yaml"),
-            config_global=False
-        )
+        args = argparse.Namespace(config_output=Path("/readonly/config.yaml"), config_global=False)
 
         with patch("src.cli.commands.config.generate_template") as mock_gen:
             mock_gen.return_value = "# Template"
@@ -1388,9 +1402,7 @@ class TestCmdConfigShow:
 
             cmd_config_show(args)
 
-            mock_load.assert_called_once_with(
-                config_path=Path("/custom/config.yaml")
-            )
+            mock_load.assert_called_once_with(config_path=Path("/custom/config.yaml"))
 
     @patch("src.cli.commands.config.logger")
     def test_cmd_config_show_handles_load_error(self, mock_logger):
@@ -1414,7 +1426,9 @@ class TestConfigIntegration:
     @patch("src.cli.setup_output_directory")
     @patch("src.cli.load_config")
     @patch("src.cli.create_parser")
-    def test_main_loads_config_before_command(self, mock_create_parser, mock_load_config, mock_setup):
+    def test_main_loads_config_before_command(
+        self, mock_create_parser, mock_load_config, mock_setup
+    ):
         """Test main loads config before dispatching to command handler."""
         from src.cli import main
         from src.config.models import AppConfig
@@ -1440,7 +1454,9 @@ class TestConfigIntegration:
     @patch("src.cli.setup_output_directory")
     @patch("src.cli.load_config")
     @patch("src.cli.create_parser")
-    def test_cli_args_override_config_values(self, mock_create_parser, mock_load_config, mock_setup):
+    def test_cli_args_override_config_values(
+        self, mock_create_parser, mock_load_config, mock_setup
+    ):
         """Test CLI arguments override config file values."""
         from src.cli import main
         from src.config.models import AnalyzeConfig, AppConfig
@@ -1457,9 +1473,7 @@ class TestConfigIntegration:
         mock_create_parser.return_value = mock_parser
 
         # Config has different value
-        mock_load_config.return_value = AppConfig(
-            analyze=AnalyzeConfig(num_clusters=10)
-        )
+        mock_load_config.return_value = AppConfig(analyze=AnalyzeConfig(num_clusters=10))
 
         with patch("src.cli.cmd_analyze") as mock_analyze:
             mock_analyze.return_value = 0
@@ -1513,7 +1527,9 @@ class TestQuietFlag:
     @patch("src.cli.setup_output_directory")
     @patch("src.cli.load_config")
     @patch("src.cli.create_parser")
-    def test_quiet_mode_sets_warning_log_level(self, mock_create_parser, mock_load_config, mock_setup):
+    def test_quiet_mode_sets_warning_log_level(
+        self, mock_create_parser, mock_load_config, mock_setup
+    ):
         """Test quiet mode sets log level to WARNING."""
         import logging
 
@@ -1598,7 +1614,15 @@ class TestJsonOutputFlag:
     @patch("src.cli.commands.analyze.logger")
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
-    def test_cmd_analyze_json_output(self, mock_corpus_class, mock_service_class, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_cmd_analyze_json_output(
+        self,
+        mock_corpus_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
+    ):
         """Test analyze command returns JSON output when --json flag is set."""
 
         from src.cli import cmd_analyze
@@ -1610,17 +1634,12 @@ class TestJsonOutputFlag:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
-        args = argparse.Namespace(
-            corpus=None,
-            num_clusters=10,
-            analysis_file=None,
-            json=True
-        )
+        args = argparse.Namespace(corpus=None, num_clusters=10, analysis_file=None, json=True)
 
         mock_corpus = MagicMock()
         mock_corpus.emails = [MagicMock() for _ in range(100)]
@@ -1689,18 +1708,23 @@ class TestInfoCommand:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
             "emails": [
-                {"id": "1", "sender_email": "alice@example.com", "received_date": "2024-01-01T00:00:00"},
-                {"id": "2", "sender_email": "bob@example.com", "received_date": "2024-06-15T00:00:00"},
-            ]
+                {
+                    "id": "1",
+                    "sender_email": "alice@example.com",
+                    "received_date": "2024-01-01T00:00:00",
+                },
+                {
+                    "id": "2",
+                    "sender_email": "bob@example.com",
+                    "received_date": "2024-06-15T00:00:00",
+                },
+            ],
         }
 
-        args = argparse.Namespace(
-            corpus=None,
-            json=False
-        )
+        args = argparse.Namespace(corpus=None, json=False)
 
         with patch("builtins.print"), patch("pathlib.Path.stat") as mock_stat:
             mock_stat.return_value = MagicMock(st_size=45_000_000)  # 45 MB
@@ -1726,17 +1750,18 @@ class TestInfoCommand:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
             "emails": [
-                {"id": "1", "sender_email": "alice@example.com", "received_date": "2024-01-01T00:00:00"},
-            ]
+                {
+                    "id": "1",
+                    "sender_email": "alice@example.com",
+                    "received_date": "2024-01-01T00:00:00",
+                },
+            ],
         }
 
-        args = argparse.Namespace(
-            corpus=None,
-            json=True
-        )
+        args = argparse.Namespace(corpus=None, json=True)
 
         with (
             patch("src.cli.commands.info.output_json") as mock_output_json,
@@ -1762,10 +1787,7 @@ class TestInfoCommand:
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_load_json.side_effect = FileNotFoundError("Corpus not found")
 
-        args = argparse.Namespace(
-            corpus=None,
-            json=False
-        )
+        args = argparse.Namespace(corpus=None, json=False)
 
         result = cmd_info(args)
 
@@ -1797,7 +1819,9 @@ class TestSkipReviewFlag:
     @patch("src.cli.commands.pipeline.cmd_review")
     @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_skip_review_auto_accepts(self, mock_logger, mock_service_class, mock_review, mock_auto_approve):
+    def test_cmd_pipeline_skip_review_auto_accepts(
+        self, mock_logger, mock_service_class, mock_review, mock_auto_approve
+    ):
         """Test pipeline with --skip-review auto-accepts all suggestions."""
         from src.cli import cmd_pipeline
         from src.services.pipeline_service import PipelineResult
@@ -1818,7 +1842,7 @@ class TestSkipReviewFlag:
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
-            json=False
+            json=False,
         )
 
         result = cmd_pipeline(args)
@@ -1832,7 +1856,9 @@ class TestSkipReviewFlag:
     @patch("src.cli.commands.pipeline.cmd_review")
     @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_without_skip_review_calls_review(self, mock_logger, mock_service_class, mock_review):
+    def test_cmd_pipeline_without_skip_review_calls_review(
+        self, mock_logger, mock_service_class, mock_review
+    ):
         """Test pipeline without --skip-review calls interactive review."""
         from src.cli import cmd_pipeline
         from src.services.pipeline_service import PipelineResult
@@ -1899,7 +1925,7 @@ class TestEmailValidation:
             corpus_file=None,
             batch_size=500,
             checkpoint_interval=100,
-            json=False
+            json=False,
         )
 
         result = cmd_extract(args)
@@ -1920,7 +1946,7 @@ class TestEmailValidation:
             output_dir=Path("/output"),
             verbose=False,
             quiet=False,
-            json=False
+            json=False,
         )
 
         result = cmd_pipeline(args)
@@ -1983,7 +2009,9 @@ class TestAutoApproveCategories:
     @patch("src.cli.commands.review.load_json")
     @patch("src.cli.commands.review.PathConfig")
     @patch("src.cli.commands.review.logger")
-    def test_auto_approve_categories_success(self, mock_logger, mock_path_config, mock_load_json, mock_save_json):
+    def test_auto_approve_categories_success(
+        self, mock_logger, mock_path_config, mock_load_json, mock_save_json
+    ):
         """Test auto_approve_categories copies suggestions to approved."""
         from src.cli import auto_approve_categories
 
@@ -1995,12 +2023,7 @@ class TestAutoApproveCategories:
             {"category_id": "cat2", "category_name": "Category 2"},
         ]
 
-        args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=True,
-            json=False
-        )
+        args = argparse.Namespace(suggestions=None, approved_file=None, no_cleanup=True, json=False)
 
         result = auto_approve_categories(args)
 
@@ -2010,19 +2033,16 @@ class TestAutoApproveCategories:
     @patch("src.cli.commands.review.load_json")
     @patch("src.cli.commands.review.PathConfig")
     @patch("src.cli.commands.review.logger")
-    def test_auto_approve_categories_file_not_found(self, mock_logger, mock_path_config, mock_load_json):
+    def test_auto_approve_categories_file_not_found(
+        self, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test auto_approve_categories handles missing suggestions file."""
         from src.cli import auto_approve_categories
 
         mock_path_config.get_suggestions_path.return_value = Path("/output/suggestions.json")
         mock_load_json.side_effect = FileNotFoundError("Suggestions not found")
 
-        args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=True,
-            json=False
-        )
+        args = argparse.Namespace(suggestions=None, approved_file=None, no_cleanup=True, json=False)
 
         result = auto_approve_categories(args)
 
@@ -2066,7 +2086,7 @@ class TestOutputJsonFunction:
             "status": "success",
             "duration_seconds": 123.45,
             "output_file": "/path/to/file.json",
-            "stats": {"emails_analyzed": 1000}
+            "stats": {"emails_analyzed": 1000},
         }
 
         old_stdout = sys.stdout
@@ -2180,12 +2200,15 @@ class TestCmdExtractDryRun:
             corpus_file=None,
             batch_size=500,
             checkpoint_interval=100,
-            dry_run=True
+            dry_run=True,
         )
 
         # In dry-run mode, the extractor should NOT be imported/called
         # The function should return early with preview output
-        with patch("src.extractors.m365_extractor.EmailExtractor", side_effect=Exception("Should not be called")):
+        with patch(
+            "src.extractors.m365_extractor.EmailExtractor",
+            side_effect=Exception("Should not be called"),
+        ):
             # Should complete without error because dry-run returns before import
             result = cmd_extract(args)
 
@@ -2205,7 +2228,7 @@ class TestCmdExtractDryRun:
             corpus_file=None,
             batch_size=500,
             checkpoint_interval=100,
-            dry_run=True
+            dry_run=True,
         )
 
         cmd_extract(args)
@@ -2229,15 +2252,13 @@ class TestCmdAnalyzeDryRun:
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
 
-        args = argparse.Namespace(
-            corpus=None,
-            num_clusters=10,
-            analysis_file=None,
-            dry_run=True
-        )
+        args = argparse.Namespace(corpus=None, num_clusters=10, analysis_file=None, dry_run=True)
 
         # In dry-run mode, AnalysisService should NOT be instantiated/called
-        with patch("src.cli.commands.analyze.AnalysisService", side_effect=Exception("Should not be called")):
+        with patch(
+            "src.cli.commands.analyze.AnalysisService",
+            side_effect=Exception("Should not be called"),
+        ):
             # Should complete without error because dry-run returns before service call
             result = cmd_analyze(args)
 
@@ -2252,12 +2273,7 @@ class TestCmdAnalyzeDryRun:
         mock_path_config.get_corpus_path.return_value = Path("/output/corpus.json")
         mock_path_config.get_analysis_path.return_value = Path("/output/analysis.json")
 
-        args = argparse.Namespace(
-            corpus=None,
-            num_clusters=10,
-            analysis_file=None,
-            dry_run=True
-        )
+        args = argparse.Namespace(corpus=None, num_clusters=10, analysis_file=None, dry_run=True)
 
         cmd_analyze(args)
 
@@ -2283,11 +2299,14 @@ class TestCmdSuggestDryRun:
             min_cluster_percentage=5.0,
             min_sender_count=20,
             suggestions_file=None,
-            dry_run=True
+            dry_run=True,
         )
 
         # In dry-run mode, CategoryGenerator should NOT be imported/called
-        with patch("src.generators.category_generator.CategoryGenerator", side_effect=Exception("Should not be called")):
+        with patch(
+            "src.generators.category_generator.CategoryGenerator",
+            side_effect=Exception("Should not be called"),
+        ):
             # Should complete without error because dry-run returns before import
             result = cmd_suggest(args)
 
@@ -2307,7 +2326,7 @@ class TestCmdSuggestDryRun:
             min_cluster_percentage=5.0,
             min_sender_count=20,
             suggestions_file=None,
-            dry_run=True
+            dry_run=True,
         )
 
         cmd_suggest(args)
@@ -2331,14 +2350,14 @@ class TestCmdReviewDryRun:
         mock_path_config.get_output_dir.return_value = Path("/output")
 
         args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=False,
-            dry_run=True
+            suggestions=None, approved_file=None, no_cleanup=False, dry_run=True
         )
 
         # In dry-run mode, review_categories should NOT be imported/called
-        with patch("src.ui.category_review.review_categories", side_effect=Exception("Should not be called")):
+        with patch(
+            "src.ui.category_review.review_categories",
+            side_effect=Exception("Should not be called"),
+        ):
             # Should complete without error because dry-run returns before import
             result = cmd_review(args)
 
@@ -2355,10 +2374,7 @@ class TestCmdReviewDryRun:
         mock_path_config.get_output_dir.return_value = Path("/output")
 
         args = argparse.Namespace(
-            suggestions=None,
-            approved_file=None,
-            no_cleanup=False,
-            dry_run=True
+            suggestions=None, approved_file=None, no_cleanup=False, dry_run=True
         )
 
         cmd_review(args)
@@ -2389,7 +2405,7 @@ class TestCmdPipelineDryRun:
             verbose=False,
             quiet=False,
             json=False,
-            dry_run=True
+            dry_run=True,
         )
 
         result = cmd_pipeline(args)
@@ -2412,7 +2428,7 @@ class TestCmdPipelineDryRun:
             verbose=False,
             quiet=False,
             json=False,
-            dry_run=True
+            dry_run=True,
         )
 
         cmd_pipeline(args)
@@ -2438,7 +2454,7 @@ class TestDryRunValidation:
             corpus_file=None,
             batch_size=500,
             checkpoint_interval=100,
-            dry_run=True
+            dry_run=True,
         )
 
         result = cmd_extract(args)
@@ -2460,7 +2476,7 @@ class TestDryRunValidation:
             verbose=False,
             quiet=False,
             json=False,
-            dry_run=True
+            dry_run=True,
         )
 
         result = cmd_pipeline(args)
@@ -2489,7 +2505,7 @@ class TestDryRunWithJsonOutput:
             batch_size=500,
             checkpoint_interval=100,
             dry_run=True,
-            json=True
+            json=True,
         )
 
         result = cmd_extract(args)
@@ -2593,7 +2609,9 @@ class TestAutoClusterCLI:
 
         parser = create_parser()
 
-        args = parser.parse_args(["pipeline", "--user-email", "test@test.com", "--cluster-method", "elbow"])
+        args = parser.parse_args(
+            ["pipeline", "--user-email", "test@test.com", "--cluster-method", "elbow"]
+        )
         assert args.cluster_method == "elbow"
 
 
@@ -2608,7 +2626,9 @@ class TestClusterAnalysisReport:
     @patch("src.cli.commands.analyze.load_json")
     @patch("src.cli.commands.analyze.PathConfig")
     @patch("src.cli.commands.analyze.logger")
-    def test_cluster_analysis_prints_k_vs_score_table(self, mock_logger, mock_path_config, mock_load_json, capsys):
+    def test_cluster_analysis_prints_k_vs_score_table(
+        self, mock_logger, mock_path_config, mock_load_json, capsys
+    ):
         """Test that --cluster-analysis prints k vs score table."""
         from src.cli import cmd_analyze
 
@@ -2619,7 +2639,7 @@ class TestClusterAnalysisReport:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 50,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
             "emails": [
                 {
@@ -2632,10 +2652,10 @@ class TestClusterAnalysisReport:
                     "subject": f"Subject {i}",
                     "body_text": f"Body text {i}",
                     "received_date": "2024-01-01T10:00:00",
-                    "has_attachments": False
+                    "has_attachments": False,
                 }
                 for i in range(50)
-            ]
+            ],
         }
 
         args = argparse.Namespace(
@@ -2646,7 +2666,7 @@ class TestClusterAnalysisReport:
             cluster_analysis=True,
             analysis_file=None,
             dry_run=False,
-            json=False
+            json=False,
         )
 
         # This test verifies the feature exists - actual implementation details
@@ -2749,7 +2769,9 @@ class TestExportCommand:
 
         parser = create_parser()
 
-        args = parser.parse_args(["export", "--format", "csv", "--input", "/custom/categories.json"])
+        args = parser.parse_args(
+            ["export", "--format", "csv", "--input", "/custom/categories.json"]
+        )
         assert args.input == Path("/custom/categories.json")
 
     def test_export_command_default_output_is_none(self):
@@ -2799,12 +2821,7 @@ class TestCmdExport:
             }
         ]
 
-        args = argparse.Namespace(
-            format="csv",
-            output=None,
-            input=None,
-            json=False
-        )
+        args = argparse.Namespace(format="csv", output=None, input=None, json=False)
 
         with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
             mock_export.return_value = Path("/output/categories.csv")
@@ -2837,12 +2854,7 @@ class TestCmdExport:
             }
         ]
 
-        args = argparse.Namespace(
-            format="html",
-            output=None,
-            input=None,
-            json=False
-        )
+        args = argparse.Namespace(format="html", output=None, input=None, json=False)
 
         with patch("src.exporters.html_exporter.export_categories_to_html") as mock_export:
             mock_export.return_value = Path("/output/report.html")
@@ -2875,10 +2887,7 @@ class TestCmdExport:
         ]
 
         args = argparse.Namespace(
-            format="csv",
-            output=Path("/custom/output.csv"),
-            input=None,
-            json=False
+            format="csv", output=Path("/custom/output.csv"), input=None, json=False
         )
 
         with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
@@ -2914,10 +2923,7 @@ class TestCmdExport:
         ]
 
         args = argparse.Namespace(
-            format="csv",
-            output=None,
-            input=Path("/custom/input.json"),
-            json=False
+            format="csv", output=None, input=Path("/custom/input.json"), json=False
         )
 
         with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
@@ -2938,12 +2944,7 @@ class TestCmdExport:
         mock_path_config.get_approved_categories_path.return_value = Path("/output/approved.json")
         mock_load_json.side_effect = FileNotFoundError("File not found")
 
-        args = argparse.Namespace(
-            format="csv",
-            output=None,
-            input=None,
-            json=False
-        )
+        args = argparse.Namespace(format="csv", output=None, input=None, json=False)
 
         result = cmd_export(args)
 
@@ -2973,12 +2974,7 @@ class TestCmdExport:
             }
         ]
 
-        args = argparse.Namespace(
-            format="csv",
-            output=None,
-            input=None,
-            json=True
-        )
+        args = argparse.Namespace(format="csv", output=None, input=None, json=True)
 
         with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
             mock_export.return_value = Path("/output/categories.csv")
@@ -2994,7 +2990,9 @@ class TestCmdExport:
     @patch("src.cli.commands.export.load_json")
     @patch("src.cli.commands.export.PathConfig")
     @patch("src.cli.commands.export.logger")
-    def test_cmd_export_handles_empty_categories(self, mock_logger, mock_path_config, mock_load_json):
+    def test_cmd_export_handles_empty_categories(
+        self, mock_logger, mock_path_config, mock_load_json
+    ):
         """Test export handles empty category list."""
         from src.cli import cmd_export
 
@@ -3003,12 +3001,7 @@ class TestCmdExport:
 
         mock_load_json.return_value = []  # Empty list
 
-        args = argparse.Namespace(
-            format="csv",
-            output=None,
-            input=None,
-            json=False
-        )
+        args = argparse.Namespace(format="csv", output=None, input=None, json=False)
 
         with patch("src.exporters.csv_exporter.export_categories_to_csv") as mock_export:
             mock_export.return_value = Path("/output/categories.csv")
@@ -3032,7 +3025,9 @@ class TestExceptionHandlingInCli:
     @patch("src.cli.commands.analyze.logger")
     @patch("src.cli.commands.analyze.load_json")
     @patch("src.cli.commands.analyze.PathConfig")
-    def test_cmd_analyze_corpus_not_found_error(self, mock_path_config, mock_load_json, mock_logger):
+    def test_cmd_analyze_corpus_not_found_error(
+        self, mock_path_config, mock_load_json, mock_logger
+    ):
         """Test analyze shows recovery hint when corpus not found."""
         from src.cli import cmd_analyze
 
@@ -3051,7 +3046,7 @@ class TestExceptionHandlingInCli:
             cluster_analysis=False,
             incremental=False,
             auto_clusters=False,
-            cluster_method="silhouette"
+            cluster_method="silhouette",
         )
 
         result = cmd_analyze(args)
@@ -3062,7 +3057,9 @@ class TestExceptionHandlingInCli:
     @patch("src.cli.commands.suggest.logger")
     @patch("src.cli.commands.suggest.load_json")
     @patch("src.cli.commands.suggest.PathConfig")
-    def test_cmd_analyze_corpus_not_found_json_output(self, mock_path_config, mock_load_json, mock_logger):
+    def test_cmd_analyze_corpus_not_found_json_output(
+        self, mock_path_config, mock_load_json, mock_logger
+    ):
         """Test analyze with --json outputs structured error."""
         from src.cli import cmd_analyze
 
@@ -3079,7 +3076,7 @@ class TestExceptionHandlingInCli:
             cluster_analysis=False,
             incremental=False,
             auto_clusters=False,
-            cluster_method="silhouette"
+            cluster_method="silhouette",
         )
 
         with patch("src.cli.commands.analyze.output_json") as mock_output_json:
@@ -3094,7 +3091,9 @@ class TestExceptionHandlingInCli:
     @patch("src.cli.commands.suggest.logger")
     @patch("src.cli.commands.suggest.load_json")
     @patch("src.cli.commands.suggest.PathConfig")
-    def test_cmd_suggest_analysis_not_found_error(self, mock_path_config, mock_load_json, mock_logger):
+    def test_cmd_suggest_analysis_not_found_error(
+        self, mock_path_config, mock_load_json, mock_logger
+    ):
         """Test suggest shows error when analysis not found."""
         from src.cli import cmd_suggest
 
@@ -3108,7 +3107,7 @@ class TestExceptionHandlingInCli:
             suggestions_file=None,
             verbose=False,
             json=False,
-            dry_run=False
+            dry_run=False,
         )
 
         result = cmd_suggest(args)
@@ -3130,7 +3129,7 @@ class TestExceptionHandlingInCli:
             json=False,
             dry_run=False,
             since_last=False,
-            output_dir=None
+            output_dir=None,
         )
 
         result = cmd_extract(args)
@@ -3158,10 +3157,7 @@ class TestConfigValidateCommand:
         from src.cli import cmd_config_validate
         from src.config.models import AppConfig
 
-        args = argparse.Namespace(
-            config=None,
-            json=False
-        )
+        args = argparse.Namespace(config=None, json=False)
 
         with patch("src.cli.commands.config.load_config") as mock_load:
             mock_load.return_value = AppConfig()
@@ -3179,16 +3175,17 @@ class TestConfigValidateCommand:
         from src.cli import cmd_config_validate
         from src.config.models import AppConfig
 
-        args = argparse.Namespace(
-            config=None,
-            json=False
-        )
+        args = argparse.Namespace(config=None, json=False)
 
         with patch("src.cli.commands.config.load_config") as mock_load:
             mock_load.return_value = AppConfig(output_dir=Path("/nonexistent/path"))
             with patch("src.cli.commands.config.validate_config") as mock_validate:
                 mock_validate.return_value = [
-                    {"field": "output_dir", "status": "error", "message": "Directory does not exist"}
+                    {
+                        "field": "output_dir",
+                        "status": "error",
+                        "message": "Directory does not exist",
+                    }
                 ]
 
                 with patch("builtins.print"):
@@ -3203,10 +3200,7 @@ class TestConfigValidateCommand:
         from src.cli import cmd_config_validate
         from src.config.models import AppConfig
 
-        args = argparse.Namespace(
-            config=None,
-            json=True
-        )
+        args = argparse.Namespace(config=None, json=True)
 
         with (
             patch("src.cli.commands.config.load_config") as mock_load,
@@ -3286,9 +3280,15 @@ class TestConfigMappingsAndPrecedence:
         from src.cli import _CONFIG_MAPPINGS
 
         expected = {
-            "output_dir", "verbose", "user_email",
-            "batch_size", "checkpoint_interval", "num_clusters",
-            "min_cluster_percentage", "min_sender_count", "no_cleanup",
+            "output_dir",
+            "verbose",
+            "user_email",
+            "batch_size",
+            "checkpoint_interval",
+            "num_clusters",
+            "min_cluster_percentage",
+            "min_sender_count",
+            "no_cleanup",
         }
         assert set(_CONFIG_MAPPINGS.keys()) == expected
 
@@ -3314,9 +3314,9 @@ class TestConfigMappingsAndPrecedence:
 
         parser = create_parser()
         # User explicitly sets --batch-size 750
-        args = parser.parse_args([
-            "extract", "--user-email", "test@test.com", "--batch-size", "750"
-        ])
+        args = parser.parse_args(
+            ["extract", "--user-email", "test@test.com", "--batch-size", "750"]
+        )
         assert args.batch_size == 750
 
         config = AppConfig(extract=ExtractConfig(batch_size=1000))
@@ -3763,8 +3763,13 @@ class TestCmdAnalyzeServiceRouting:
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
     def test_cmd_analyze_constructs_analysis_service(
-        self, mock_corpus_class, mock_service_class, mock_logger,
-        mock_path_config, mock_load_json, mock_save_json
+        self,
+        mock_corpus_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
     ):
         """Test cmd_analyze constructs AnalysisService with AnalyzeConfig."""
         from src.cli import cmd_analyze
@@ -3776,9 +3781,9 @@ class TestCmdAnalyzeServiceRouting:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
         args = argparse.Namespace(
@@ -3809,8 +3814,11 @@ class TestCmdAnalyzeServiceRouting:
         assert result == 0
         # Verify AnalysisService was constructed with an AnalyzeConfig
         mock_service_class.assert_called_once()
-        config_arg = mock_service_class.call_args[1].get("config") or mock_service_class.call_args[0][0]
+        config_arg = (
+            mock_service_class.call_args[1].get("config") or mock_service_class.call_args[0][0]
+        )
         from src.config.models import AnalyzeConfig
+
         assert isinstance(config_arg, AnalyzeConfig)
         assert config_arg.num_clusters == 10
 
@@ -3821,8 +3829,13 @@ class TestCmdAnalyzeServiceRouting:
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
     def test_cmd_analyze_calls_service_run_with_correct_args(
-        self, mock_corpus_class, mock_service_class, mock_logger,
-        mock_path_config, mock_load_json, mock_save_json
+        self,
+        mock_corpus_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
     ):
         """Test cmd_analyze passes auto_clusters and cluster_method to service.run()."""
         from src.cli import cmd_analyze
@@ -3834,9 +3847,9 @@ class TestCmdAnalyzeServiceRouting:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
         args = argparse.Namespace(
@@ -3880,8 +3893,14 @@ class TestCmdAnalyzeServiceRouting:
     @patch("src.cli.commands.analyze.EmbeddingCache")
     @patch("src.models.corpus.Corpus")
     def test_cmd_analyze_incremental_routes_through_service(
-        self, mock_corpus_class, mock_cache_class, mock_service_class,
-        mock_logger, mock_path_config, mock_load_json, mock_save_json
+        self,
+        mock_corpus_class,
+        mock_cache_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
     ):
         """Test --incremental routes through AnalysisService with embedding_cache."""
         from src.cli import cmd_analyze
@@ -3894,9 +3913,9 @@ class TestCmdAnalyzeServiceRouting:
                 "extraction_date": "2024-01-01T00:00:00",
                 "total_emails": 100,
                 "source": "test",
-                "user_email": "test@example.com"
+                "user_email": "test@example.com",
             },
-            "emails": []
+            "emails": [],
         }
 
         args = argparse.Namespace(
@@ -3944,8 +3963,13 @@ class TestCmdAnalyzeServiceRouting:
     @patch("src.cli.commands.analyze.AnalysisService")
     @patch("src.models.corpus.Corpus")
     def test_cmd_analyze_does_not_import_run_full_analysis(
-        self, mock_corpus_class, mock_service_class, mock_logger,
-        mock_path_config, mock_load_json, mock_save_json
+        self,
+        mock_corpus_class,
+        mock_service_class,
+        mock_logger,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
     ):
         """Test cmd_analyze does not directly import run_full_analysis."""
         import src.cli.commands.analyze as analyze_module
@@ -4009,6 +4033,7 @@ class TestCmdPipelineServiceRouting:
         mock_service_class.assert_called_once()
         config_arg = mock_service_class.call_args[0][0]
         from src.config.models import AppConfig
+
         assert isinstance(config_arg, AppConfig)
 
     @patch("src.cli.commands.pipeline.auto_approve_categories")
@@ -4194,9 +4219,7 @@ class TestCmdPipelineServiceRouting:
 
     @patch("src.cli.commands.pipeline.PipelineService")
     @patch("src.cli.commands.pipeline.logger")
-    def test_cmd_pipeline_returns_error_on_service_failure(
-        self, mock_logger, mock_service_class
-    ):
+    def test_cmd_pipeline_returns_error_on_service_failure(self, mock_logger, mock_service_class):
         """Test cmd_pipeline returns 1 when PipelineService.run() raises."""
         from src.cli.commands.pipeline import cmd_pipeline
 

@@ -28,6 +28,7 @@ from src.models.sender import Sender, SenderType
 # Test Fixtures - Sample Data Builders
 # -----------------------------------------------------------------------------
 
+
 def create_sample_sender(
     email: str = "test@example.com",
     domain: str = "example.com",
@@ -126,6 +127,7 @@ def create_sample_analysis_results(
 # CategoryGenerator Tests
 # -----------------------------------------------------------------------------
 
+
 class TestCategoryGenerator:
     """Test cases for CategoryGenerator class."""
 
@@ -170,14 +172,21 @@ class TestCategoryGenerator:
         """Test that clusters below min percentage are filtered out."""
         clusters = [
             create_sample_cluster(
-                cluster_id=0, size=100, percentage=10.0,
+                cluster_id=0,
+                size=100,
+                percentage=10.0,
                 subjects=["Amazon order shipped", "Amazon delivery update"],
-                body_previews=["Your Amazon order has shipped via UPS", "Amazon package delivered today"],
+                body_previews=[
+                    "Your Amazon order has shipped via UPS",
+                    "Amazon package delivered today",
+                ],
                 email_ids=[f"amazon_{i}" for i in range(100)],
             ),
             create_sample_cluster(cluster_id=1, size=30, percentage=3.0),  # Below default 5%
             create_sample_cluster(
-                cluster_id=2, size=50, percentage=5.0,
+                cluster_id=2,
+                size=50,
+                percentage=5.0,
                 subjects=["Netflix recommendation", "Netflix new release"],
                 body_previews=["New shows to watch on Netflix", "Netflix original series premiere"],
                 email_ids=[f"netflix_{i}" for i in range(50)],
@@ -739,9 +748,8 @@ class TestMergeHighNameSimilarity:
 
         # Verify names are similar at 0.8 threshold but below 0.9
         from difflib import SequenceMatcher
-        ratio = SequenceMatcher(
-            None, "amazon emails", "amazon emails promo"
-        ).ratio()
+
+        ratio = SequenceMatcher(None, "amazon emails", "amazon emails promo").ratio()
         assert 0.8 <= ratio <= 0.9, f"Expected ratio 0.8-0.9, got {ratio}"
 
         merged = generator._merge_similar(categories)
@@ -989,6 +997,7 @@ class TestCategoryGeneratorReport:
 # -----------------------------------------------------------------------------
 # TemplateMatcher Tests
 # -----------------------------------------------------------------------------
+
 
 class TestTemplateMatcher:
     """Test cases for template matching functions."""
@@ -1533,7 +1542,7 @@ class TestCategoryGeneratorTfidfIntegration:
         # (depends on actual name generated)
         assert len(cluster_cats) >= 1
         # The assertion checks that the field exists
-        assert hasattr(cluster_cats[0], 'needs_name_review')
+        assert hasattr(cluster_cats[0], "needs_name_review")
 
     def test_category_from_sender_includes_quality_score(self):
         """Test that sender categories include name quality score."""
@@ -1580,7 +1589,9 @@ class TestCategoryGeneratorTfidfIntegration:
         # Name should contain something relevant (Amazon, Order, Shipping, etc)
         name = cluster_cats[0].category_name.lower()
         relevant_terms = ["amazon", "order", "ship", "deliver", "package", "track"]
-        assert any(term in name for term in relevant_terms), f"Name '{name}' should contain relevant terms"
+        assert any(term in name for term in relevant_terms), (
+            f"Name '{name}' should contain relevant terms"
+        )
 
     def test_build_corpus_texts_collects_all_samples(self):
         """Test that corpus texts are built from all cluster samples."""
@@ -1735,7 +1746,16 @@ class TestTemplateMatcherEdgeCases:
             CategoryTemplate(
                 name="Financial",
                 # Use keywords that will match, more than 5
-                keywords=["invoice", "payment", "bank", "statement", "bill", "credit", "transaction", "money"],
+                keywords=[
+                    "invoice",
+                    "payment",
+                    "bank",
+                    "statement",
+                    "bill",
+                    "credit",
+                    "transaction",
+                    "money",
+                ],
                 domains=[],
                 description="Financial",
             ),
@@ -1761,9 +1781,7 @@ class TestHierarchicalCategoryGenerator:
         from src.models.content_cluster import RepresentativeSample
 
         sample = RepresentativeSample(
-            subject="Test",
-            sender="test@example.com",
-            body_preview="Test body"
+            subject="Test", sender="test@example.com", body_preview="Test body"
         )
 
         # Create hierarchical clusters
@@ -1819,7 +1837,7 @@ class TestHierarchicalCategoryGenerator:
         sample = RepresentativeSample(
             subject="Shopping order",
             sender="orders@amazon.com",
-            body_preview="Your order has shipped"
+            body_preview="Your order has shipped",
         )
 
         child = HierarchicalCluster(
@@ -1870,7 +1888,7 @@ class TestHierarchicalCategoryGenerator:
         sample = RepresentativeSample(
             subject="Order shipped",
             sender="orders@amazon.com",
-            body_preview="Your Amazon order shipped"
+            body_preview="Your Amazon order shipped",
         )
 
         child = HierarchicalCluster(
@@ -1916,7 +1934,7 @@ class TestHierarchicalCategoryGenerator:
         sample = RepresentativeSample(
             subject="Amazon order #12345 shipped",
             sender="ship-confirm@amazon.com",
-            body_preview="Your Amazon.com order has shipped"
+            body_preview="Your Amazon.com order has shipped",
         )
 
         child = HierarchicalCluster(
@@ -1963,7 +1981,7 @@ class TestHierarchicalCategoryGenerator:
         sample = RepresentativeSample(
             subject="Your invoice is ready",
             sender="billing@bank.com",
-            body_preview="Payment due: Your monthly statement"
+            body_preview="Payment due: Your monthly statement",
         )
 
         cluster = HierarchicalCluster(
@@ -2003,9 +2021,7 @@ class TestHierarchicalCategoryGenerator:
         from src.models.content_cluster import RepresentativeSample
 
         sample = RepresentativeSample(
-            subject="Test",
-            sender="test@example.com",
-            body_preview="Test"
+            subject="Test", sender="test@example.com", body_preview="Test"
         )
 
         cluster = HierarchicalCluster(
@@ -2038,7 +2054,7 @@ class TestHierarchicalCategoryGenerator:
         sample = RepresentativeSample(
             subject="Newsletter",
             sender="news@company.com",
-            body_preview="Weekly newsletter content"
+            body_preview="Weekly newsletter content",
         )
 
         cluster = HierarchicalCluster(
@@ -2218,9 +2234,7 @@ class TestCategoryGeneratorLearning:
         from src.models.content_cluster import RepresentativeSample
 
         sample = RepresentativeSample(
-            subject="Test",
-            sender="test@bbc.co.uk",
-            body_preview="Test body"
+            subject="Test", sender="test@bbc.co.uk", body_preview="Test body"
         )
 
         cluster = HierarchicalCluster(
@@ -2249,7 +2263,7 @@ class TestCategoryGeneratorLearning:
         sample = RepresentativeSample(
             subject="Your order has shipped",
             sender="orders@amazon.co.uk",
-            body_preview="Order shipped"
+            body_preview="Order shipped",
         )
 
         cluster = HierarchicalCluster(
@@ -2347,17 +2361,21 @@ class TestEnhancedConfidenceIntegration:
                 f"Category '{cat.category_name}' is missing confidence_breakdown"
             )
             # Breakdown should contain all 6 component keys
-            expected_keys = {"cohesion", "volume", "source", "percentage",
-                             "name_quality", "distinctiveness"}
+            expected_keys = {
+                "cohesion",
+                "volume",
+                "source",
+                "percentage",
+                "name_quality",
+                "distinctiveness",
+            }
             assert set(cat.confidence_breakdown.keys()) == expected_keys, (
                 f"Category '{cat.category_name}' has wrong breakdown keys: "
                 f"{cat.confidence_breakdown.keys()}"
             )
             # All component scores should be in [0, 1]
             for key, value in cat.confidence_breakdown.items():
-                assert 0.0 <= value <= 1.0, (
-                    f"Component '{key}' out of range: {value}"
-                )
+                assert 0.0 <= value <= 1.0, f"Component '{key}' out of range: {value}"
 
     def test_poor_name_quality_lowers_confidence(self):
         """Categories with poor names (quality < 0.4) get measurably lower confidence.
@@ -2392,12 +2410,8 @@ class TestEnhancedConfidenceIntegration:
             **base_kwargs,
         )
 
-        good_score, good_breakdown = calculate_confidence_enhanced(
-            good_name_cat, total_emails=1000
-        )
-        poor_score, poor_breakdown = calculate_confidence_enhanced(
-            poor_name_cat, total_emails=1000
-        )
+        good_score, good_breakdown = calculate_confidence_enhanced(good_name_cat, total_emails=1000)
+        poor_score, poor_breakdown = calculate_confidence_enhanced(poor_name_cat, total_emails=1000)
 
         # Good name should produce measurably higher confidence
         assert good_score > poor_score, (
@@ -2451,10 +2465,12 @@ class TestEnhancedConfidenceIntegration:
         custom_cats = custom_gen.generate_suggestions(analysis)
 
         # Find matching cluster categories by ID to compare
-        default_cluster_cats = {c.category_id: c for c in default_cats
-                                if c.source == CategorySource.CONTENT_CLUSTER}
-        custom_cluster_cats = {c.category_id: c for c in custom_cats
-                               if c.source == CategorySource.CONTENT_CLUSTER}
+        default_cluster_cats = {
+            c.category_id: c for c in default_cats if c.source == CategorySource.CONTENT_CLUSTER
+        }
+        custom_cluster_cats = {
+            c.category_id: c for c in custom_cats if c.source == CategorySource.CONTENT_CLUSTER
+        }
 
         # At least one cluster category should have different confidence
         for cat_id in default_cluster_cats:
@@ -2493,9 +2509,7 @@ class TestEnhancedConfidenceIntegration:
             name_quality_score=None,  # No name quality score
         )
 
-        score, breakdown = calculate_confidence_enhanced(
-            empty_category, total_emails=1000
-        )
+        score, breakdown = calculate_confidence_enhanced(empty_category, total_emails=1000)
 
         # Score should be valid but low
         assert 0.0 <= score <= 1.0
@@ -2608,9 +2622,7 @@ class TestEnhancedConfidenceIntegration:
         )
 
         simple_score = calculate_confidence(category, total_emails=1000)
-        enhanced_score, breakdown = calculate_confidence_enhanced(
-            category, total_emails=1000
-        )
+        enhanced_score, breakdown = calculate_confidence_enhanced(category, total_emails=1000)
 
         # They should not be identical because enhanced uses 6 weighted
         # factors vs simple using 3 equal-weight factors
@@ -2630,7 +2642,7 @@ class TestEnhancedConfidenceIntegration:
         sample = RepresentativeSample(
             subject="Order shipped",
             sender="orders@amazon.com",
-            body_preview="Your Amazon order shipped"
+            body_preview="Your Amazon order shipped",
         )
 
         child = HierarchicalCluster(

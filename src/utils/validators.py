@@ -32,14 +32,11 @@ def validate_corpus_total_matches_length(corpus: Corpus) -> bool:
     total_emails = corpus.extraction_metadata.total_emails
     actual_count = len(corpus.emails)
 
-    logger.debug(
-        f"Validating corpus total: declared={total_emails}, actual={actual_count}"
-    )
+    logger.debug(f"Validating corpus total: declared={total_emails}, actual={actual_count}")
 
     if total_emails != actual_count:
         error_msg = (
-            f"Corpus total_emails mismatch: "
-            f"declared {total_emails} but found {actual_count} emails"
+            f"Corpus total_emails mismatch: declared {total_emails} but found {actual_count} emails"
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
@@ -65,8 +62,7 @@ def validate_unique_email_ids(corpus: Corpus) -> bool:
     unique_ids = set(email_ids)
 
     logger.debug(
-        f"Validating email ID uniqueness: "
-        f"total={len(email_ids)}, unique={len(unique_ids)}"
+        f"Validating email ID uniqueness: total={len(email_ids)}, unique={len(unique_ids)}"
     )
 
     if len(email_ids) != len(unique_ids):
@@ -91,8 +87,7 @@ def validate_unique_email_ids(corpus: Corpus) -> bool:
 
 
 def validate_cluster_percentages_sum_100(
-    clusters: list[ContentCluster],
-    tolerance: float = 2.0
+    clusters: list[ContentCluster], tolerance: float = 2.0
 ) -> bool:
     """
     Validate that ContentCluster percentages sum to approximately 100%.
@@ -136,10 +131,7 @@ def validate_cluster_percentages_sum_100(
     return True
 
 
-def validate_email_id_references(
-    categories: list[Category],
-    corpus: Corpus
-) -> bool:
+def validate_email_id_references(categories: list[Category], corpus: Corpus) -> bool:
     """
     Validate that Category.example_email_ids reference valid Email.id values.
 
@@ -165,11 +157,13 @@ def validate_email_id_references(
     for category in categories:
         for email_id in category.example_email_ids:
             if email_id not in valid_email_ids:
-                invalid_references.append({
-                    'category_id': category.category_id,
-                    'category_name': category.category_name,
-                    'invalid_email_id': email_id
-                })
+                invalid_references.append(
+                    {
+                        "category_id": category.category_id,
+                        "category_name": category.category_name,
+                        "invalid_email_id": email_id,
+                    }
+                )
 
     if invalid_references:
         # Log first few examples

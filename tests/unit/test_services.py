@@ -7,6 +7,7 @@ Tests the service layer components:
 - SuggestionService
 - PipelineService
 """
+
 import json
 import tempfile
 from datetime import datetime
@@ -370,9 +371,10 @@ class TestAnalysisServiceIncremental:
         """Test that embedding_cache is forwarded to run_full_analysis."""
         from src.services.analysis_service import AnalysisService
 
-        mock_rfa.return_value = (create_test_analysis_results(), {
-            "cached_count": 5, "generated_count": 5, "total_emails": 10, "hit_rate": 0.5
-        })
+        mock_rfa.return_value = (
+            create_test_analysis_results(),
+            {"cached_count": 5, "generated_count": 5, "total_emails": 10, "hit_rate": 0.5},
+        )
 
         config = AnalyzeConfig()
         service = AnalysisService(config)
@@ -391,7 +393,10 @@ class TestAnalysisServiceIncremental:
         from src.services.analysis_service import AnalysisService
 
         expected_stats = {
-            "cached_count": 5, "generated_count": 5, "total_emails": 10, "hit_rate": 0.5
+            "cached_count": 5,
+            "generated_count": 5,
+            "total_emails": 10,
+            "hit_rate": 0.5,
         }
         mock_rfa.return_value = (create_test_analysis_results(), expected_stats)
 
@@ -1074,12 +1079,18 @@ class TestExtractionServiceBoth:
         gmail_corpus = create_test_corpus(emails=[create_test_email(email_id="gmail_1")])
 
         m365_result = ExtractionResult(
-            corpus=m365_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
         gmail_result = ExtractionResult(
-            corpus=gmail_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
 
         service._m365_extractor = MagicMock()
@@ -1105,12 +1116,18 @@ class TestExtractionServiceBoth:
         gmail_corpus = create_test_corpus(emails=[create_test_email(email_id="gmail_1")])
 
         m365_result = ExtractionResult(
-            corpus=m365_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
         gmail_result = ExtractionResult(
-            corpus=gmail_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
 
         service._m365_extractor = MagicMock()
@@ -1223,12 +1240,18 @@ class TestExtractionServiceSourceRegistry:
         gmail_corpus = create_test_corpus(emails=gmail_emails)
 
         m365_result = ExtractionResult(
-            corpus=m365_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
         gmail_result = ExtractionResult(
-            corpus=gmail_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
 
         service._m365_extractor = MagicMock()
@@ -1260,7 +1283,8 @@ class TestMergeCorpora:
         c2 = create_test_corpus(emails=[])
 
         merged = ExtractionService._merge_corpora(
-            [c1, c2], user_email="test@example.com",
+            [c1, c2],
+            user_email="test@example.com",
             source_labels=["A", "B"],
         )
 
@@ -1275,7 +1299,8 @@ class TestMergeCorpora:
         c1 = create_test_corpus(emails=emails)
 
         merged = ExtractionService._merge_corpora(
-            [c1], user_email="test@example.com",
+            [c1],
+            user_email="test@example.com",
             source_labels=["Source"],
         )
 
@@ -1318,9 +1343,7 @@ class TestPipelineServiceRun:
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
     @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
-    def test_run_returns_pipeline_result(
-        self, mock_st, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_run_returns_pipeline_result(self, mock_st, mock_suggest, mock_analyze, mock_extract):
         """Test that run returns PipelineResult."""
 
         from src.services.pipeline_service import PipelineResult, PipelineService
@@ -1348,9 +1371,7 @@ class TestPipelineServiceRun:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_run_calls_progress_callback(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_run_calls_progress_callback(self, mock_suggest, mock_analyze, mock_extract):
         """Test that run calls progress callback."""
         from src.services.pipeline_service import PipelineService
 
@@ -1582,8 +1603,10 @@ class TestExtractionServiceFailedEmails:
         mock_corpus = create_test_corpus()
         failed = [
             ExtractionError(
-                email_id="bad_1", error_type="timeout",
-                error_message="timeout", timestamp=datetime.now(),
+                email_id="bad_1",
+                error_type="timeout",
+                error_message="timeout",
+                timestamp=datetime.now(),
             )
         ]
         mock_result = ExtractionResult(
@@ -1615,12 +1638,16 @@ class TestExtractionServiceFailedEmails:
         existing_corpus = create_test_corpus()
         failed = [
             ExtractionError(
-                email_id="bad_1", error_type="malformed",
-                error_message="bad data", timestamp=datetime.now(),
+                email_id="bad_1",
+                error_type="malformed",
+                error_message="bad data",
+                timestamp=datetime.now(),
             ),
             ExtractionError(
-                email_id="bad_2", error_type="timeout",
-                error_message="timeout", timestamp=datetime.now(),
+                email_id="bad_2",
+                error_type="timeout",
+                error_message="timeout",
+                timestamp=datetime.now(),
             ),
         ]
         mock_result = IncrementalExtractionResult(
@@ -1690,9 +1717,7 @@ class TestExtractionServiceErrorPropagation:
         service = ExtractionService(config, user_email="test@example.com")
 
         service._m365_extractor = MagicMock()
-        service._m365_extractor.extract_all.side_effect = ConnectionError(
-            "Server unreachable"
-        )
+        service._m365_extractor.extract_all.side_effect = ConnectionError("Server unreachable")
 
         with patch("src.services.extraction_service.logger") as mock_logger:
             with pytest.raises(ConnectionError, match="Server unreachable"):
@@ -1710,9 +1735,7 @@ class TestExtractionServiceErrorPropagation:
         service = ExtractionService(config, user_email="test@example.com")
 
         service._m365_extractor = MagicMock()
-        service._m365_extractor.extract_all.side_effect = PermissionError(
-            "Auth failed"
-        )
+        service._m365_extractor.extract_all.side_effect = PermissionError("Auth failed")
 
         with pytest.raises(PermissionError, match="Auth failed"):
             service.run()
@@ -1728,8 +1751,11 @@ class TestExtractionServiceErrorPropagation:
         # M365 succeeds, Gmail fails
         m365_corpus = create_test_corpus(emails=[create_test_email(email_id="m365_1")])
         m365_result = ExtractionResult(
-            corpus=m365_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_all.return_value = m365_result
@@ -1818,8 +1844,11 @@ class TestExtractionServiceConfigPropagation:
 
         mock_corpus = create_test_corpus()
         mock_result = ExtractionResult(
-            corpus=mock_corpus, failed_emails=[],
-            success_count=10, failure_count=0, total_attempted=10,
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=10,
+            failure_count=0,
+            total_attempted=10,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_all.return_value = mock_result
@@ -1842,8 +1871,11 @@ class TestExtractionServiceConfigPropagation:
 
         existing_corpus = create_test_corpus()
         mock_result = IncrementalExtractionResult(
-            corpus=existing_corpus, failed_emails=[],
-            new_emails_count=5, previous_count=10, total_count=15,
+            corpus=existing_corpus,
+            failed_emails=[],
+            new_emails_count=5,
+            previous_count=10,
+            total_count=15,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_incremental.return_value = mock_result
@@ -1867,8 +1899,11 @@ class TestExtractionServiceConfigPropagation:
 
         mock_corpus = create_test_corpus()
         mock_result = ExtractionResult(
-            corpus=mock_corpus, failed_emails=[],
-            success_count=10, failure_count=0, total_attempted=10,
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=10,
+            failure_count=0,
+            total_attempted=10,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_all.return_value = mock_result
@@ -1892,8 +1927,11 @@ class TestExtractionServiceConfigPropagation:
 
         mock_corpus = create_test_corpus()
         mock_result = ExtractionResult(
-            corpus=mock_corpus, failed_emails=[],
-            success_count=10, failure_count=0, total_attempted=10,
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=10,
+            failure_count=0,
+            total_attempted=10,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_all.return_value = mock_result
@@ -1916,8 +1954,11 @@ class TestExtractionServiceConfigPropagation:
 
         existing_corpus = create_test_corpus()
         mock_result = IncrementalExtractionResult(
-            corpus=existing_corpus, failed_emails=[],
-            new_emails_count=5, previous_count=10, total_count=15,
+            corpus=existing_corpus,
+            failed_emails=[],
+            new_emails_count=5,
+            previous_count=10,
+            total_count=15,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_incremental.return_value = mock_result
@@ -1956,7 +1997,8 @@ class TestMergeCorporaEdgeCases:
         c2 = create_test_corpus(emails=emails_b)
 
         merged = ExtractionService._merge_corpora(
-            [c1, c2], user_email="test@example.com",
+            [c1, c2],
+            user_email="test@example.com",
             source_labels=["A", "B"],
         )
 
@@ -1973,7 +2015,8 @@ class TestMergeCorporaEdgeCases:
         c1 = create_test_corpus(emails=emails)
 
         merged = ExtractionService._merge_corpora(
-            [c1], user_email="test@example.com",
+            [c1],
+            user_email="test@example.com",
             source_labels=["Test"],
         )
 
@@ -1992,7 +2035,8 @@ class TestMergeCorporaEdgeCases:
         c1 = create_test_corpus(emails=[])
 
         merged = ExtractionService._merge_corpora(
-            [c1], user_email="test@example.com",
+            [c1],
+            user_email="test@example.com",
             source_labels=["Empty"],
         )
 
@@ -2006,7 +2050,8 @@ class TestMergeCorporaEdgeCases:
         c2 = create_test_corpus(emails=[create_test_email(email_id="e2")])
 
         merged = ExtractionService._merge_corpora(
-            [c1, c2], user_email="test@example.com",
+            [c1, c2],
+            user_email="test@example.com",
             source_labels=["M365/Hotmail", "Gmail"],
         )
 
@@ -2021,7 +2066,8 @@ class TestMergeCorporaEdgeCases:
         c1 = create_test_corpus(emails=[create_test_email(email_id="e1")])
 
         merged = ExtractionService._merge_corpora(
-            [c1], user_email="merged@example.com",
+            [c1],
+            user_email="merged@example.com",
             source_labels=["Test"],
         )
 
@@ -2093,9 +2139,7 @@ class TestAnalysisServiceGenerateViz:
         results = create_test_analysis_results()
 
         with patch("src.services.analysis_service.logger") as mock_logger:
-            with patch(
-                "src.analyzers.semantic_analyzer.SemanticAnalyzer"
-            ) as mock_sem:
+            with patch("src.analyzers.semantic_analyzer.SemanticAnalyzer") as mock_sem:
                 mock_sem.side_effect = RuntimeError("Model loading failed")
                 service._generate_viz(corpus, results)
 
@@ -2112,16 +2156,12 @@ class TestAnalysisServiceGenerateViz:
 
         # Create results with only 1 cluster
         single_cluster_results = create_test_analysis_results()
-        single_cluster_results.content_clusters = [
-            single_cluster_results.content_clusters[0]
-        ]
+        single_cluster_results.content_clusters = [single_cluster_results.content_clusters[0]]
 
         corpus = create_test_corpus()
 
         with patch("src.services.analysis_service.logger") as mock_logger:
-            with patch(
-                "src.analyzers.semantic_analyzer.SemanticAnalyzer"
-            ) as mock_sem_cls:
+            with patch("src.analyzers.semantic_analyzer.SemanticAnalyzer") as mock_sem_cls:
                 mock_analyzer = MagicMock()
                 mock_analyzer.model.encode.return_value = np.random.rand(10, 384)
                 mock_sem_cls.return_value = mock_analyzer
@@ -2129,9 +2169,7 @@ class TestAnalysisServiceGenerateViz:
                 service._generate_viz(corpus, single_cluster_results)
 
             # Should log a warning about fewer than 2 clusters
-            warning_calls = [
-                call[0][0] for call in mock_logger.warning.call_args_list
-            ]
+            warning_calls = [call[0][0] for call in mock_logger.warning.call_args_list]
             assert any("fewer than 2 clusters" in msg for msg in warning_calls)
 
     def test_generate_viz_happy_path(self):
@@ -2170,9 +2208,7 @@ class TestAnalysisServiceGenerateViz:
         mock_embeddings = np.random.rand(10, 384)
         mock_labels = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
 
-        with patch(
-            "src.analyzers.semantic_analyzer.SemanticAnalyzer"
-        ) as mock_sem_cls:
+        with patch("src.analyzers.semantic_analyzer.SemanticAnalyzer") as mock_sem_cls:
             mock_analyzer = MagicMock()
             mock_analyzer.model.encode.return_value = mock_embeddings
             mock_sem_cls.return_value = mock_analyzer
@@ -2194,7 +2230,9 @@ class TestAnalysisServiceGenerateViz:
                     # Verify generate_cluster_visualization was called
                     mock_gen_viz.assert_called_once()
                     call_kwargs = mock_gen_viz.call_args[1]
-                    assert call_kwargs["output_path"] == Path("/tmp/test_output/cluster_visualization.png")
+                    assert call_kwargs["output_path"] == Path(
+                        "/tmp/test_output/cluster_visualization.png"
+                    )
                     # Verify silhouette scores were passed
                     assert call_kwargs["cluster_silhouette_scores"] is not None
 
@@ -2233,9 +2271,7 @@ class TestAnalysisServiceGenerateViz:
         mock_embeddings = np.random.rand(10, 384)
         mock_labels = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
 
-        with patch(
-            "src.analyzers.semantic_analyzer.SemanticAnalyzer"
-        ) as mock_sem_cls:
+        with patch("src.analyzers.semantic_analyzer.SemanticAnalyzer") as mock_sem_cls:
             mock_analyzer = MagicMock()
             mock_analyzer.model.encode.return_value = mock_embeddings
             mock_sem_cls.return_value = mock_analyzer
@@ -2324,9 +2360,7 @@ class TestPipelineServiceSkipExtraction:
 
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_skip_extraction_uses_existing_corpus(
-        self, mock_suggest, mock_analyze
-    ):
+    def test_skip_extraction_uses_existing_corpus(self, mock_suggest, mock_analyze):
         """Test skip_extraction=True uses the provided corpus."""
         from src.services.pipeline_service import PipelineResult, PipelineService
 
@@ -2369,9 +2403,7 @@ class TestPipelineServiceSkipExtraction:
 
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_skip_extraction_progress_callback(
-        self, mock_suggest, mock_analyze
-    ):
+    def test_skip_extraction_progress_callback(self, mock_suggest, mock_analyze):
         """Test that skip_extraction reports correct progress messages."""
         from src.services.pipeline_service import PipelineService
 
@@ -2445,9 +2477,7 @@ class TestPipelineServiceErrors:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_suggestion_failure_propagates(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_suggestion_failure_propagates(self, mock_suggest, mock_analyze, mock_extract):
         """Test that suggestion failure propagates through pipeline."""
         from src.services.pipeline_service import PipelineService
 
@@ -2479,9 +2509,7 @@ class TestPipelineServiceConfigPropagation:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_extract_config_propagated(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_extract_config_propagated(self, mock_suggest, mock_analyze, mock_extract):
         """Test that extract config is passed to ExtractionService."""
         from src.services.pipeline_service import PipelineService
 
@@ -2511,9 +2539,7 @@ class TestPipelineServiceConfigPropagation:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_analyze_config_propagated(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_analyze_config_propagated(self, mock_suggest, mock_analyze, mock_extract):
         """Test that analyze config is passed to AnalysisService."""
         from src.services.pipeline_service import PipelineService
 
@@ -2540,9 +2566,7 @@ class TestPipelineServiceConfigPropagation:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_suggest_config_propagated(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_suggest_config_propagated(self, mock_suggest, mock_analyze, mock_extract):
         """Test that suggest config is passed to SuggestionService."""
         from src.services.pipeline_service import PipelineService
 
@@ -2569,9 +2593,7 @@ class TestPipelineServiceConfigPropagation:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_auto_clusters_propagated_to_analysis(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_auto_clusters_propagated_to_analysis(self, mock_suggest, mock_analyze, mock_extract):
         """Test that auto_clusters flag is forwarded to analysis service."""
         from src.services.pipeline_service import PipelineService
 
@@ -2611,9 +2633,7 @@ class TestPipelineServiceOutputFiles:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_pipeline_saves_analysis_results(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_pipeline_saves_analysis_results(self, mock_suggest, mock_analyze, mock_extract):
         """Test that pipeline saves analysis results to JSON file."""
         from src.services.pipeline_service import PipelineService
 
@@ -2637,9 +2657,7 @@ class TestPipelineServiceOutputFiles:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_pipeline_saves_suggestions(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_pipeline_saves_suggestions(self, mock_suggest, mock_analyze, mock_extract):
         """Test that pipeline saves category suggestions to JSON file."""
         from src.services.pipeline_service import PipelineService
 
@@ -2667,9 +2685,7 @@ class TestPipelineServiceOutputFiles:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    def test_pipeline_creates_output_dir(
-        self, mock_suggest, mock_analyze, mock_extract
-    ):
+    def test_pipeline_creates_output_dir(self, mock_suggest, mock_analyze, mock_extract):
         """Test that pipeline creates output directory if it doesn't exist."""
         from src.services.pipeline_service import PipelineService
 
@@ -2801,8 +2817,11 @@ class TestExtractionServiceProgressDetails:
 
         mock_corpus = create_test_corpus()
         mock_result = ExtractionResult(
-            corpus=mock_corpus, failed_emails=[],
-            success_count=10, failure_count=0, total_attempted=10,
+            corpus=mock_corpus,
+            failed_emails=[],
+            success_count=10,
+            failure_count=0,
+            total_attempted=10,
         )
         service._m365_extractor = MagicMock()
         service._m365_extractor.extract_all.return_value = mock_result
@@ -2824,12 +2843,18 @@ class TestExtractionServiceProgressDetails:
         gmail_corpus = create_test_corpus(emails=[create_test_email(email_id="gmail_1")])
 
         m365_result = ExtractionResult(
-            corpus=m365_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
         gmail_result = ExtractionResult(
-            corpus=gmail_corpus, failed_emails=[],
-            success_count=1, failure_count=0, total_attempted=1,
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=1,
+            failure_count=0,
+            total_attempted=1,
         )
 
         service._m365_extractor = MagicMock()
@@ -2859,12 +2884,18 @@ class TestExtractionServiceProgressDetails:
         gmail_corpus = create_test_corpus(emails=gmail_emails)
 
         m365_result = ExtractionResult(
-            corpus=m365_corpus, failed_emails=[],
-            success_count=5, failure_count=0, total_attempted=5,
+            corpus=m365_corpus,
+            failed_emails=[],
+            success_count=5,
+            failure_count=0,
+            total_attempted=5,
         )
         gmail_result = ExtractionResult(
-            corpus=gmail_corpus, failed_emails=[],
-            success_count=3, failure_count=0, total_attempted=3,
+            corpus=gmail_corpus,
+            failed_emails=[],
+            success_count=3,
+            failure_count=0,
+            total_attempted=3,
         )
 
         service._m365_extractor = MagicMock()

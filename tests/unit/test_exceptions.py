@@ -10,6 +10,7 @@ Tests cover:
 
 Per Phase 6 Track 6A specification.
 """
+
 import pytest
 
 
@@ -31,10 +32,7 @@ class TestEmailAnalyzerError:
         """Test EmailAnalyzerError with recovery hint."""
         from src.exceptions import EmailAnalyzerError
 
-        error = EmailAnalyzerError(
-            "Something went wrong",
-            recovery_hint="Try again later"
-        )
+        error = EmailAnalyzerError("Something went wrong", recovery_hint="Try again later")
 
         assert error.message == "Something went wrong"
         assert error.recovery_hint == "Try again later"
@@ -44,8 +42,7 @@ class TestEmailAnalyzerError:
         from src.exceptions import EmailAnalyzerError
 
         error = EmailAnalyzerError(
-            "File error",
-            context={"file_path": "/path/to/file", "operation": "read"}
+            "File error", context={"file_path": "/path/to/file", "operation": "read"}
         )
 
         assert error.message == "File error"
@@ -57,9 +54,7 @@ class TestEmailAnalyzerError:
         from src.exceptions import EmailAnalyzerError
 
         error = EmailAnalyzerError(
-            "Complete error",
-            recovery_hint="Check the file exists",
-            context={"path": "/file.json"}
+            "Complete error", recovery_hint="Check the file exists", context={"path": "/file.json"}
         )
 
         assert error.message == "Complete error"
@@ -107,10 +102,7 @@ class TestCorpusExceptions:
         """Test CorpusNotFoundError with custom recovery hint."""
         from src.exceptions import CorpusNotFoundError
 
-        error = CorpusNotFoundError(
-            "/custom/path.json",
-            recovery_hint="Custom hint"
-        )
+        error = CorpusNotFoundError("/custom/path.json", recovery_hint="Custom hint")
 
         assert error.recovery_hint == "Custom hint"
 
@@ -161,8 +153,7 @@ class TestConfigurationExceptions:
         from src.exceptions import ConfigurationError
 
         error = ConfigurationError(
-            "Missing required field",
-            recovery_hint="Run 'config init' to generate a template"
+            "Missing required field", recovery_hint="Run 'config init' to generate a template"
         )
 
         assert error.recovery_hint == "Run 'config init' to generate a template"
@@ -172,9 +163,7 @@ class TestConfigurationExceptions:
         from src.exceptions import ConfigurationError, ConfigValidationError
 
         error = ConfigValidationError(
-            field="output_dir",
-            value="/invalid/path",
-            reason="Directory does not exist"
+            field="output_dir", value="/invalid/path", reason="Directory does not exist"
         )
 
         assert isinstance(error, ConfigurationError)
@@ -185,11 +174,7 @@ class TestConfigurationExceptions:
         """Test ConfigValidationError includes field details in context."""
         from src.exceptions import ConfigValidationError
 
-        error = ConfigValidationError(
-            field="num_clusters",
-            value=-5,
-            reason="Must be positive"
-        )
+        error = ConfigValidationError(field="num_clusters", value=-5, reason="Must be positive")
 
         assert "field" in error.context
         assert "value" in error.context
@@ -215,8 +200,7 @@ class TestAnalysisExceptions:
         from src.exceptions import AnalysisError
 
         error = AnalysisError(
-            "Analyzer error",
-            context={"analyzer": "semantic", "stage": "embedding"}
+            "Analyzer error", context={"analyzer": "semantic", "stage": "embedding"}
         )
 
         assert error.context["analyzer"] == "semantic"
@@ -235,10 +219,7 @@ class TestAnalysisExceptions:
         """Test ClusteringError with cluster information in context."""
         from src.exceptions import ClusteringError
 
-        error = ClusteringError(
-            "Invalid k value",
-            context={"k": 0, "min_k": 2, "max_k": 15}
-        )
+        error = ClusteringError("Invalid k value", context={"k": 0, "min_k": 2, "max_k": 15})
 
         assert "k" in error.context
         assert error.context["k"] == 0
@@ -261,8 +242,7 @@ class TestExtractionExceptions:
         from src.exceptions import ExtractionError
 
         error = ExtractionError(
-            "Batch failed",
-            context={"batch_number": 5, "total_batches": 10, "emails_so_far": 2500}
+            "Batch failed", context={"batch_number": 5, "total_batches": 10, "emails_so_far": 2500}
         )
 
         assert error.context["batch_number"] == 5
@@ -284,8 +264,7 @@ class TestExtractionExceptions:
         from src.exceptions import M365AuthError
 
         error = M365AuthError(
-            "Token expired",
-            context={"user_email": "user@example.com", "error_code": "AADSTS50001"}
+            "Token expired", context={"user_email": "user@example.com", "error_code": "AADSTS50001"}
         )
 
         assert "user_email" in error.context

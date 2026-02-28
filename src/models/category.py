@@ -5,6 +5,7 @@ Per data-model.md lines 320-355.
 Per Phase 4 Track 4A.1: Added hierarchical category support with parent_category_id,
 level, and subcategories fields for tree-based category organization.
 """
+
 from __future__ import annotations
 
 from enum import Enum
@@ -44,30 +45,28 @@ class Category(BaseModel):
         default=None,
         ge=0.0,
         le=1.0,
-        description="Quality score for the category name (0-1, higher is better)"
+        description="Quality score for the category name (0-1, higher is better)",
     )
     needs_name_review: bool = Field(
         default=False,
-        description="Flag indicating the category name needs human review (quality < 0.4)"
+        description="Flag indicating the category name needs human review (quality < 0.4)",
     )
     confidence_breakdown: dict[str, float] | None = Field(
         default=None,
-        description="Component scores that make up the confidence score (cohesion, volume, source, percentage, name_quality, distinctiveness)"
+        description="Component scores that make up the confidence score (cohesion, volume, source, percentage, name_quality, distinctiveness)",
     )
 
     # Hierarchical category fields (Task 4A.1)
     parent_category_id: str | None = Field(
-        default=None,
-        description="ID of parent category if this is a subcategory"
+        default=None, description="ID of parent category if this is a subcategory"
     )
     level: int = Field(
         default=0,
         ge=0,
-        description="Hierarchy level (0=top-level, 1=subcategory, 2=sub-subcategory, etc.)"
+        description="Hierarchy level (0=top-level, 1=subcategory, 2=sub-subcategory, etc.)",
     )
     subcategories: list[Category] = Field(
-        default_factory=list,
-        description="Child categories for tree view display"
+        default_factory=list, description="Child categories for tree view display"
     )
 
     @property

@@ -4,6 +4,7 @@ Sender Analyzer module.
 Implements sender pattern analysis per analyzer_contract.md lines 38-100.
 Contract compliance: FR-012, FR-013
 """
+
 import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable
@@ -32,6 +33,7 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
         """
         if thresholds is None:
             from ..config.models import AnalyzerThresholds
+
             thresholds = AnalyzerThresholds()
         self.thresholds = thresholds
 
@@ -41,9 +43,7 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
         return "Sender Analyzer"
 
     def analyze(
-        self,
-        corpus: Corpus,
-        progress_callback: Callable[[int, int], None] | None = None
+        self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> SenderAnalysis:
         """
         Analyze sender patterns.
@@ -98,23 +98,24 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
             progress_callback(total_emails, total_emails)
 
         logger.debug(
-            f"Counted {len(sender_counts)} unique senders "
-            f"from {len(domain_counts)} unique domains"
+            f"Counted {len(sender_counts)} unique senders from {len(domain_counts)} unique domains"
         )
 
         # Extract top N senders by frequency
-        top_sender_emails = [email for email, _ in sender_counts.most_common(self.thresholds.top_senders)]
+        top_sender_emails = [
+            email for email, _ in sender_counts.most_common(self.thresholds.top_senders)
+        ]
         top_senders = []
 
         for sender_email in top_sender_emails:
             sender = Sender(
                 email=sender_email,
                 name=sender_names.get(sender_email, ""),
-                domain=sender_email.split('@')[1] if '@' in sender_email else "",
+                domain=sender_email.split("@")[1] if "@" in sender_email else "",
                 type=SenderType.PERSONAL,  # Will be classified next
                 frequency_count=sender_counts[sender_email],
                 sample_subjects=sender_subjects[sender_email],
-                email_ids=sender_email_ids[sender_email]
+                email_ids=sender_email_ids[sender_email],
             )
             # Classify sender type
             sender.type = self.classify_sender_type(sender)
@@ -126,16 +127,13 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
             for domain, count in domain_counts.most_common(self.thresholds.top_domains)
         ]
 
-        logger.debug(
-            f"Extracted top {len(top_senders)} senders "
-            f"and top {len(top_domains)} domains"
-        )
+        logger.debug(f"Extracted top {len(top_senders)} senders and top {len(top_domains)} domains")
 
         return SenderAnalysis(
             top_senders=top_senders,
             top_domains=top_domains,
             unique_senders=len(sender_counts),
-            unique_domains=len(domain_counts)
+            unique_domains=len(domain_counts),
         )
 
     def classify_sender_type(self, sender: Sender) -> SenderType:
@@ -161,19 +159,23 @@ class SenderAnalyzer(BaseAnalyzer[SenderAnalysis]):
             indicator in email_lower or indicator in domain_lower
             for indicator in self.thresholds.service_keywords
         ):
-            logger.debug(f"Classified {sender.email} as SERVICE (email/domain contains service indicator)")
+            logger.debug(
+                f"Classified {sender.email} as SERVICE (email/domain contains service indicator)"
+            )
             return SenderType.SERVICE
 
         # Combine all sample subjects for keyword analysis
         all_subjects_text = " ".join(sender.sample_subjects).lower()
 
         # Check for marketing indicators (requires sufficient emails)
-        if sender.frequency_count > self.thresholds.marketing_min_emails and any(keyword in all_subjects_text for keyword in self.thresholds.marketing_keywords):
-                logger.debug(
-                    f"Classified {sender.email} as MARKETING "
-                    f"(count: {sender.frequency_count}, keywords found)"
-                )
-                return SenderType.MARKETING
+        if sender.frequency_count > self.thresholds.marketing_min_emails and any(
+            keyword in all_subjects_text for keyword in self.thresholds.marketing_keywords
+        ):
+            logger.debug(
+                f"Classified {sender.email} as MARKETING "
+                f"(count: {sender.frequency_count}, keywords found)"
+            )
+            return SenderType.MARKETING
 
         # Check for work indicators
         if any(keyword in all_subjects_text for keyword in self.thresholds.work_keywords):

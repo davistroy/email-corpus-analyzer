@@ -4,6 +4,7 @@ Volume Analyzer module.
 Implements volume statistics analysis per analyzer_contract.md lines 282-316.
 Contract compliance: FR-019
 """
+
 import logging
 from collections.abc import Callable
 from datetime import datetime
@@ -24,9 +25,7 @@ class VolumeAnalyzer(BaseAnalyzer[VolumeStats]):
         return "Volume Analyzer"
 
     def analyze(
-        self,
-        corpus: Corpus,
-        progress_callback: Callable[[int, int], None] | None = None
+        self, corpus: Corpus, progress_callback: Callable[[int, int], None] | None = None
     ) -> VolumeStats:
         """
         Calculate corpus volume statistics.
@@ -99,16 +98,12 @@ class VolumeAnalyzer(BaseAnalyzer[VolumeStats]):
             date_range = {
                 "oldest": oldest_date.isoformat(),
                 "newest": newest_date.isoformat(),
-                "span_days": str(span_days)
+                "span_days": str(span_days),
             }
         else:
             # Fallback for edge case (should not happen if corpus is not empty)
             emails_per_day = 0.0
-            date_range = {
-                "oldest": "",
-                "newest": "",
-                "span_days": "0"
-            }
+            date_range = {"oldest": "", "newest": "", "span_days": "0"}
 
         logger.debug(
             f"Volume stats: {total_emails} emails, {unique_senders} unique senders, "
@@ -124,5 +119,5 @@ class VolumeAnalyzer(BaseAnalyzer[VolumeStats]):
             with_attachments=attachment_count,
             attachment_percentage=round(attachment_percentage, 2),
             avg_body_length_chars=avg_body_length_chars,
-            emails_per_day=round(emails_per_day, 2)
+            emails_per_day=round(emails_per_day, 2),
         )

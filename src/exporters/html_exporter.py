@@ -6,6 +6,7 @@ Generates standalone HTML reports with:
 - Charts for confidence distribution and source breakdown
 - Inline CSS (no external dependencies)
 """
+
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -61,7 +62,7 @@ def export_categories_to_html(
         template_path = TEMPLATE_DIR / TEMPLATE_NAME
         raise ExportError(
             message=f"Template not found at {template_path}. "
-                    "Reinstall package or check installation.",
+            "Reinstall package or check installation.",
             recovery_hint=(
                 "The HTML template directory is missing. "
                 "Reinstall the package with 'pip install -e .' or restore the "
@@ -82,7 +83,7 @@ def export_categories_to_html(
         template_path = TEMPLATE_DIR / TEMPLATE_NAME
         raise ExportError(
             message=f"Template not found at {template_path}. "
-                    "Reinstall package or check installation.",
+            "Reinstall package or check installation.",
             recovery_hint=(
                 "The HTML report template file is missing. "
                 "Reinstall the package with 'pip install -e .' or restore the "
@@ -93,9 +94,7 @@ def export_categories_to_html(
 
     # Calculate statistics
     total_categories = len(categories)
-    total_emails = sum(
-        cat.email_count for cat in categories if cat.email_count is not None
-    )
+    total_emails = sum(cat.email_count for cat in categories if cat.email_count is not None)
     avg_confidence = (
         round(sum(cat.confidence for cat in categories) / total_categories * 100)
         if total_categories > 0

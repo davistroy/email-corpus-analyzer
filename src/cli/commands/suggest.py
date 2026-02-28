@@ -1,4 +1,5 @@
 """Suggest command: generate category suggestions from analysis."""
+
 import argparse
 import time
 
@@ -35,34 +36,35 @@ Examples:
 
   # Preview without executing
   %(prog)s --dry-run
-        """
+        """,
     )
     suggest_parser.add_argument(
         "--analysis",
         type=Path,
-        help="Path to analysis results JSON (default: {output-dir}/corpus_analysis_results.json)"
+        help="Path to analysis results JSON (default: {output-dir}/corpus_analysis_results.json)",
     )
     suggest_parser.add_argument(
         "--min-cluster-percentage",
         type=float,
         default=5.0,
-        help="Minimum cluster size percentage for category generation (default: 5.0)"
+        help="Minimum cluster size percentage for category generation (default: 5.0)",
     )
     suggest_parser.add_argument(
         "--min-sender-count",
         type=int,
         default=20,
-        help="Minimum email count for sender-based categories (default: 20)"
+        help="Minimum email count for sender-based categories (default: 20)",
     )
     suggest_parser.add_argument(
         "--suggestions-file",
         type=Path,
-        help="Custom path for suggestions JSON (default: {output-dir}/category_suggestions.json)"
+        help="Custom path for suggestions JSON (default: {output-dir}/category_suggestions.json)",
     )
     suggest_parser.add_argument(
-        "-n", "--dry-run",
+        "-n",
+        "--dry-run",
         action="store_true",
-        help="Show what would be done without actually executing"
+        help="Show what would be done without actually executing",
     )
 
     return suggest_parser
@@ -79,22 +81,24 @@ def cmd_suggest(args: argparse.Namespace) -> int:
         Exit code (0 = success, non-zero = error)
     """
     # Handle dry-run mode
-    if getattr(args, 'dry_run', False):
+    if getattr(args, "dry_run", False):
         from src.preview.estimators import SuggestEstimator, format_suggest_preview
 
         estimator = SuggestEstimator()
         estimate = estimator.estimate(args)
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "suggest",
-                "dry_run": True,
-                "status": "preview",
-                "analysis_path": str(estimate.analysis_path),
-                "analysis_exists": estimate.analysis_exists,
-                "output_path": str(estimate.output_path),
-                "duration_estimate_seconds": estimate.duration_estimate_seconds,
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "suggest",
+                    "dry_run": True,
+                    "status": "preview",
+                    "analysis_path": str(estimate.analysis_path),
+                    "analysis_exists": estimate.analysis_exists,
+                    "output_path": str(estimate.output_path),
+                    "duration_estimate_seconds": estimate.duration_estimate_seconds,
+                }
+            )
         else:
             print(format_suggest_preview(estimate))
 
@@ -123,24 +127,22 @@ def cmd_suggest(args: argparse.Namespace) -> int:
             f"Run 'analyze' first to generate analysis results, "
             f"or specify a valid path with --analysis."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "suggest",
-                "status": "error",
-                "error": f"Analysis results file not found: {analysis_path}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "suggest",
+                    "status": "error",
+                    "error": f"Analysis results file not found: {analysis_path}",
+                }
+            )
         return 1
     except Exception as e:
         logger.error(
             f"Failed to load analysis results from {analysis_path}: {e}. "
             f"The file may be corrupted. Try re-running 'analyze' to regenerate it."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "suggest",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "suggest", "status": "error", "error": str(e)})
         return 1
 
     # Determine suggestions output path
@@ -154,14 +156,11 @@ def cmd_suggest(args: argparse.Namespace) -> int:
         categories = generator.generate_suggestions(
             analysis_results=results,
             min_cluster_percentage=args.min_cluster_percentage,
-            min_sender_count=args.min_sender_count
+            min_sender_count=args.min_sender_count,
         )
 
         # Save suggestions
-        save_json(
-            [cat.model_dump() for cat in categories],
-            suggestions_path
-        )
+        save_json([cat.model_dump() for cat in categories], suggestions_path)
 
         # Generate markdown report (atomic write to prevent corruption)
         report_path = PathConfig.get_suggestions_report_path()
@@ -170,16 +169,16 @@ def cmd_suggest(args: argparse.Namespace) -> int:
 
         duration = time.time() - start_time
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "suggest",
-                "status": "success",
-                "duration_seconds": round(duration, 2),
-                "output_file": str(suggestions_path),
-                "stats": {
-                    "categories_suggested": len(categories)
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "suggest",
+                    "status": "success",
+                    "duration_seconds": round(duration, 2),
+                    "output_file": str(suggestions_path),
+                    "stats": {"categories_suggested": len(categories)},
                 }
-            })
+            )
         else:
             logger.info(f"Generated {len(categories)} category suggestions")
 
@@ -192,10 +191,6 @@ def cmd_suggest(args: argparse.Namespace) -> int:
             f"Use --verbose for full traceback.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "suggest",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "suggest", "status": "error", "error": str(e)})
         return 1

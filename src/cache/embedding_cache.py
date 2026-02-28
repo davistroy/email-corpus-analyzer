@@ -7,6 +7,7 @@ numpy compressed format (.npz) for fast incremental analysis.
 Work Item 3.1: Added cache versioning with metadata sidecar (.meta.json)
 to detect model/config changes and auto-invalidate stale caches.
 """
+
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -77,6 +78,7 @@ class EmbeddingCache:
         """
         if cache_path is None:
             from src.utils.paths import PathConfig
+
             cache_path = PathConfig.get_output_dir() / "embeddings_cache.npz"
 
         self.cache_path = Path(cache_path)
@@ -151,9 +153,7 @@ class EmbeddingCache:
         self._misses += 1
         return None
 
-    def get_batch(
-        self, email_ids: list[str]
-    ) -> tuple[np.ndarray, list[str]]:
+    def get_batch(self, email_ids: list[str]) -> tuple[np.ndarray, list[str]]:
         """
         Get embeddings for multiple email IDs.
 
@@ -245,9 +245,7 @@ class EmbeddingCache:
 
         logger.debug("Cleared embedding cache")
 
-    def partition_ids(
-        self, email_ids: list[str]
-    ) -> tuple[list[str], list[str]]:
+    def partition_ids(self, email_ids: list[str]) -> tuple[list[str], list[str]]:
         """
         Partition email IDs into cached and uncached.
 
@@ -279,10 +277,7 @@ class EmbeddingCache:
             Number of embeddings removed
         """
         corpus_ids = {email.id for email in corpus.emails}
-        ids_to_remove = [
-            email_id for email_id in self._email_ids
-            if email_id not in corpus_ids
-        ]
+        ids_to_remove = [email_id for email_id in self._email_ids if email_id not in corpus_ids]
 
         if ids_to_remove:
             self.invalidate_batch(ids_to_remove)
@@ -406,7 +401,7 @@ class EmbeddingCache:
             total_entries=self.size,
             hits=self._hits,
             misses=self._misses,
-            cache_size_bytes=cache_size
+            cache_size_bytes=cache_size,
         )
 
     def _load(self) -> None:
@@ -420,8 +415,7 @@ class EmbeddingCache:
         if metadata is None:
             # Old cache without metadata sidecar - treat as invalid
             logger.warning(
-                "Cache file exists without metadata sidecar. "
-                "Starting fresh (old cache format)."
+                "Cache file exists without metadata sidecar. Starting fresh (old cache format)."
             )
             self._delete_cache_files()
             return
@@ -450,6 +444,4 @@ class EmbeddingCache:
 
     def _rebuild_index(self) -> None:
         """Rebuild the email ID to index mapping."""
-        self._id_to_index = {
-            email_id: idx for idx, email_id in enumerate(self._email_ids)
-        }
+        self._id_to_index = {email_id: idx for idx, email_id in enumerate(self._email_ids)}

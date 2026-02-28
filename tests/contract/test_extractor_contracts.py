@@ -11,6 +11,7 @@ NOTE: Extractor constructors initialize API clients that require auth.
 These tests verify the class structure and method signatures without
 instantiating the extractors (no network or auth required).
 """
+
 import inspect
 
 import pytest
@@ -116,9 +117,11 @@ class TestM365ExtractorSourceContract:
         assert "return" in source
         # Also verify via direct call on an uninitialized-safe approach:
         # The method doesn't use self, so we can call it with a dummy
-        result = EmailExtractor._get_source_name.__wrapped__(None) if hasattr(
-            EmailExtractor._get_source_name, "__wrapped__"
-        ) else EmailExtractor._get_source_name(None)  # type: ignore[arg-type]
+        result = (
+            EmailExtractor._get_source_name.__wrapped__(None)
+            if hasattr(EmailExtractor._get_source_name, "__wrapped__")
+            else EmailExtractor._get_source_name(None)
+        )  # type: ignore[arg-type]
         assert isinstance(result, str)
         assert len(result) > 0
 

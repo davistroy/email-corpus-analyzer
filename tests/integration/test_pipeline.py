@@ -4,6 +4,7 @@ Integration tests for full pipeline workflow.
 Tests the complete email analysis pipeline from corpus to suggestions.
 Per Phase 7, Track 7C specification.
 """
+
 import json
 import tempfile
 from datetime import datetime
@@ -121,9 +122,7 @@ class TestFullPipeline:
         analysis_path.write_text(analysis.model_dump_json(indent=2))
 
         suggestions_path = temp_output_dir / "category_suggestions.json"
-        suggestions_path.write_text(
-            "[" + ",\n".join(c.model_dump_json() for c in categories) + "]"
-        )
+        suggestions_path.write_text("[" + ",\n".join(c.model_dump_json() for c in categories) + "]")
 
         # Verify all files exist
         assert corpus_path.exists()
@@ -136,9 +135,7 @@ class TestFullPipeline:
         json.loads(suggestions_path.read_text())
 
     @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
-    def test_pipeline_analysis_contains_all_components(
-        self, mock_st, sample_corpus
-    ):
+    def test_pipeline_analysis_contains_all_components(self, mock_st, sample_corpus):
         """Test that analysis contains all required components."""
         from src.services.analysis_service import AnalysisService
 
@@ -163,9 +160,7 @@ class TestFullPipeline:
         assert len(analysis.content_clusters) > 0
 
     @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
-    def test_pipeline_suggestions_have_valid_structure(
-        self, mock_st, sample_corpus
-    ):
+    def test_pipeline_suggestions_have_valid_structure(self, mock_st, sample_corpus):
         """Test that suggestions have valid category structure."""
         from src.services.analysis_service import AnalysisService
         from src.services.suggestion_service import SuggestionService
@@ -190,9 +185,7 @@ class TestFullPipeline:
             assert category.source is not None
 
     @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
-    def test_pipeline_with_progress_callback(
-        self, mock_st, sample_corpus
-    ):
+    def test_pipeline_with_progress_callback(self, mock_st, sample_corpus):
         """Test that progress callbacks are called throughout pipeline."""
         from src.services.analysis_service import AnalysisService
         from src.services.suggestion_service import SuggestionService
@@ -218,7 +211,9 @@ class TestFullPipeline:
 
         # Verify callbacks were called
         assert len(callback_messages) > 0
-        assert any("analysis" in msg.lower() or "analyzer" in msg.lower() for msg in callback_messages)
+        assert any(
+            "analysis" in msg.lower() or "analyzer" in msg.lower() for msg in callback_messages
+        )
 
 
 class TestPipelineEdgeCases:
@@ -313,7 +308,10 @@ class TestDataPersistence:
         loaded_corpus = Corpus.model_validate(loaded_data)
 
         # Verify data integrity
-        assert loaded_corpus.extraction_metadata.total_emails == sample_corpus.extraction_metadata.total_emails
+        assert (
+            loaded_corpus.extraction_metadata.total_emails
+            == sample_corpus.extraction_metadata.total_emails
+        )
         assert len(loaded_corpus.emails) == len(sample_corpus.emails)
 
         for orig, loaded in zip(sample_corpus.emails, loaded_corpus.emails, strict=True):
@@ -347,4 +345,7 @@ class TestDataPersistence:
         # Verify data integrity
         assert loaded_analysis.volume_stats.total_emails == analysis.volume_stats.total_emails
         assert len(loaded_analysis.content_clusters) == len(analysis.content_clusters)
-        assert loaded_analysis.sender_analysis.unique_senders == analysis.sender_analysis.unique_senders
+        assert (
+            loaded_analysis.sender_analysis.unique_senders
+            == analysis.sender_analysis.unique_senders
+        )

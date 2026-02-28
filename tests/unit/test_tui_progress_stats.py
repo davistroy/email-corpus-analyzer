@@ -27,7 +27,7 @@ def create_test_category(
         source=source,
         source_id="test_source",
         example_email_ids=[],
-        distinguishing_features=[]
+        distinguishing_features=[],
     )
 
 
@@ -176,12 +176,7 @@ class TestStatsPanelInit:
         """Test StatsPanel with initial stats."""
         from src.ui.tui.widgets.stats_panel import StatsPanel
 
-        panel = StatsPanel(
-            accepted=5,
-            renamed=2,
-            merged=1,
-            deleted=3
-        )
+        panel = StatsPanel(accepted=5, renamed=2, merged=1, deleted=3)
 
         assert panel.accepted == 5
         assert panel.renamed == 2

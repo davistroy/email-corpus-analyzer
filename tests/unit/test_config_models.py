@@ -6,6 +6,7 @@ Tests cover:
 
 Following TDD: these tests were written BEFORE implementation.
 """
+
 from pathlib import Path
 
 import pytest
@@ -29,9 +30,7 @@ class TestExtractConfig:
         from src.config.models import ExtractConfig
 
         config = ExtractConfig(
-            batch_size=250,
-            checkpoint_interval=50,
-            corpus_file=Path("/custom/corpus.json")
+            batch_size=250, checkpoint_interval=50, corpus_file=Path("/custom/corpus.json")
         )
 
         assert config.batch_size == 250
@@ -112,7 +111,7 @@ class TestAnalyzeConfig:
             num_clusters=15,
             max_embedding_text_length=2000,
             corpus_file=Path("/input/corpus.json"),
-            analysis_file=Path("/output/analysis.json")
+            analysis_file=Path("/output/analysis.json"),
         )
 
         assert config.num_clusters == 15
@@ -266,7 +265,7 @@ class TestSuggestConfig:
             min_cluster_percentage=10.0,
             min_sender_count=50,
             analysis_file=Path("/input/analysis.json"),
-            suggestions_file=Path("/output/suggestions.json")
+            suggestions_file=Path("/output/suggestions.json"),
         )
 
         assert config.min_cluster_percentage == 10.0
@@ -326,7 +325,7 @@ class TestReviewConfig:
         config = ReviewConfig(
             suggestions_file=Path("/input/suggestions.json"),
             approved_file=Path("/output/approved.json"),
-            no_cleanup=True
+            no_cleanup=True,
         )
 
         assert config.suggestions_file == Path("/input/suggestions.json")
@@ -404,9 +403,7 @@ class TestAppConfig:
         """Test AppConfig can set nested ExtractConfig values."""
         from src.config.models import AppConfig, ExtractConfig
 
-        config = AppConfig(
-            extract=ExtractConfig(batch_size=200, checkpoint_interval=25)
-        )
+        config = AppConfig(extract=ExtractConfig(batch_size=200, checkpoint_interval=25))
 
         assert config.extract.batch_size == 200
         assert config.extract.checkpoint_interval == 25
@@ -423,12 +420,7 @@ class TestAppConfig:
         """Test AppConfig can set nested SuggestConfig values."""
         from src.config.models import AppConfig, SuggestConfig
 
-        config = AppConfig(
-            suggest=SuggestConfig(
-                min_cluster_percentage=8.0,
-                min_sender_count=30
-            )
-        )
+        config = AppConfig(suggest=SuggestConfig(min_cluster_percentage=8.0, min_sender_count=30))
 
         assert config.suggest.min_cluster_percentage == 8.0
         assert config.suggest.min_sender_count == 30
@@ -441,13 +433,8 @@ class TestAppConfig:
             "output_dir": "/custom/output",
             "user_email": "test@example.com",
             "verbose": True,
-            "extract": {
-                "batch_size": 300,
-                "checkpoint_interval": 75
-            },
-            "analyze": {
-                "num_clusters": 15
-            }
+            "extract": {"batch_size": 300, "checkpoint_interval": 75},
+            "analyze": {"num_clusters": 15},
         }
 
         config = AppConfig(**data)
@@ -466,7 +453,7 @@ class TestAppConfig:
         config = AppConfig(
             output_dir=Path("/custom/output"),
             user_email="test@example.com",
-            extract=ExtractConfig(batch_size=250)
+            extract=ExtractConfig(batch_size=250),
         )
 
         data = config.model_dump()
@@ -526,12 +513,8 @@ class TestConfigMerging:
         """Test merging nested config values."""
         from src.config.models import AppConfig, ExtractConfig, merge_configs
 
-        base = AppConfig(
-            extract=ExtractConfig(batch_size=500, checkpoint_interval=100)
-        )
-        override = AppConfig(
-            extract=ExtractConfig(batch_size=250)
-        )
+        base = AppConfig(extract=ExtractConfig(batch_size=500, checkpoint_interval=100))
+        override = AppConfig(extract=ExtractConfig(batch_size=250))
 
         result = merge_configs(base, override)
 
@@ -546,11 +529,9 @@ class TestConfigMerging:
 
         base = AppConfig(
             analyze=AnalyzeConfig(num_clusters=10),
-            suggest=SuggestConfig(min_cluster_percentage=5.0, min_sender_count=20)
+            suggest=SuggestConfig(min_cluster_percentage=5.0, min_sender_count=20),
         )
-        override = AppConfig(
-            suggest=SuggestConfig(min_sender_count=30)
-        )
+        override = AppConfig(suggest=SuggestConfig(min_sender_count=30))
 
         result = merge_configs(base, override)
 
@@ -576,16 +557,11 @@ class TestConfigMerging:
         """Test merging multiple configs (defaults < global < project)."""
         from src.config.models import AppConfig, ExtractConfig, merge_configs
 
-        defaults = AppConfig(
-            extract=ExtractConfig(batch_size=500, checkpoint_interval=100)
-        )
+        defaults = AppConfig(extract=ExtractConfig(batch_size=500, checkpoint_interval=100))
         global_config = AppConfig(
-            user_email="global@example.com",
-            extract=ExtractConfig(batch_size=300)
+            user_email="global@example.com", extract=ExtractConfig(batch_size=300)
         )
-        project_config = AppConfig(
-            extract=ExtractConfig(checkpoint_interval=50)
-        )
+        project_config = AppConfig(extract=ExtractConfig(checkpoint_interval=50))
 
         # Merge: defaults <- global <- project
         result = merge_configs(merge_configs(defaults, global_config), project_config)
@@ -765,7 +741,7 @@ class TestAnalyzerThresholds:
             "thresholds": {
                 "top_senders": 75,
                 "frequency_daily_threshold_days": 1.0,
-            }
+            },
         }
         config = AnalyzeConfig(**data)
 
@@ -874,7 +850,7 @@ class TestGeneratorThresholds:
             "thresholds": {
                 "max_senders_for_categories": 50,
                 "merge_email_overlap": 0.6,
-            }
+            },
         }
         config = SuggestConfig(**data)
 
@@ -950,8 +926,7 @@ class TestConfigMergePrecedence:
         from src.config.models import AnalyzeConfig, AppConfig, merge_configs
 
         global_config = AppConfig(
-            verbose=True,
-            analyze=AnalyzeConfig(num_clusters=15, max_embedding_text_length=2000)
+            verbose=True, analyze=AnalyzeConfig(num_clusters=15, max_embedding_text_length=2000)
         )
         # Override only sets num_clusters, NOT verbose or max_embedding_text_length
         project_config = AppConfig(analyze=AnalyzeConfig(num_clusters=20))
@@ -1019,10 +994,7 @@ class TestConfigMergePrecedence:
 
         from src.config.models import AppConfig, merge_configs
 
-        base = AppConfig(
-            output_dir=Path("/base/output"),
-            user_email="base@example.com"
-        )
+        base = AppConfig(output_dir=Path("/base/output"), user_email="base@example.com")
         # Override with only user_email, output_dir left as None (default)
         override = AppConfig(user_email="override@example.com")
 

@@ -1,4 +1,5 @@
 """Info command: show corpus statistics."""
+
 import argparse
 from datetime import datetime
 from pathlib import Path
@@ -28,12 +29,12 @@ Examples:
 
   # Output as JSON
   %(prog)s --json
-        """
+        """,
     )
     info_parser.add_argument(
         "--corpus",
         type=Path,
-        help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)"
+        help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)",
     )
 
     return info_parser
@@ -61,24 +62,22 @@ def cmd_info(args: argparse.Namespace) -> int:
             f"Run 'extract' first to create the corpus file, "
             f"or specify a valid path with --corpus."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "info",
-                "status": "error",
-                "error": f"Corpus file not found: {corpus_path}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "info",
+                    "status": "error",
+                    "error": f"Corpus file not found: {corpus_path}",
+                }
+            )
         return 1
     except Exception as e:
         logger.error(
             f"Failed to load corpus from {corpus_path}: {e}. "
             f"The file may be corrupted. Try re-running 'extract' to regenerate it."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "info",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "info", "status": "error", "error": str(e)})
         return 1
 
     # Extract statistics
@@ -156,24 +155,26 @@ def cmd_info(args: argparse.Namespace) -> int:
                 f"Approved count will show as 0."
             )
 
-    if getattr(args, 'json', False):
-        output_json({
-            "command": "info",
-            "status": "success",
-            "corpus_file": str(corpus_path),
-            "file_size_bytes": file_size,
-            "email_count": email_count,
-            "unique_senders": len(senders),
-            "unique_domains": len(domains),
-            "date_range": {
-                "oldest": min(dates).isoformat() if dates else None,
-                "newest": max(dates).isoformat() if dates else None,
-                "span_days": date_span_days
-            },
-            "analysis_available": analysis_available,
-            "categories_suggested": suggestions_count,
-            "categories_approved": approved_count
-        })
+    if getattr(args, "json", False):
+        output_json(
+            {
+                "command": "info",
+                "status": "success",
+                "corpus_file": str(corpus_path),
+                "file_size_bytes": file_size,
+                "email_count": email_count,
+                "unique_senders": len(senders),
+                "unique_domains": len(domains),
+                "date_range": {
+                    "oldest": min(dates).isoformat() if dates else None,
+                    "newest": max(dates).isoformat() if dates else None,
+                    "span_days": date_span_days,
+                },
+                "analysis_available": analysis_available,
+                "categories_suggested": suggestions_count,
+                "categories_approved": approved_count,
+            }
+        )
     else:
         print("\nCorpus Information")
         print("-" * 50)

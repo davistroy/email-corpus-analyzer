@@ -4,13 +4,14 @@ Abstract base class for all email analyzers.
 Per Phase 7, Track 7A specification.
 Provides a consistent interface for all analyzer implementations.
 """
+
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 if TYPE_CHECKING:
     from src.models.email import Email
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class AnalysisError(Exception):
@@ -87,7 +88,7 @@ class BaseAnalyzer(ABC, Generic[T]):
 
 # Export for convenience
 __all__ = [
-    'BaseAnalyzer',
-    'AnalysisError',
-    'T',
+    "BaseAnalyzer",
+    "AnalysisError",
+    "T",
 ]

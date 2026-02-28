@@ -3,6 +3,7 @@ Merge selection dialog for the TUI application.
 
 Modal dialog for selecting a category to merge into with preview.
 """
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Vertical
@@ -82,13 +83,7 @@ class MergeDialog(ModalScreen[Category | None]):
 
     selected_index: reactive[int] = reactive(0)
 
-    def __init__(
-        self,
-        categories: list[Category],
-        source_category: Category,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, categories: list[Category], source_category: Category, *args, **kwargs):
         """
         Initialize the merge dialog.
 
@@ -104,10 +99,7 @@ class MergeDialog(ModalScreen[Category | None]):
         """Compose the dialog content."""
         yield Container(
             Static("Merge Into Category", classes="dialog-title"),
-            Static(
-                f"Merging: {self.source_category.category_name}",
-                classes="dialog-subtitle"
-            ),
+            Static(f"Merging: {self.source_category.category_name}", classes="dialog-subtitle"),
             Static("Select a category to merge into:", classes="dialog-subtitle"),
             DataTable(id="merge-table", cursor_type="row"),
             Vertical(
@@ -117,7 +109,7 @@ class MergeDialog(ModalScreen[Category | None]):
             ),
             Static(
                 "Press Enter to select, j/k or arrows to navigate, Escape to cancel",
-                classes="dialog-hint"
+                classes="dialog-hint",
             ),
             id="merge-dialog",
         )

@@ -4,6 +4,7 @@ HTML parser utility for email body text extraction.
 Per research.md lines 166-185, uses BeautifulSoup with lxml parser
 and fallback to html.parser for robust handling of malformed HTML.
 """
+
 from bs4 import BeautifulSoup
 
 from src.utils.logger import get_logger
@@ -41,7 +42,7 @@ def extract_plain_text(html_content: str) -> str:
             return html_content.replace("<", " <").replace(">", "> ").strip()
 
     # Remove script and style elements
-    for script_or_style in soup(['script', 'style']):
+    for script_or_style in soup(["script", "style"]):
         script_or_style.decompose()
 
     # Get text with separator and strip whitespace
@@ -49,5 +50,5 @@ def extract_plain_text(html_content: str) -> str:
 
     # Collapse multiple spaces to single space
     import re
-    return re.sub(r'\s+', ' ', text)
 
+    return re.sub(r"\s+", " ", text)

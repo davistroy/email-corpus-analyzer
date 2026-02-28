@@ -15,6 +15,7 @@ from src.generators.name_generator import (
 # Task 2B.1: TF-IDF Name Generator Tests
 # -----------------------------------------------------------------------------
 
+
 class TestTfidfNameGenerator:
     """Test cases for TfidfNameGenerator class."""
 
@@ -176,6 +177,7 @@ class TestTfidfNameGenerator:
 # Task 2B.2: Name Quality Scoring Tests
 # -----------------------------------------------------------------------------
 
+
 class TestNameQualityScoring:
     """Test cases for score_name_quality function."""
 
@@ -265,13 +267,13 @@ class TestNameQualityScoring:
         score = score_name_quality("Amazon Order Confirmations")
 
         assert isinstance(score, NameQualityScore)
-        assert hasattr(score, 'total_score')
-        assert hasattr(score, 'length_penalty')
-        assert hasattr(score, 'generic_penalty')
-        assert hasattr(score, 'caps_penalty')
-        assert hasattr(score, 'specificity_bonus')
-        assert hasattr(score, 'proper_noun_bonus')
-        assert hasattr(score, 'action_bonus')
+        assert hasattr(score, "total_score")
+        assert hasattr(score, "length_penalty")
+        assert hasattr(score, "generic_penalty")
+        assert hasattr(score, "caps_penalty")
+        assert hasattr(score, "specificity_bonus")
+        assert hasattr(score, "proper_noun_bonus")
+        assert hasattr(score, "action_bonus")
 
     def test_score_bounded_zero_to_one(self):
         """Total score should be bounded between 0 and 1."""
@@ -285,7 +287,9 @@ class TestNameQualityScoring:
 
         for name in names:
             score = score_name_quality(name)
-            assert 0.0 <= score.total_score <= 1.0, f"'{name}' score {score.total_score} out of bounds"
+            assert 0.0 <= score.total_score <= 1.0, (
+                f"'{name}' score {score.total_score} out of bounds"
+            )
 
     def test_empty_name_zero_score(self):
         """Empty name should score 0."""
@@ -326,6 +330,7 @@ class TestNameQualityEdgeCases:
 # -----------------------------------------------------------------------------
 # Integration Tests
 # -----------------------------------------------------------------------------
+
 
 class TestNameGeneratorIntegration:
     """Integration tests for name generator with quality scoring."""
@@ -369,4 +374,6 @@ class TestNameGeneratorIntegration:
 
         # Should produce a decent quality name for clear clusters
         if confidence > 0.5:
-            assert quality_score.total_score > 0.4, f"Name '{name}' has low quality {quality_score.total_score}"
+            assert quality_score.total_score > 0.4, (
+                f"Name '{name}' has low quality {quality_score.total_score}"
+            )

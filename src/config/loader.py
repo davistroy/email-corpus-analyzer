@@ -9,6 +9,7 @@ Provides YAML configuration loading with resolution order:
 
 Per Task 1A.2 specification.
 """
+
 import os
 import platform
 from pathlib import Path
@@ -22,7 +23,6 @@ from src.config.models import AppConfig, merge_configs
 
 class ConfigLoadError(Exception):
     """Raised when configuration loading fails."""
-
 
 
 def get_global_config_path() -> Path:
@@ -109,10 +109,7 @@ def _dict_to_config(data: dict[str, Any]) -> AppConfig:
         raise ConfigLoadError(f"Configuration validation error: {e}") from e
 
 
-def load_config(
-    config_path: Path | None = None,
-    project_dir: Path | None = None
-) -> AppConfig:
+def load_config(config_path: Path | None = None, project_dir: Path | None = None) -> AppConfig:
     """
     Load configuration from all sources with proper precedence.
 

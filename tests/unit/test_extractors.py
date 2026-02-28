@@ -4,6 +4,7 @@ Unit tests for extractor modules.
 Tests CheckpointManager and EmailExtractor (backed by GraphAPIClient)
 with mocked API calls and file operations.
 """
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -208,7 +209,7 @@ class TestCheckpointManager:
             "emails_processed": 10,
             "last_processed_id": "abc",
             "timestamp": "2024-01-01T12:00:00",
-            "extracted_emails": [{"id": "email1"}, {"id": "email2"}]
+            "extracted_emails": [{"id": "email1"}, {"id": "email2"}],
             # No version field = v1 format
         }
 
@@ -266,7 +267,7 @@ class TestCheckpointManager:
             "extracted_emails": [
                 {"id": f"email_{i}", "subject": f"Subject {i}", "body": "x" * 1000}
                 for i in range(50)
-            ]
+            ],
         }
 
         with open(checkpoint_file, "w") as f:
@@ -374,10 +375,7 @@ class TestEmailExtractor:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor with temp checkpoint directory."""
-        return EmailExtractor(
-            user_email="test@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="test@example.com", checkpoint_dir=str(tmp_path))
 
     @pytest.fixture
     def mock_email_data(self):
@@ -385,34 +383,21 @@ class TestEmailExtractor:
         return {
             "id": "msg123",
             "subject": "Test Email Subject",
-            "from": {
-                "emailAddress": {
-                    "address": "sender@example.com",
-                    "name": "Test Sender"
-                }
-            },
+            "from": {"emailAddress": {"address": "sender@example.com", "name": "Test Sender"}},
             "toRecipients": [
-                {
-                    "emailAddress": {
-                        "address": "recipient@example.com",
-                        "name": "Test Recipient"
-                    }
-                }
+                {"emailAddress": {"address": "recipient@example.com", "name": "Test Recipient"}}
             ],
             "body": {
                 "contentType": "html",
-                "content": "<html><body><p>Test email body content</p></body></html>"
+                "content": "<html><body><p>Test email body content</p></body></html>",
             },
             "receivedDateTime": "2024-01-15T10:30:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
     def test_init_creates_checkpoint_manager(self, tmp_path):
         """Test that initialization creates checkpoint manager."""
-        extractor = EmailExtractor(
-            user_email="user@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        extractor = EmailExtractor(user_email="user@example.com", checkpoint_dir=str(tmp_path))
         assert extractor.user_email == "user@example.com"
         assert extractor.checkpoint_manager is not None
 
@@ -480,7 +465,9 @@ class TestEmailExtractor:
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_extract_all_success(self, mock_fetch_batch, mock_get_count, extractor, mock_email_data):
+    def test_extract_all_success(
+        self, mock_fetch_batch, mock_get_count, extractor, mock_email_data
+    ):
         """Test successful extraction of all emails."""
         mock_get_count.return_value = 2
         mock_fetch_batch.return_value = [mock_email_data, mock_email_data]
@@ -507,18 +494,14 @@ class TestEmailExtractor:
             progress_values.append((current, total))
 
         extractor.extract_all(
-            max_batch_size=1,
-            checkpoint_interval=100,
-            progress_callback=progress_callback
+            max_batch_size=1, checkpoint_interval=100, progress_callback=progress_callback
         )
 
         assert len(progress_values) > 0
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_extract_all_handles_batch_error(
-        self, mock_fetch_batch, mock_get_count, extractor
-    ):
+    def test_extract_all_handles_batch_error(self, mock_fetch_batch, mock_get_count, extractor):
         """Test extraction handles batch fetch errors."""
         mock_get_count.return_value = 100
         mock_fetch_batch.side_effect = Exception("Network error")
@@ -539,7 +522,7 @@ class TestEmailExtractor:
         # First call fails with RateLimitError, second succeeds but empty
         mock_fetch_batch.side_effect = [
             RateLimitError(retry_after=5),
-            []  # Empty batch to stop iteration
+            [],  # Empty batch to stop iteration
         ]
 
         with patch.object(extractor, "_handle_rate_limit") as mock_rate_limit:
@@ -654,7 +637,7 @@ class TestEmailExtractor:
         # Return 100 emails to trigger checkpoint
         mock_fetch_batch.side_effect = [
             [mock_email_data] * 100,
-            []  # Empty to stop
+            [],  # Empty to stop
         ]
 
         result = extractor.extract_all(max_batch_size=100, checkpoint_interval=100)
@@ -674,14 +657,14 @@ class TestExtractionResult:
                     extraction_date=datetime.now(),
                     total_emails=80,
                     source="test",
-                    user_email="user@example.com"
+                    user_email="user@example.com",
                 ),
-                emails=[]
+                emails=[],
             ),
             failed_emails=[],
             success_count=80,
             failure_count=20,
-            total_attempted=100
+            total_attempted=100,
         )
         assert result.success_rate == 0.8
 
@@ -693,14 +676,14 @@ class TestExtractionResult:
                     extraction_date=datetime.now(),
                     total_emails=0,
                     source="test",
-                    user_email="user@example.com"
+                    user_email="user@example.com",
                 ),
-                emails=[]
+                emails=[],
             ),
             failed_emails=[],
             success_count=0,
             failure_count=0,
-            total_attempted=0
+            total_attempted=0,
         )
         assert result.success_rate == 0.0
 
@@ -714,7 +697,7 @@ class TestExtractionError:
             email_id="msg123",
             error_type="timeout",
             error_message="Connection timed out",
-            timestamp=datetime(2024, 1, 15, 10, 30)
+            timestamp=datetime(2024, 1, 15, 10, 30),
         )
         assert error.email_id == "msg123"
         assert error.error_type == "timeout"
@@ -728,7 +711,7 @@ class TestExtractionError:
                 email_id="test",
                 error_type=error_type,
                 error_message="Test error",
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
             assert error.error_type == error_type
 
@@ -752,10 +735,7 @@ class TestEmailExtractorResume:
         with open(checkpoint_file, "w") as f:
             json.dump(checkpoint_data, f)
 
-        return EmailExtractor(
-            user_email="test@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="test@example.com", checkpoint_dir=str(tmp_path))
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
@@ -792,15 +772,12 @@ class TestEmailExtractorResume:
             "last_processed_id": "old_id",
             "timestamp": "2024-01-01T12:00:00",
             "checkpoint_interval": 100,
-            "extracted_emails": [{"id": "email1"}]
+            "extracted_emails": [{"id": "email1"}],
         }
         with open(checkpoint_file, "w") as f:
             json.dump(v1_data, f)
 
-        extractor = EmailExtractor(
-            user_email="test@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        extractor = EmailExtractor(user_email="test@example.com", checkpoint_dir=str(tmp_path))
 
         mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         mock_fetch_batch.return_value = []
@@ -819,10 +796,7 @@ class TestEmailExtractorRetryLogic:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor for retry tests."""
-        return EmailExtractor(
-            user_email="retry@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="retry@example.com", checkpoint_dir=str(tmp_path))
 
     @pytest.fixture
     def valid_email_data(self):
@@ -830,18 +804,13 @@ class TestEmailExtractorRetryLogic:
         return {
             "id": "valid_msg",
             "subject": "Valid Subject",
-            "from": {
-                "emailAddress": {
-                    "address": "sender@example.com",
-                    "name": "Sender"
-                }
-            },
+            "from": {"emailAddress": {"address": "sender@example.com", "name": "Sender"}},
             "toRecipients": [
                 {"emailAddress": {"address": "recipient@example.com", "name": "Recipient"}}
             ],
             "body": {"content": "<p>Valid body</p>"},
             "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
     @patch.object(EmailExtractor, "_get_total_email_count")
@@ -870,7 +839,7 @@ class TestEmailExtractorRetryLogic:
         # First batch: exact size, second batch: empty
         mock_fetch_batch.side_effect = [
             [valid_email_data] * 10,  # Exact batch size
-            []  # Empty stops iteration
+            [],  # Empty stops iteration
         ]
 
         result = extractor.extract_all(max_batch_size=10)
@@ -886,10 +855,7 @@ class TestEmailExtractorRetryLogic:
         """Test checkpoint is saved exactly at interval."""
         mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         # Return 100 emails to hit checkpoint at exactly 100
-        mock_fetch_batch.side_effect = [
-            [valid_email_data] * 100,
-            []
-        ]
+        mock_fetch_batch.side_effect = [[valid_email_data] * 100, []]
 
         with patch.object(extractor.checkpoint_manager, "save_checkpoint") as mock_save:
             extractor.extract_all(max_batch_size=100, checkpoint_interval=100)
@@ -943,16 +909,11 @@ class TestSentinelValueSuppression:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor for sentinel tests."""
-        return EmailExtractor(
-            user_email="sentinel@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="sentinel@example.com", checkpoint_dir=str(tmp_path))
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_sentinel_value_suppressed_in_log(
-        self, mock_fetch_batch, mock_get_count, extractor
-    ):
+    def test_sentinel_value_suppressed_in_log(self, mock_fetch_batch, mock_get_count, extractor):
         """Test that sentinel value 999999 does not appear in any log message."""
         mock_get_count.return_value = EMAIL_COUNT_SENTINEL
         mock_fetch_batch.return_value = []
@@ -967,9 +928,7 @@ class TestSentinelValueSuppression:
             extractor.logger.info = original_info
 
         for msg in logged_messages:
-            assert "999999" not in msg, (
-                f"Sentinel value leaked into log: {msg}"
-            )
+            assert "999999" not in msg, f"Sentinel value leaked into log: {msg}"
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
@@ -989,15 +948,13 @@ class TestSentinelValueSuppression:
         finally:
             extractor.logger.info = original_info
 
-        assert any(
-            "total count unknown" in msg for msg in logged_messages
-        ), f"Expected 'total count unknown' message, got: {logged_messages}"
+        assert any("total count unknown" in msg for msg in logged_messages), (
+            f"Expected 'total count unknown' message, got: {logged_messages}"
+        )
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_real_count_shows_formatted_number(
-        self, mock_fetch_batch, mock_get_count, extractor
-    ):
+    def test_real_count_shows_formatted_number(self, mock_fetch_batch, mock_get_count, extractor):
         """Test that a real email count displays with comma formatting."""
         mock_get_count.return_value = 1500
         mock_fetch_batch.return_value = []
@@ -1011,15 +968,13 @@ class TestSentinelValueSuppression:
         finally:
             extractor.logger.info = original_info
 
-        assert any(
-            "Found 1,500 emails to process" in msg for msg in logged_messages
-        ), f"Expected formatted count '1,500', got: {logged_messages}"
+        assert any("Found 1,500 emails to process" in msg for msg in logged_messages), (
+            f"Expected formatted count '1,500', got: {logged_messages}"
+        )
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_small_real_count_shows_number(
-        self, mock_fetch_batch, mock_get_count, extractor
-    ):
+    def test_small_real_count_shows_number(self, mock_fetch_batch, mock_get_count, extractor):
         """Test that a small real email count displays without commas."""
         mock_get_count.return_value = 42
         mock_fetch_batch.return_value = []
@@ -1033,9 +988,9 @@ class TestSentinelValueSuppression:
         finally:
             extractor.logger.info = original_info
 
-        assert any(
-            "Found 42 emails to process" in msg for msg in logged_messages
-        ), f"Expected 'Found 42 emails to process', got: {logged_messages}"
+        assert any("Found 42 emails to process" in msg for msg in logged_messages), (
+            f"Expected 'Found 42 emails to process', got: {logged_messages}"
+        )
 
 
 class TestIncrementalExtraction:
@@ -1044,10 +999,7 @@ class TestIncrementalExtraction:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor with temp directory."""
-        return EmailExtractor(
-            user_email="incremental@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="incremental@example.com", checkpoint_dir=str(tmp_path))
 
     @pytest.fixture
     def existing_corpus(self):
@@ -1060,7 +1012,7 @@ class TestIncrementalExtraction:
                 user_email="incremental@example.com",
                 last_extraction_date=datetime(2024, 1, 1, 10, 0),
                 email_ids_hash="existing_hash",
-                extraction_params={"batch_size": 500}
+                extraction_params={"batch_size": 500},
             ),
             emails=[
                 Email(
@@ -1071,7 +1023,7 @@ class TestIncrementalExtraction:
                     subject="Old Email 1",
                     body_text="Old body 1",
                     received_date=datetime(2024, 1, 1, 8, 0),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="existing_002",
@@ -1081,9 +1033,9 @@ class TestIncrementalExtraction:
                     subject="Old Email 2",
                     body_text="Old body 2",
                     received_date=datetime(2024, 1, 1, 9, 0),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
     @pytest.fixture
@@ -1092,18 +1044,11 @@ class TestIncrementalExtraction:
         return {
             "id": "new_001",
             "subject": "New Email",
-            "from": {
-                "emailAddress": {
-                    "address": "new@example.com",
-                    "name": "New Sender"
-                }
-            },
-            "toRecipients": [
-                {"emailAddress": {"address": "me@example.com", "name": "Me"}}
-            ],
+            "from": {"emailAddress": {"address": "new@example.com", "name": "New Sender"}},
+            "toRecipients": [{"emailAddress": {"address": "me@example.com", "name": "Me"}}],
             "body": {"content": "<p>New email body</p>"},
             "receivedDateTime": "2024-01-15T10:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
     def test_extract_incremental_only_fetches_new_emails(
@@ -1120,9 +1065,7 @@ class TestIncrementalExtraction:
             assert len(result.corpus.emails) == 3
             assert result.new_emails_count == 1
 
-    def test_extract_incremental_deduplicates_by_message_id(
-        self, extractor, existing_corpus
-    ):
+    def test_extract_incremental_deduplicates_by_message_id(self, extractor, existing_corpus):
         """Test that duplicate emails are not added (deduplication by message_id)."""
         # Return an email with ID that already exists in corpus
         duplicate_email = {
@@ -1132,7 +1075,7 @@ class TestIncrementalExtraction:
             "toRecipients": [{"emailAddress": {"address": "me@example.com", "name": "Me"}}],
             "body": {"content": "Duplicate body"},
             "receivedDateTime": "2024-01-15T10:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
         with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
@@ -1144,9 +1087,7 @@ class TestIncrementalExtraction:
             assert len(result.corpus.emails) == 2
             assert result.new_emails_count == 0
 
-    def test_extract_incremental_updates_metadata(
-        self, extractor, existing_corpus, new_email_data
-    ):
+    def test_extract_incremental_updates_metadata(self, extractor, existing_corpus, new_email_data):
         """Test that metadata is updated after incremental extraction."""
         with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.side_effect = [[new_email_data], []]
@@ -1156,11 +1097,12 @@ class TestIncrementalExtraction:
 
             # Metadata should be updated
             assert result.corpus.extraction_metadata.last_extraction_date > old_extraction_date
-            assert result.corpus.extraction_metadata.email_ids_hash != existing_corpus.extraction_metadata.email_ids_hash
+            assert (
+                result.corpus.extraction_metadata.email_ids_hash
+                != existing_corpus.extraction_metadata.email_ids_hash
+            )
 
-    def test_extract_incremental_empty_result(
-        self, extractor, existing_corpus
-    ):
+    def test_extract_incremental_empty_result(self, extractor, existing_corpus):
         """Test incremental extraction when there are no new emails."""
         with patch.object(extractor.graph_client, "fetch_emails") as mock_fetch:
             mock_fetch.return_value = []
@@ -1175,8 +1117,9 @@ class TestIncrementalExtraction:
         """Test that IncrementalExtractionResult has new_emails_count attribute."""
         # Just verify the dataclass/result class has the expected attribute
         from src.extractors.m365_extractor import IncrementalExtractionResult
-        assert hasattr(IncrementalExtractionResult, '__annotations__')
-        assert 'new_emails_count' in IncrementalExtractionResult.__annotations__
+
+        assert hasattr(IncrementalExtractionResult, "__annotations__")
+        assert "new_emails_count" in IncrementalExtractionResult.__annotations__
 
     def test_extract_incremental_reports_statistics(
         self, extractor, existing_corpus, new_email_data
@@ -1195,9 +1138,7 @@ class TestIncrementalExtraction:
             assert result.new_emails_count == 2  # Added 2 new
             assert result.total_count == 4  # Total is now 4
 
-    def test_get_incremental_kwargs_returns_filter_after(
-        self, extractor, existing_corpus
-    ):
+    def test_get_incremental_kwargs_returns_filter_after(self, extractor, existing_corpus):
         """Test that _get_incremental_kwargs returns filter_after from corpus metadata."""
         kwargs = extractor._get_incremental_kwargs(existing_corpus)
 
@@ -1263,15 +1204,16 @@ class TestIncrementalExtraction:
 
             # Verify the first call included filter_after
             first_call = mock_fetch.call_args_list[0]
-            assert first_call.kwargs.get("filter_after") == existing_corpus.extraction_metadata.last_extraction_date
+            assert (
+                first_call.kwargs.get("filter_after")
+                == existing_corpus.extraction_metadata.last_extraction_date
+            )
 
             # New email should be added
             assert result.new_emails_count == 1
             assert result.total_count == 3
 
-    def test_incremental_extraction_dedup_still_works_with_filter(
-        self, extractor, existing_corpus
-    ):
+    def test_incremental_extraction_dedup_still_works_with_filter(self, extractor, existing_corpus):
         """Test that client-side dedup still works as safety net alongside server filter."""
         # Simulate server returning a duplicate despite the date filter
         duplicate_email = {
@@ -1382,26 +1324,18 @@ class TestEmailExtractorEdgeCases:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor with temp directory."""
-        return EmailExtractor(
-            user_email="edge@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="edge@example.com", checkpoint_dir=str(tmp_path))
 
     def test_process_email_no_at_in_sender(self, extractor):
         """Test handling sender email without @ symbol."""
         email_data = {
             "id": "test1",
             "subject": "Test",
-            "from": {
-                "emailAddress": {
-                    "address": "invalid-email-format",
-                    "name": "Invalid"
-                }
-            },
+            "from": {"emailAddress": {"address": "invalid-email-format", "name": "Invalid"}},
             "toRecipients": [],
             "body": {"content": "Body"},
             "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
         # Lenient validator still rejects strings without @ (ValueError)
@@ -1416,22 +1350,18 @@ class TestEmailExtractorEdgeCases:
         """
         test_cases = [
             ("noreply@39._ecoenergi.online", "39._ecoenergi.online"),
-            ("CloudNotify@---SyncServi...-MtO0.autoworkscoll.com", "---SyncServi...-MtO0.autoworkscoll.com"),
+            (
+                "CloudNotify@---SyncServi...-MtO0.autoworkscoll.com",
+                "---SyncServi...-MtO0.autoworkscoll.com",
+            ),
         ]
 
         for address, expected_domain in test_cases:
             email_data = {
                 "id": f"test_{address}",
                 "subject": "Spam Test",
-                "from": {
-                    "emailAddress": {
-                        "address": address,
-                        "name": "Spam Sender"
-                    }
-                },
-                "toRecipients": [
-                    {"emailAddress": {"address": "user@example.com", "name": "User"}}
-                ],
+                "from": {"emailAddress": {"address": address, "name": "Spam Sender"}},
+                "toRecipients": [{"emailAddress": {"address": "user@example.com", "name": "User"}}],
                 "body": {"content": "<p>Spam body</p>"},
                 "receivedDateTime": "2024-01-15T10:00:00Z",
                 "hasAttachments": False,
@@ -1447,20 +1377,13 @@ class TestEmailExtractorEdgeCases:
         email_data = {
             "id": "test1",
             "subject": "Test",
-            "from": {
-                "emailAddress": {
-                    "address": "sender@example.com",
-                    "name": "Sender"
-                }
-            },
+            "from": {"emailAddress": {"address": "sender@example.com", "name": "Sender"}},
             "toRecipients": [
                 {"emailAddress": {"address": "recipient@example.com", "name": "Recipient"}}
             ],
-            "body": {
-                "content": "<p>Special chars: &amp; &lt; &gt; &quot; &#x27;</p>"
-            },
+            "body": {"content": "<p>Special chars: &amp; &lt; &gt; &quot; &#x27;</p>"},
             "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
         email = extractor._process_email(email_data)
@@ -1498,7 +1421,7 @@ class TestCorpusMetadataEnhancements:
             total_emails=10,
             source="test",
             user_email="user@example.com",
-            last_extraction_date=datetime(2024, 1, 15, 10, 0)
+            last_extraction_date=datetime(2024, 1, 15, 10, 0),
         )
         assert metadata.last_extraction_date == datetime(2024, 1, 15, 10, 0)
 
@@ -1508,7 +1431,7 @@ class TestCorpusMetadataEnhancements:
             extraction_date=datetime.now(),
             total_emails=0,
             source="test",
-            user_email="user@example.com"
+            user_email="user@example.com",
         )
         assert metadata.last_extraction_date is None
 
@@ -1519,7 +1442,7 @@ class TestCorpusMetadataEnhancements:
             total_emails=5,
             source="test",
             user_email="user@example.com",
-            email_ids_hash="abc123def456"
+            email_ids_hash="abc123def456",
         )
         assert metadata.email_ids_hash == "abc123def456"
 
@@ -1529,7 +1452,7 @@ class TestCorpusMetadataEnhancements:
             extraction_date=datetime.now(),
             total_emails=0,
             source="test",
-            user_email="user@example.com"
+            user_email="user@example.com",
         )
         assert metadata.email_ids_hash is None
 
@@ -1541,7 +1464,7 @@ class TestCorpusMetadataEnhancements:
             total_emails=100,
             source="test",
             user_email="user@example.com",
-            extraction_params=params
+            extraction_params=params,
         )
         assert metadata.extraction_params == params
         assert metadata.extraction_params["batch_size"] == 500
@@ -1552,7 +1475,7 @@ class TestCorpusMetadataEnhancements:
             extraction_date=datetime.now(),
             total_emails=0,
             source="test",
-            user_email="user@example.com"
+            user_email="user@example.com",
         )
         assert metadata.extraction_params is None
 
@@ -1565,7 +1488,7 @@ class TestCorpusMetadataEnhancements:
             user_email="user@example.com",
             last_extraction_date=datetime(2024, 6, 1),
             email_ids_hash="hash123",
-            extraction_params={"batch_size": 100}
+            extraction_params={"batch_size": 100},
         )
         dumped = metadata.model_dump()
 
@@ -1581,10 +1504,7 @@ class TestExtractionMetadataUpdate:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor for metadata update tests."""
-        return EmailExtractor(
-            user_email="test@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="test@example.com", checkpoint_dir=str(tmp_path))
 
     @pytest.fixture
     def mock_email_data(self):
@@ -1592,18 +1512,13 @@ class TestExtractionMetadataUpdate:
         return {
             "id": "msg123",
             "subject": "Test Email",
-            "from": {
-                "emailAddress": {
-                    "address": "sender@example.com",
-                    "name": "Test Sender"
-                }
-            },
+            "from": {"emailAddress": {"address": "sender@example.com", "name": "Test Sender"}},
             "toRecipients": [
                 {"emailAddress": {"address": "recipient@example.com", "name": "Recipient"}}
             ],
             "body": {"content": "<p>Test body</p>"},
             "receivedDateTime": "2024-01-15T10:30:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
     @patch.object(EmailExtractor, "_get_total_email_count")
@@ -1654,7 +1569,7 @@ class TestExtractionMetadataUpdate:
             "toRecipients": [{"emailAddress": {"address": "r@example.com", "name": "R"}}],
             "body": {"content": "Body 1"},
             "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
         mock_fetch_batch.return_value = [email1]
         result1 = extractor.extract_all()
@@ -1668,7 +1583,7 @@ class TestExtractionMetadataUpdate:
             "toRecipients": [{"emailAddress": {"address": "r@example.com", "name": "R"}}],
             "body": {"content": "Body 2"},
             "receivedDateTime": "2024-01-02T00:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
         mock_fetch_batch.return_value = [email2]
         result2 = extractor.extract_all()
@@ -1684,10 +1599,7 @@ class TestIntegrationScenarios:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor for integration tests."""
-        return EmailExtractor(
-            user_email="integration@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="integration@example.com", checkpoint_dir=str(tmp_path))
 
     def test_full_extraction_workflow_empty_inbox(self, extractor):
         """Test complete extraction workflow with empty inbox."""
@@ -1709,25 +1621,42 @@ class TestIntegrationScenarios:
         mock_get_count.return_value = EMAIL_COUNT_SENTINEL
 
         # First batch: 50 emails, second batch: 30 emails, third batch: empty
-        batch1 = [{
-            "id": f"email_{i}",
-            "subject": f"Subject {i}",
-            "from": {"emailAddress": {"address": f"sender{i}@example.com", "name": f"Sender {i}"}},
-            "toRecipients": [{"emailAddress": {"address": "recipient@example.com", "name": "R"}}],
-            "body": {"content": f"<p>Body {i}</p>"},
-            "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
-        } for i in range(50)]
+        batch1 = [
+            {
+                "id": f"email_{i}",
+                "subject": f"Subject {i}",
+                "from": {
+                    "emailAddress": {"address": f"sender{i}@example.com", "name": f"Sender {i}"}
+                },
+                "toRecipients": [
+                    {"emailAddress": {"address": "recipient@example.com", "name": "R"}}
+                ],
+                "body": {"content": f"<p>Body {i}</p>"},
+                "receivedDateTime": "2024-01-01T00:00:00Z",
+                "hasAttachments": False,
+            }
+            for i in range(50)
+        ]
 
-        batch2 = [{
-            "id": f"email_{i + 50}",
-            "subject": f"Subject {i + 50}",
-            "from": {"emailAddress": {"address": f"sender{i + 50}@example.com", "name": f"Sender {i}"}},
-            "toRecipients": [{"emailAddress": {"address": "recipient@example.com", "name": "R"}}],
-            "body": {"content": f"<p>Body {i}</p>"},
-            "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
-        } for i in range(30)]
+        batch2 = [
+            {
+                "id": f"email_{i + 50}",
+                "subject": f"Subject {i + 50}",
+                "from": {
+                    "emailAddress": {
+                        "address": f"sender{i + 50}@example.com",
+                        "name": f"Sender {i}",
+                    }
+                },
+                "toRecipients": [
+                    {"emailAddress": {"address": "recipient@example.com", "name": "R"}}
+                ],
+                "body": {"content": f"<p>Body {i}</p>"},
+                "receivedDateTime": "2024-01-01T00:00:00Z",
+                "hasAttachments": False,
+            }
+            for i in range(30)
+        ]
 
         mock_fetch_batch.side_effect = [batch1, batch2, []]
 
@@ -1759,10 +1688,7 @@ class TestSharedBatchLoopCheckpoint:
     @pytest.fixture
     def extractor(self, tmp_path):
         """Create EmailExtractor with temp directory."""
-        return EmailExtractor(
-            user_email="shared@example.com",
-            checkpoint_dir=str(tmp_path)
-        )
+        return EmailExtractor(user_email="shared@example.com", checkpoint_dir=str(tmp_path))
 
     @pytest.fixture
     def valid_email_data(self):
@@ -1770,18 +1696,13 @@ class TestSharedBatchLoopCheckpoint:
         return {
             "id": "shared_msg",
             "subject": "Shared Test",
-            "from": {
-                "emailAddress": {
-                    "address": "sender@example.com",
-                    "name": "Sender"
-                }
-            },
+            "from": {"emailAddress": {"address": "sender@example.com", "name": "Sender"}},
             "toRecipients": [
                 {"emailAddress": {"address": "recipient@example.com", "name": "Recipient"}}
             ],
             "body": {"content": "<p>Shared body</p>"},
             "receivedDateTime": "2024-01-01T00:00:00Z",
-            "hasAttachments": False
+            "hasAttachments": False,
         }
 
     @pytest.fixture
@@ -1805,10 +1726,7 @@ class TestSharedBatchLoopCheckpoint:
     ):
         """Test that checkpoint saving works in extract_all via shared batch loop."""
         mock_get_count.return_value = EMAIL_COUNT_SENTINEL
-        mock_fetch_batch.side_effect = [
-            [valid_email_data] * 100,
-            []
-        ]
+        mock_fetch_batch.side_effect = [[valid_email_data] * 100, []]
 
         with patch.object(extractor.checkpoint_manager, "save_checkpoint") as mock_save:
             extractor.extract_all(max_batch_size=100, checkpoint_interval=100)
@@ -1917,9 +1835,7 @@ class TestErrorMessageFormatting:
                     "name": "Sender",
                 }
             },
-            "toRecipients": [
-                {"emailAddress": {"address": "recipient@example.com", "name": "R"}}
-            ],
+            "toRecipients": [{"emailAddress": {"address": "recipient@example.com", "name": "R"}}],
             "body": {"content": "<p>Valid body</p>"},
             "receivedDateTime": "2024-01-01T00:00:00Z",
             "hasAttachments": False,
@@ -1990,9 +1906,7 @@ class TestErrorMessageFormatting:
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_email_id_truncated_to_12_chars(
-        self, mock_fetch_batch, mock_get_count, extractor
-    ):
+    def test_email_id_truncated_to_12_chars(self, mock_fetch_batch, mock_get_count, extractor):
         """Email ID in warning messages is truncated to first 12 characters."""
         mock_get_count.return_value = 1
         bad_email = {"id": "123456789012XYZEXTRA"}
@@ -2037,9 +1951,7 @@ class TestErrorMessageFormatting:
 
         # Find the summary message
         summary_msgs = [m for m in info_messages if "Skipped" in m and "emails" in m]
-        assert len(summary_msgs) == 1, (
-            f"Expected exactly one summary message, got: {info_messages}"
-        )
+        assert len(summary_msgs) == 1, f"Expected exactly one summary message, got: {info_messages}"
         summary = summary_msgs[0]
         assert "Skipped 3 emails" in summary
         # Should contain error type breakdown
@@ -2112,7 +2024,6 @@ class TestErrorMessageFormatting:
 
             # This won't work because raise_validation_error raises before returning
             # Let's use a direct ValidationError instead
-            pass
 
         # Better approach: directly raise a ValidationError
         def make_validation_error(email_data):
@@ -2148,9 +2059,7 @@ class TestErrorMessageFormatting:
 
     @patch.object(EmailExtractor, "_get_total_email_count")
     @patch.object(EmailExtractor, "_fetch_batch")
-    def test_mixed_error_types_in_summary(
-        self, mock_fetch_batch, mock_get_count, extractor
-    ):
+    def test_mixed_error_types_in_summary(self, mock_fetch_batch, mock_get_count, extractor):
         """Summary groups errors by type when multiple error types occur."""
         mock_get_count.return_value = 3
 
@@ -2161,15 +2070,12 @@ class TestErrorMessageFormatting:
             call_count += 1
             if call_count == 1:
                 raise KeyError("missing_field")
-            elif call_count == 2:
+            if call_count == 2:
                 raise KeyError("another_field")
-            else:
-                raise ValueError("bad value")
+            raise ValueError("bad value")
 
         with patch.object(extractor, "_process_email", side_effect=mixed_errors):
-            mock_fetch_batch.return_value = [
-                {"id": "err1"}, {"id": "err2"}, {"id": "err3"}
-            ]
+            mock_fetch_batch.return_value = [{"id": "err1"}, {"id": "err2"}, {"id": "err3"}]
 
             info_messages = []
             original_info = extractor.logger.info
@@ -2232,80 +2138,82 @@ class TestProgressBarIntegration:
         service.run.return_value = mock_corpus
         return service
 
-    def test_progress_bar_created_in_normal_mode(
-        self, extract_args, mock_service
-    ):
+    def test_progress_bar_created_in_normal_mode(self, extract_args, mock_service):
         """tqdm progress bar is created when not --json and not --quiet."""
         from src.cli.commands.extract import cmd_extract
 
-        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
-             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
-             patch("src.cli.commands.extract.save_json"), \
-             patch("src.cli.commands.extract.PathConfig"):
+        with (
+            patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls,
+            patch("src.services.extraction_service.ExtractionService", return_value=mock_service),
+            patch("src.cli.commands.extract.save_json"),
+            patch("src.cli.commands.extract.PathConfig"),
+        ):
             mock_bar = MagicMock()
             mock_tqdm_cls.return_value = mock_bar
             cmd_extract(extract_args)
             mock_tqdm_cls.assert_called_once()
 
-    def test_progress_bar_suppressed_with_json(
-        self, extract_args, mock_service
-    ):
+    def test_progress_bar_suppressed_with_json(self, extract_args, mock_service):
         """No tqdm progress bar when --json flag is set."""
         from src.cli.commands.extract import cmd_extract
 
         extract_args.json = True
 
-        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
-             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
-             patch("src.cli.commands.extract.save_json"), \
-             patch("src.cli.commands.extract.PathConfig"), \
-             patch("src.cli.commands.extract.output_json"):
+        with (
+            patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls,
+            patch("src.services.extraction_service.ExtractionService", return_value=mock_service),
+            patch("src.cli.commands.extract.save_json"),
+            patch("src.cli.commands.extract.PathConfig"),
+            patch("src.cli.commands.extract.output_json"),
+        ):
             cmd_extract(extract_args)
             mock_tqdm_cls.assert_not_called()
 
-    def test_progress_bar_suppressed_with_quiet(
-        self, extract_args, mock_service
-    ):
+    def test_progress_bar_suppressed_with_quiet(self, extract_args, mock_service):
         """No tqdm progress bar when --quiet flag is set."""
         from src.cli.commands.extract import cmd_extract
 
         extract_args.quiet = True
 
-        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
-             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
-             patch("src.cli.commands.extract.save_json"), \
-             patch("src.cli.commands.extract.PathConfig"):
+        with (
+            patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls,
+            patch("src.services.extraction_service.ExtractionService", return_value=mock_service),
+            patch("src.cli.commands.extract.save_json"),
+            patch("src.cli.commands.extract.PathConfig"),
+        ):
             cmd_extract(extract_args)
             mock_tqdm_cls.assert_not_called()
 
-    def test_progress_bar_closed_on_success(
-        self, extract_args, mock_service
-    ):
+    def test_progress_bar_closed_on_success(self, extract_args, mock_service):
         """Progress bar close() is called after successful extraction."""
         from src.cli.commands.extract import cmd_extract
 
-        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
-             patch("src.services.extraction_service.ExtractionService", return_value=mock_service), \
-             patch("src.cli.commands.extract.save_json"), \
-             patch("src.cli.commands.extract.PathConfig"):
+        with (
+            patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls,
+            patch("src.services.extraction_service.ExtractionService", return_value=mock_service),
+            patch("src.cli.commands.extract.save_json"),
+            patch("src.cli.commands.extract.PathConfig"),
+        ):
             mock_bar = MagicMock()
             mock_tqdm_cls.return_value = mock_bar
             cmd_extract(extract_args)
             mock_bar.close.assert_called_once()
 
-    def test_progress_bar_closed_on_error(
-        self, extract_args
-    ):
+    def test_progress_bar_closed_on_error(self, extract_args):
         """Progress bar close() is called even when extraction raises."""
         from src.cli.commands.extract import cmd_extract
 
         failing_service = MagicMock()
         failing_service.run.side_effect = ConnectionError("Server unreachable")
 
-        with patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls, \
-             patch("src.services.extraction_service.ExtractionService", return_value=failing_service), \
-             patch("src.cli.commands.extract.save_json"), \
-             patch("src.cli.commands.extract.PathConfig"):
+        with (
+            patch("src.cli.commands.extract.tqdm") as mock_tqdm_cls,
+            patch(
+                "src.services.extraction_service.ExtractionService", return_value=failing_service
+            ),
+            patch("src.cli.commands.extract.save_json"),
+            patch("src.cli.commands.extract.PathConfig"),
+        ):
             mock_bar = MagicMock()
             mock_tqdm_cls.return_value = mock_bar
             result = cmd_extract(extract_args)

@@ -7,6 +7,7 @@ for seamless integration with the CLI and pipeline.
 
 Refactored in Work Item 1.3: Now inherits from BaseExtractor.
 """
+
 from datetime import datetime
 from pathlib import Path
 

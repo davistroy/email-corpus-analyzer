@@ -1,4 +1,5 @@
 """Shared CLI parser helpers and configuration mapping."""
+
 import argparse
 import re
 from collections.abc import Callable
@@ -17,9 +18,7 @@ SUBPARSERS: dict[str, argparse.ArgumentParser] = {}
 
 
 # Email validation regex pattern (RFC 5322 simplified)
-EMAIL_REGEX = re.compile(
-    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-)
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 
 def validate_email_format(email: str) -> bool:

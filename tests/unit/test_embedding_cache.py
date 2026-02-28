@@ -6,6 +6,7 @@ email embeddings efficiently using numpy compressed format.
 
 Work Item 3.1: Added tests for cache versioning / metadata sidecar.
 """
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -35,7 +36,7 @@ def create_test_email(email_id: str, subject: str = "Test") -> Email:
         subject=subject,
         body_text=f"Body for {email_id}",
         received_date=datetime(2024, 1, 15),
-        has_attachments=False
+        has_attachments=False,
     )
 
 
@@ -157,11 +158,7 @@ class TestEmbeddingCacheRetrieval:
 
         # Add some test embeddings
         email_ids = ["email_1", "email_2", "email_3"]
-        embeddings = np.array([
-            [0.1, 0.2, 0.3],
-            [0.4, 0.5, 0.6],
-            [0.7, 0.8, 0.9]
-        ])
+        embeddings = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]])
         cache.add(email_ids, embeddings)
         return cache
 
@@ -375,13 +372,13 @@ class TestCacheWithCorpus:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 create_test_email("email_1", "Subject 1"),
                 create_test_email("email_2", "Subject 2"),
                 create_test_email("email_3", "Subject 3"),
-            ]
+            ],
         )
 
     def test_get_cached_and_uncached_ids(self, cache, test_corpus):
@@ -398,10 +395,7 @@ class TestCacheWithCorpus:
     def test_sync_with_corpus_removes_deleted_emails(self, cache, test_corpus):
         """Test that sync removes cached embeddings for deleted emails."""
         # Add more emails to cache than exist in corpus
-        cache.add(
-            ["email_1", "email_2", "email_3", "deleted_email"],
-            np.random.rand(4, 384)
-        )
+        cache.add(["email_1", "email_2", "email_3", "deleted_email"], np.random.rand(4, 384))
 
         # Sync with corpus (which doesn't have "deleted_email")
         removed_count = cache.sync_with_corpus(test_corpus)
@@ -456,8 +450,9 @@ class TestCacheVersioning:
         cache_path = tmp_path / "test_cache.npz"
         meta_path = cache_path.with_suffix(".meta.json")
 
-        cache = EmbeddingCache(cache_path=cache_path, model_name="my-model",
-                               embedding_dim=768, max_text_length=2000)
+        cache = EmbeddingCache(
+            cache_path=cache_path, model_name="my-model", embedding_dim=768, max_text_length=2000
+        )
         cache.add(["e1"], np.random.rand(1, 768))
         cache.save()
 
@@ -480,13 +475,15 @@ class TestCacheVersioning:
         model = "test-model/v1"
         dim = 256
 
-        cache1 = EmbeddingCache(cache_path=cache_path, model_name=model,
-                                embedding_dim=dim, max_text_length=1000)
+        cache1 = EmbeddingCache(
+            cache_path=cache_path, model_name=model, embedding_dim=dim, max_text_length=1000
+        )
         cache1.add(["a", "b"], np.array([[1.0, 2.0], [3.0, 4.0]]))
         cache1.save()
 
-        cache2 = EmbeddingCache(cache_path=cache_path, model_name=model,
-                                embedding_dim=dim, max_text_length=1000)
+        cache2 = EmbeddingCache(
+            cache_path=cache_path, model_name=model, embedding_dim=dim, max_text_length=1000
+        )
         assert cache2.size == 2
         assert np.allclose(cache2.get("a"), [1.0, 2.0])
         assert np.allclose(cache2.get("b"), [3.0, 4.0])
@@ -500,15 +497,11 @@ class TestCacheVersioning:
         embeddings = np.random.rand(3, 384)
 
         _write_npz_with_metadata(
-            cache_path, embeddings, ["e1", "e2", "e3"],
-            model_name="old-model/v1"
+            cache_path, embeddings, ["e1", "e2", "e3"], model_name="old-model/v1"
         )
 
         # Load with different model name
-        cache = EmbeddingCache(
-            cache_path=cache_path,
-            model_name="new-model/v2"
-        )
+        cache = EmbeddingCache(cache_path=cache_path, model_name="new-model/v2")
 
         assert cache.size == 0
         assert not cache_path.exists()
@@ -522,16 +515,10 @@ class TestCacheVersioning:
         meta_path = cache_path.with_suffix(".meta.json")
         embeddings = np.random.rand(2, 384)
 
-        _write_npz_with_metadata(
-            cache_path, embeddings, ["e1", "e2"],
-            embedding_dim=384
-        )
+        _write_npz_with_metadata(cache_path, embeddings, ["e1", "e2"], embedding_dim=384)
 
         # Load with different dimension
-        cache = EmbeddingCache(
-            cache_path=cache_path,
-            embedding_dim=1024
-        )
+        cache = EmbeddingCache(cache_path=cache_path, embedding_dim=1024)
 
         assert cache.size == 0
         assert not cache_path.exists()
@@ -545,16 +532,10 @@ class TestCacheVersioning:
         meta_path = cache_path.with_suffix(".meta.json")
         embeddings = np.random.rand(2, 384)
 
-        _write_npz_with_metadata(
-            cache_path, embeddings, ["e1", "e2"],
-            max_text_length=1500
-        )
+        _write_npz_with_metadata(cache_path, embeddings, ["e1", "e2"], max_text_length=1500)
 
         # Load with different text length
-        cache = EmbeddingCache(
-            cache_path=cache_path,
-            max_text_length=3000
-        )
+        cache = EmbeddingCache(cache_path=cache_path, max_text_length=3000)
 
         assert cache.size == 0
         assert not cache_path.exists()
@@ -583,6 +564,7 @@ class TestCacheVersioning:
     def _caplog_for_cache(self, caplog):
         """Add caplog handler to the cache logger (propagate=False prevents root capture)."""
         import logging
+
         cache_logger = logging.getLogger("src.cache.embedding_cache")
         cache_logger.addHandler(caplog.handler)
         caplog.handler.setLevel(logging.WARNING)
@@ -610,10 +592,7 @@ class TestCacheVersioning:
     def test_model_mismatch_logs_warning(self, tmp_path, caplog):
         """Model name mismatch should log a warning about the change."""
         cache_path = tmp_path / "test_cache.npz"
-        _write_npz_with_metadata(
-            cache_path, np.random.rand(1, 3), ["e1"],
-            model_name="old-model"
-        )
+        _write_npz_with_metadata(cache_path, np.random.rand(1, 3), ["e1"], model_name="old-model")
 
         cache_logger = self._caplog_for_cache(caplog)
         try:
@@ -626,10 +605,7 @@ class TestCacheVersioning:
     def test_text_length_mismatch_logs_warning(self, tmp_path, caplog):
         """Max text length mismatch should log a warning."""
         cache_path = tmp_path / "test_cache.npz"
-        _write_npz_with_metadata(
-            cache_path, np.random.rand(1, 3), ["e1"],
-            max_text_length=1500
-        )
+        _write_npz_with_metadata(cache_path, np.random.rand(1, 3), ["e1"], max_text_length=1500)
 
         cache_logger = self._caplog_for_cache(caplog)
         try:
@@ -642,10 +618,7 @@ class TestCacheVersioning:
     def test_dim_mismatch_logs_warning(self, tmp_path, caplog):
         """Embedding dimension mismatch should log a warning."""
         cache_path = tmp_path / "test_cache.npz"
-        _write_npz_with_metadata(
-            cache_path, np.random.rand(1, 3), ["e1"],
-            embedding_dim=384
-        )
+        _write_npz_with_metadata(cache_path, np.random.rand(1, 3), ["e1"], embedding_dim=384)
 
         cache_logger = self._caplog_for_cache(caplog)
         try:
@@ -681,8 +654,7 @@ class TestCacheVersioning:
         meta_path = cache_path.with_suffix(".meta.json")
 
         _write_npz_with_metadata(
-            cache_path, np.random.rand(2, 3), ["e1", "e2"],
-            model_name="old-model"
+            cache_path, np.random.rand(2, 3), ["e1", "e2"], model_name="old-model"
         )
         assert cache_path.exists()
         assert meta_path.exists()
@@ -701,8 +673,7 @@ class TestCacheVersioning:
         meta_path = cache_path.with_suffix(".meta.json")
 
         _write_npz_with_metadata(
-            cache_path, np.random.rand(2, 3), ["e1", "e2"],
-            model_name="old-model"
+            cache_path, np.random.rand(2, 3), ["e1", "e2"], model_name="old-model"
         )
 
         # Invalidate via model change

@@ -1,4 +1,5 @@
 """Analyze command: run analyzers on email corpus."""
+
 import argparse
 import time
 from pathlib import Path
@@ -47,59 +48,57 @@ Examples:
 Note: --auto-clusters and --num-clusters are mutually exclusive.
       When using --auto-clusters, the --cluster-method flag determines
       which optimization method is used (default: silhouette).
-        """
+        """,
     )
     analyze_parser.add_argument(
         "--corpus",
         type=Path,
-        help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)"
+        help="Path to corpus JSON file (default: {output-dir}/email_corpus.json)",
     )
     analyze_parser.add_argument(
-        "--num-clusters",
-        type=int,
-        default=10,
-        help="Number of semantic clusters (default: 10)"
+        "--num-clusters", type=int, default=10, help="Number of semantic clusters (default: 10)"
     )
     analyze_parser.add_argument(
         "--auto-clusters",
         action="store_true",
         default=False,
-        help="Automatically determine optimal number of clusters"
+        help="Automatically determine optimal number of clusters",
     )
     analyze_parser.add_argument(
         "--cluster-method",
         type=str,
         choices=["elbow", "silhouette"],
         default="silhouette",
-        help="Method to determine optimal clusters: elbow or silhouette (default: silhouette)"
+        help="Method to determine optimal clusters: elbow or silhouette (default: silhouette)",
     )
     analyze_parser.add_argument(
         "--cluster-analysis",
         action="store_true",
         default=False,
-        help="Show cluster analysis report with k vs score table"
+        help="Show cluster analysis report with k vs score table",
     )
     analyze_parser.add_argument(
         "--analysis-file",
         type=Path,
-        help="Custom path for analysis results (default: {output-dir}/corpus_analysis_results.json)"
+        help="Custom path for analysis results (default: {output-dir}/corpus_analysis_results.json)",
     )
     analyze_parser.add_argument(
-        "-n", "--dry-run",
+        "-n",
+        "--dry-run",
         action="store_true",
-        help="Show what would be done without actually executing"
+        help="Show what would be done without actually executing",
     )
     analyze_parser.add_argument(
         "--incremental",
         action="store_true",
         default=False,
-        help="Use embedding cache for incremental analysis (Task 4B.4)"
+        help="Use embedding cache for incremental analysis (Task 4B.4)",
     )
     analyze_parser.add_argument(
         "--cluster-viz",
         action="store_true",
         default=False,
-        help="Generate cluster visualization PNG (requires matplotlib)"
+        help="Generate cluster visualization PNG (requires matplotlib)",
     )
 
     return analyze_parser
@@ -138,24 +137,26 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         Exit code (0 = success, non-zero = error)
     """
     # Handle dry-run mode
-    if getattr(args, 'dry_run', False):
+    if getattr(args, "dry_run", False):
         from src.preview.estimators import AnalyzeEstimator, format_analyze_preview
 
         estimator = AnalyzeEstimator()
         estimate = estimator.estimate(args)
 
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "analyze",
-                "dry_run": True,
-                "status": "preview",
-                "corpus_path": str(estimate.corpus_path),
-                "corpus_exists": estimate.corpus_exists,
-                "email_count": estimate.email_count,
-                "output_path": str(estimate.output_path),
-                "embedding_time_estimate_seconds": estimate.embedding_time_estimate_seconds,
-                "clustering_time_estimate_seconds": estimate.clustering_time_estimate_seconds,
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "analyze",
+                    "dry_run": True,
+                    "status": "preview",
+                    "corpus_path": str(estimate.corpus_path),
+                    "corpus_exists": estimate.corpus_exists,
+                    "email_count": estimate.email_count,
+                    "output_path": str(estimate.output_path),
+                    "embedding_time_estimate_seconds": estimate.embedding_time_estimate_seconds,
+                    "clustering_time_estimate_seconds": estimate.clustering_time_estimate_seconds,
+                }
+            )
         else:
             print(format_analyze_preview(estimate))
 
@@ -184,24 +185,22 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             f"Run 'extract' first to create the corpus file, "
             f"or specify a valid path with --corpus."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "analyze",
-                "status": "error",
-                "error": f"Corpus file not found: {corpus_path}"
-            })
+        if getattr(args, "json", False):
+            output_json(
+                {
+                    "command": "analyze",
+                    "status": "error",
+                    "error": f"Corpus file not found: {corpus_path}",
+                }
+            )
         return 1
     except Exception as e:
         logger.error(
             f"Failed to load corpus from {corpus_path}: {e}. "
             f"The file may be corrupted. Try re-running 'extract' to regenerate it."
         )
-        if getattr(args, 'json', False):
-            output_json({
-                "command": "analyze",
-                "status": "error",
-                "error": str(e)
-            })
+        if getattr(args, "json", False):
+            output_json({"command": "analyze", "status": "error", "error": str(e)})
         return 1
 
     # Determine analysis output path
@@ -210,7 +209,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     logger.info(f"Analysis output: {analysis_path}")
 
     # Handle --cluster-analysis flag (show k vs score analysis)
-    if getattr(args, 'cluster_analysis', False):
+    if getattr(args, "cluster_analysis", False):
         return _show_cluster_analysis(corpus, args)
 
     # Build config and service
@@ -219,7 +218,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     # Prepare embedding cache for incremental mode
     embedding_cache = None
-    incremental = getattr(args, 'incremental', False)
+    incremental = getattr(args, "incremental", False)
     if incremental:
         logger.info("=== INCREMENTAL ANALYSIS (--incremental) ===")
         cache_path = PathConfig.get_output_dir() / "embeddings_cache.npz"
@@ -230,10 +229,10 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     try:
         results, incremental_stats = service.run(
             corpus=corpus,
-            auto_clusters=getattr(args, 'auto_clusters', False),
-            cluster_method=getattr(args, 'cluster_method', 'silhouette'),
+            auto_clusters=getattr(args, "auto_clusters", False),
+            cluster_method=getattr(args, "cluster_method", "silhouette"),
             embedding_cache=embedding_cache,
-            cluster_viz=getattr(args, 'cluster_viz', False),
+            cluster_viz=getattr(args, "cluster_viz", False),
         )
 
         # Save embedding cache if incremental
@@ -245,7 +244,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
         duration = time.time() - start_time
 
-        if getattr(args, 'json', False):
+        if getattr(args, "json", False):
             json_output = {
                 "command": "analyze",
                 "status": "success",
@@ -255,12 +254,14 @@ def cmd_analyze(args: argparse.Namespace) -> int:
                     "emails_analyzed": len(corpus.emails),
                     "clusters_generated": len(results.content_clusters),
                     "unique_senders": results.sender_analysis.unique_senders,
-                }
+                },
             }
             if incremental and incremental_stats:
                 json_output["incremental"] = True
                 json_output["stats"]["cached_embeddings"] = incremental_stats.get("cached_count", 0)
-                json_output["stats"]["generated_embeddings"] = incremental_stats.get("generated_count", 0)
+                json_output["stats"]["generated_embeddings"] = incremental_stats.get(
+                    "generated_count", 0
+                )
             output_json(json_output)
         else:
             if incremental and incremental_stats:
@@ -284,7 +285,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             f"Try adjusting --num-clusters or use --auto-clusters.",
             exc_info=True,
         )
-        if getattr(args, 'json', False):
+        if getattr(args, "json", False):
             json_output = {
                 "command": "analyze",
                 "status": "error",

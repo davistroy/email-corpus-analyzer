@@ -8,6 +8,7 @@ Tests the following analyzer components:
 - VolumeAnalyzer class from src/analyzers/volume_analyzer.py
 - SubjectAnalyzer class from src/analyzers/subject_analyzer.py
 """
+
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -37,7 +38,7 @@ def create_email(
     has_attachments: bool = False,
     sender_name: str = "",
     recipient_email: str | None = None,
-    recipient_name: str = ""
+    recipient_name: str = "",
 ) -> Email:
     """Factory function to create Email objects for testing."""
     if received_date is None:
@@ -52,7 +53,7 @@ def create_email(
         subject=subject,
         body_text=body_text,
         received_date=received_date,
-        has_attachments=has_attachments
+        has_attachments=has_attachments,
     )
 
 
@@ -63,9 +64,9 @@ def create_corpus(emails: list[Email], user_email: str = "user@example.com") -> 
             extraction_date=datetime.now(),
             total_emails=len(emails),
             source="test",
-            user_email=user_email
+            user_email=user_email,
         ),
-        emails=emails
+        emails=emails,
     )
 
 
@@ -98,7 +99,7 @@ class TestVolumeAnalyzer:
                 subject="Test",
                 body_text="This is test body content",
                 received_date=datetime(2024, 1, 15, 10, 0),
-                has_attachments=True
+                has_attachments=True,
             )
         ]
         corpus = create_corpus(emails)
@@ -122,7 +123,7 @@ class TestVolumeAnalyzer:
                 sender_domain="example.com",
                 subject=f"Subject {i}",
                 body_text=f"Body {i}",
-                received_date=datetime(2024, 1, i, 10, 0)
+                received_date=datetime(2024, 1, i, 10, 0),
             )
             for i in range(1, 6)
         ]
@@ -139,20 +140,10 @@ class TestVolumeAnalyzer:
         """Test analyzing corpus with multiple unique senders."""
         emails = [
             create_email(
-                email_id="1",
-                sender_email="alice@example.com",
-                sender_domain="example.com"
+                email_id="1", sender_email="alice@example.com", sender_domain="example.com"
             ),
-            create_email(
-                email_id="2",
-                sender_email="bob@example.com",
-                sender_domain="example.com"
-            ),
-            create_email(
-                email_id="3",
-                sender_email="charlie@other.com",
-                sender_domain="other.com"
-            )
+            create_email(email_id="2", sender_email="bob@example.com", sender_domain="example.com"),
+            create_email(email_id="3", sender_email="charlie@other.com", sender_domain="other.com"),
         ]
         corpus = create_corpus(emails)
 
@@ -168,14 +159,14 @@ class TestVolumeAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 1, 10, 0)
+                received_date=datetime(2024, 1, 1, 10, 0),
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 31, 10, 0)
-            )
+                received_date=datetime(2024, 1, 31, 10, 0),
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -193,7 +184,7 @@ class TestVolumeAnalyzer:
                 email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 1, 10, 0) + timedelta(days=i)
+                received_date=datetime(2024, 1, 1, 10, 0) + timedelta(days=i),
             )
             for i in range(10)
         ]
@@ -211,26 +202,26 @@ class TestVolumeAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                has_attachments=True
+                has_attachments=True,
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                has_attachments=False
+                has_attachments=False,
             ),
             create_email(
                 email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                has_attachments=True
+                has_attachments=True,
             ),
             create_email(
                 email_id="4",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                has_attachments=False
-            )
+                has_attachments=False,
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -246,14 +237,14 @@ class TestVolumeAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                body_text="Short"  # 5 chars
+                body_text="Short",  # 5 chars
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                body_text="This is a longer body"  # 21 chars
-            )
+                body_text="This is a longer body",  # 21 chars
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -266,9 +257,7 @@ class TestVolumeAnalyzer:
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email="sender@example.com", sender_domain="example.com"
             )
             for i in range(25)
         ]
@@ -290,15 +279,11 @@ class TestVolumeAnalyzer:
         """Test that sender emails are normalized to lowercase."""
         emails = [
             create_email(
-                email_id="1",
-                sender_email="Sender@Example.COM",
-                sender_domain="example.com"
+                email_id="1", sender_email="Sender@Example.COM", sender_domain="example.com"
             ),
             create_email(
-                email_id="2",
-                sender_email="sender@example.com",
-                sender_domain="example.com"
-            )
+                email_id="2", sender_email="sender@example.com", sender_domain="example.com"
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -343,21 +328,21 @@ class TestTemporalAnalyzer:
     def test_classify_frequency_weekly(self, analyzer):
         """Test classification of weekly sender (avg < 8 days, >= 10 emails)."""
         # 10 emails over 50 days = avg 5.5 days between emails
-        dates = [datetime(2024, 1, 1) + timedelta(days=i*5) for i in range(10)]
+        dates = [datetime(2024, 1, 1) + timedelta(days=i * 5) for i in range(10)]
         result = analyzer.classify_frequency(dates)
         assert result == "weekly"
 
     def test_classify_frequency_monthly(self, analyzer):
         """Test classification of monthly sender (avg < 35 days, >= 10 emails)."""
         # 10 emails over 200 days = avg 22 days between emails
-        dates = [datetime(2024, 1, 1) + timedelta(days=i*22) for i in range(10)]
+        dates = [datetime(2024, 1, 1) + timedelta(days=i * 22) for i in range(10)]
         result = analyzer.classify_frequency(dates)
         assert result == "monthly"
 
     def test_classify_frequency_occasional_sparse(self, analyzer):
         """Test classification of occasional sender (avg >= 35 days, >= 10 emails)."""
         # 10 emails over 400 days = avg 44 days between emails
-        dates = [datetime(2024, 1, 1) + timedelta(days=i*44) for i in range(10)]
+        dates = [datetime(2024, 1, 1) + timedelta(days=i * 44) for i in range(10)]
         result = analyzer.classify_frequency(dates)
         assert result == "occasional"
 
@@ -388,7 +373,7 @@ class TestTemporalAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 15)
+                received_date=datetime(2024, 1, 15),
             )
         ]
         corpus = create_corpus(emails)
@@ -406,21 +391,25 @@ class TestTemporalAnalyzer:
         emails = []
 
         # One-time sender
-        emails.append(create_email(
-            email_id="onetime_1",
-            sender_email="onetime@example.com",
-            sender_domain="example.com",
-            received_date=base_date
-        ))
+        emails.append(
+            create_email(
+                email_id="onetime_1",
+                sender_email="onetime@example.com",
+                sender_domain="example.com",
+                received_date=base_date,
+            )
+        )
 
         # Daily sender (10 emails, 1 day apart)
         for i in range(10):
-            emails.append(create_email(
-                email_id=f"daily_{i}",
-                sender_email="daily@example.com",
-                sender_domain="example.com",
-                received_date=base_date + timedelta(days=i)
-            ))
+            emails.append(
+                create_email(
+                    email_id=f"daily_{i}",
+                    sender_email="daily@example.com",
+                    sender_domain="example.com",
+                    received_date=base_date + timedelta(days=i),
+                )
+            )
 
         corpus = create_corpus(emails)
         result = analyzer.analyze(corpus)
@@ -437,20 +426,20 @@ class TestTemporalAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 1, 10, 0)
+                received_date=datetime(2024, 1, 1, 10, 0),
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 15, 10, 0)
+                received_date=datetime(2024, 1, 15, 10, 0),
             ),
             create_email(
                 email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 10, 10, 0)
-            )
+                received_date=datetime(2024, 1, 10, 10, 0),
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -464,9 +453,7 @@ class TestTemporalAnalyzer:
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email=f"sender{i}@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email=f"sender{i}@example.com", sender_domain="example.com"
             )
             for i in range(150)
         ]
@@ -510,7 +497,7 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Test Subject Line"
+                subject="Test Subject Line",
             )
         ]
         corpus = create_corpus(emails)
@@ -529,20 +516,20 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Re: Meeting Tomorrow"
+                subject="Re: Meeting Tomorrow",
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="RE: Follow Up"
+                subject="RE: Follow Up",
             ),
             create_email(
                 email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="re: another reply"
-            )
+                subject="re: another reply",
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -559,14 +546,14 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Fwd: Important Document"
+                subject="Fwd: Important Document",
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="FWD: Check This Out"
-            )
+                subject="FWD: Check This Out",
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -582,20 +569,20 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Invoice #12345"
+                subject="Invoice #12345",
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Order #9876"
+                subject="Order #9876",
             ),
             create_email(
                 email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Invoice #67890"
-            )
+                subject="Invoice #67890",
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -613,20 +600,20 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="[URGENT] Please Review"
+                subject="[URGENT] Please Review",
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="(Action Required) Update Needed"
+                subject="(Action Required) Update Needed",
             ),
             create_email(
                 email_id="3",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="[URGENT] Another Urgent Matter"
-            )
+                subject="[URGENT] Another Urgent Matter",
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -646,7 +633,7 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="This is the test meeting for project"
+                subject="This is the test meeting for project",
             )
         ]
         corpus = create_corpus(emails)
@@ -672,7 +659,7 @@ class TestSubjectAnalyzer:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Re: Important Meeting"
+                subject="Re: Important Meeting",
             )
         ]
         corpus = create_corpus(emails)
@@ -692,7 +679,7 @@ class TestSubjectAnalyzer:
                 email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject=subjects[i]
+                subject=subjects[i],
             )
             for i in range(100)
         ]
@@ -709,7 +696,7 @@ class TestSubjectAnalyzer:
                 email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject=f"Subject {i}"
+                subject=f"Subject {i}",
             )
             for i in range(250)
         ]
@@ -728,6 +715,7 @@ class TestSubjectAnalyzer:
     def test_extract_prefixes_private_method(self, analyzer):
         """Test the private _extract_prefixes method directly."""
         from collections import Counter
+
         counter = Counter()
 
         analyzer._extract_prefixes("Re: Test", counter)
@@ -745,6 +733,7 @@ class TestSubjectAnalyzer:
     def test_extract_numbered_patterns_private_method(self, analyzer):
         """Test the private _extract_numbered_patterns method directly."""
         from collections import Counter
+
         counter = Counter()
 
         analyzer._extract_numbered_patterns("Invoice #123", counter)
@@ -757,6 +746,7 @@ class TestSubjectAnalyzer:
     def test_extract_bracket_tags_private_method(self, analyzer):
         """Test the private _extract_bracket_tags method directly."""
         from collections import Counter
+
         counter = Counter()
 
         analyzer._extract_bracket_tags("[URGENT] Test", counter)
@@ -769,6 +759,7 @@ class TestSubjectAnalyzer:
     def test_extract_keywords_private_method(self, analyzer):
         """Test the private _extract_keywords method directly."""
         from collections import Counter
+
         counter = Counter()
 
         analyzer._extract_keywords("Hello World Testing", counter)
@@ -799,7 +790,7 @@ class TestIncrementalAnalysis:
         # Add cached embeddings for email_1 and email_2
         cache.add(
             ["email_1", "email_2"],
-            np.random.rand(2, 1024)  # mxbai-embed-large has 1024 dimensions
+            np.random.rand(2, 1024),  # mxbai-embed-large has 1024 dimensions
         )
         return cache
 
@@ -811,7 +802,7 @@ class TestIncrementalAnalysis:
                 extraction_date=datetime.now(),
                 total_emails=4,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -821,7 +812,7 @@ class TestIncrementalAnalysis:
                     subject="Cached email 1",
                     body_text="This is cached email 1",
                     received_date=datetime(2024, 1, 1),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="email_2",
@@ -830,7 +821,7 @@ class TestIncrementalAnalysis:
                     subject="Cached email 2",
                     body_text="This is cached email 2",
                     received_date=datetime(2024, 1, 2),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="email_3",
@@ -839,7 +830,7 @@ class TestIncrementalAnalysis:
                     subject="New email 3",
                     body_text="This is new email 3",
                     received_date=datetime(2024, 1, 3),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="email_4",
@@ -848,12 +839,12 @@ class TestIncrementalAnalysis:
                     subject="New email 4",
                     body_text="This is new email 4",
                     received_date=datetime(2024, 1, 4),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
     def test_analyze_incremental_uses_cached_embeddings(
         self, mock_ensure, analyzer, mock_embedding_cache, test_corpus
     ):
@@ -863,17 +854,15 @@ class TestIncrementalAnalysis:
         analyzer.model = mock_model
 
         result = analyzer.analyze_incremental(
-            corpus=test_corpus,
-            embedding_cache=mock_embedding_cache,
-            num_clusters=2
+            corpus=test_corpus, embedding_cache=mock_embedding_cache, num_clusters=2
         )
 
         # Should have generated stats
-        assert hasattr(result, 'stats')
-        assert result.stats['cached_count'] == 2
-        assert result.stats['generated_count'] == 2
+        assert hasattr(result, "stats")
+        assert result.stats["cached_count"] == 2
+        assert result.stats["generated_count"] == 2
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
     def test_analyze_incremental_updates_cache(
         self, mock_ensure, analyzer, mock_embedding_cache, test_corpus
     ):
@@ -885,15 +874,13 @@ class TestIncrementalAnalysis:
         analyzer.model = mock_model
 
         analyzer.analyze_incremental(
-            corpus=test_corpus,
-            embedding_cache=mock_embedding_cache,
-            num_clusters=2
+            corpus=test_corpus, embedding_cache=mock_embedding_cache, num_clusters=2
         )
 
         # Cache should have grown by 2 (the new emails)
         assert mock_embedding_cache.size == initial_size + 2
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
     def test_analyze_incremental_returns_clusters(
         self, mock_ensure, analyzer, mock_embedding_cache, test_corpus
     ):
@@ -903,15 +890,13 @@ class TestIncrementalAnalysis:
         analyzer.model = mock_model
 
         result = analyzer.analyze_incremental(
-            corpus=test_corpus,
-            embedding_cache=mock_embedding_cache,
-            num_clusters=2
+            corpus=test_corpus, embedding_cache=mock_embedding_cache, num_clusters=2
         )
 
-        assert hasattr(result, 'clusters')
+        assert hasattr(result, "clusters")
         assert isinstance(result.clusters, list)
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
     def test_analyze_incremental_all_cached(self, mock_ensure, analyzer, tmp_path):
         """Test incremental analysis when all emails are cached."""
         from src.cache.embedding_cache import EmbeddingCache
@@ -925,38 +910,48 @@ class TestIncrementalAnalysis:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
-                    id="e1", sender_email="a@example.com", sender_domain="example.com",
-                    subject="Test", body_text="Test", received_date=datetime(2024, 1, 1),
-                    has_attachments=False
+                    id="e1",
+                    sender_email="a@example.com",
+                    sender_domain="example.com",
+                    subject="Test",
+                    body_text="Test",
+                    received_date=datetime(2024, 1, 1),
+                    has_attachments=False,
                 ),
                 Email(
-                    id="e2", sender_email="b@example.com", sender_domain="example.com",
-                    subject="Test", body_text="Test", received_date=datetime(2024, 1, 2),
-                    has_attachments=False
+                    id="e2",
+                    sender_email="b@example.com",
+                    sender_domain="example.com",
+                    subject="Test",
+                    body_text="Test",
+                    received_date=datetime(2024, 1, 2),
+                    has_attachments=False,
                 ),
                 Email(
-                    id="e3", sender_email="c@example.com", sender_domain="example.com",
-                    subject="Test", body_text="Test", received_date=datetime(2024, 1, 3),
-                    has_attachments=False
-                )
-            ]
+                    id="e3",
+                    sender_email="c@example.com",
+                    sender_domain="example.com",
+                    subject="Test",
+                    body_text="Test",
+                    received_date=datetime(2024, 1, 3),
+                    has_attachments=False,
+                ),
+            ],
         )
 
         mock_model = MagicMock()
         analyzer.model = mock_model
 
-        result = analyzer.analyze_incremental(
-            corpus=corpus, embedding_cache=cache, num_clusters=2
-        )
+        result = analyzer.analyze_incremental(corpus=corpus, embedding_cache=cache, num_clusters=2)
 
         # Model.encode should not be called (all cached)
         mock_model.encode.assert_not_called()
-        assert result.stats['cached_count'] == 3
-        assert result.stats['generated_count'] == 0
+        assert result.stats["cached_count"] == 3
+        assert result.stats["generated_count"] == 0
 
 
 class TestCLIAnalyzeIncrementalFlag:
@@ -1011,9 +1006,7 @@ class TestSemanticAnalyzer:
         """Test that invalid num_clusters raises ValueError."""
         emails = [
             create_email(
-                email_id="1",
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id="1", sender_email="sender@example.com", sender_domain="example.com"
             )
         ]
         corpus = create_corpus(emails)
@@ -1024,9 +1017,11 @@ class TestSemanticAnalyzer:
         with pytest.raises(ValueError, match="num_clusters must be >= 1"):
             analyzer.analyze(corpus, num_clusters=-1)
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
-    def test_analyze_reduces_clusters_for_small_corpus(self, mock_st_class, mock_ensure_model, analyzer):
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    def test_analyze_reduces_clusters_for_small_corpus(
+        self, mock_st_class, mock_ensure_model, analyzer
+    ):
         """Test that num_clusters is reduced when corpus is smaller."""
         # Create small corpus
         emails = [
@@ -1035,7 +1030,7 @@ class TestSemanticAnalyzer:
                 sender_email=f"sender{i}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
-                body_text=f"Body content {i}"
+                body_text=f"Body content {i}",
             )
             for i in range(3)
         ]
@@ -1052,8 +1047,8 @@ class TestSemanticAnalyzer:
         # Should have at most 3 clusters
         assert len(result) <= 3
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_analyze_creates_clusters(self, mock_st_class, mock_ensure_model, analyzer):
         """Test that analyze creates ContentCluster objects."""
         emails = [
@@ -1062,7 +1057,7 @@ class TestSemanticAnalyzer:
                 sender_email=f"sender{i % 2}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
-                body_text=f"Body content {i}"
+                body_text=f"Body content {i}",
             )
             for i in range(10)
         ]
@@ -1083,15 +1078,15 @@ class TestSemanticAnalyzer:
             assert len(cluster.representative_samples) <= 5
             assert len(cluster.email_ids) > 0
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
-    def test_analyze_cluster_percentages_sum_correctly(self, mock_st_class, mock_ensure_model, analyzer):
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    def test_analyze_cluster_percentages_sum_correctly(
+        self, mock_st_class, mock_ensure_model, analyzer
+    ):
         """Test that cluster percentages sum to approximately 100%."""
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email="sender@example.com", sender_domain="example.com"
             )
             for i in range(20)
         ]
@@ -1106,8 +1101,8 @@ class TestSemanticAnalyzer:
         total_percentage = sum(c.percentage for c in result)
         assert abs(total_percentage - 100.0) < 0.1
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_analyze_single_email_single_cluster(self, mock_st_class, mock_ensure_model, analyzer):
         """Test analyzing single email creates single cluster."""
         emails = [
@@ -1116,7 +1111,7 @@ class TestSemanticAnalyzer:
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject="Test Subject",
-                body_text="Test body"
+                body_text="Test body",
             )
         ]
         corpus = create_corpus(emails)
@@ -1131,8 +1126,8 @@ class TestSemanticAnalyzer:
         assert result[0].size == 1
         assert result[0].percentage == 100.0
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_analyze_common_domains_extraction(self, mock_st_class, mock_ensure_model, analyzer):
         """Test that common domains are extracted for each cluster."""
         emails = [
@@ -1140,7 +1135,7 @@ class TestSemanticAnalyzer:
                 email_id=str(i),
                 sender_email=f"sender{i % 3}@domain{i % 2}.com",
                 sender_domain=f"domain{i % 2}.com",
-                subject=f"Subject {i}"
+                subject=f"Subject {i}",
             )
             for i in range(10)
         ]
@@ -1158,8 +1153,8 @@ class TestSemanticAnalyzer:
             # common_domains is list of tuples
             assert isinstance(cluster.common_domains, list)
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_analyze_representative_samples(self, mock_st_class, mock_ensure_model, analyzer):
         """Test that representative samples are created correctly."""
         emails = [
@@ -1168,7 +1163,7 @@ class TestSemanticAnalyzer:
                 sender_email=f"sender{i}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
-                body_text=f"Body text for email {i}"
+                body_text=f"Body text for email {i}",
             )
             for i in range(10)
         ]
@@ -1184,20 +1179,18 @@ class TestSemanticAnalyzer:
             # At most 5 representative samples
             assert len(cluster.representative_samples) <= 5
             for sample in cluster.representative_samples:
-                assert hasattr(sample, 'subject')
-                assert hasattr(sample, 'sender')
-                assert hasattr(sample, 'body_preview')
+                assert hasattr(sample, "subject")
+                assert hasattr(sample, "sender")
+                assert hasattr(sample, "body_preview")
                 assert len(sample.body_preview) <= 200
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_analyze_progress_callback(self, mock_st_class, mock_ensure_model, analyzer):
         """Test progress callback is called correctly."""
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email="sender@example.com", sender_domain="example.com"
             )
             for i in range(10)
         ]
@@ -1223,7 +1216,7 @@ class TestSemanticAnalyzer:
         """Test that model is lazily loaded."""
         assert analyzer.model is None
 
-        with patch('src.analyzers.semantic_analyzer.SentenceTransformer') as mock_st:
+        with patch("src.analyzers.semantic_analyzer.SentenceTransformer") as mock_st:
             mock_model = MagicMock()
             mock_st.return_value = mock_model
 
@@ -1237,7 +1230,7 @@ class TestSemanticAnalyzer:
         mock_model = MagicMock()
         analyzer.model = mock_model
 
-        with patch('src.analyzers.semantic_analyzer.SentenceTransformer') as mock_st:
+        with patch("src.analyzers.semantic_analyzer.SentenceTransformer") as mock_st:
             analyzer._ensure_model_loaded()
             mock_st.assert_not_called()
 
@@ -1250,8 +1243,8 @@ class TestSemanticAnalyzer:
         custom_analyzer = SemanticAnalyzer(max_embedding_text_length=3000)
         assert custom_analyzer.max_embedding_text_length == 3000
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_analyze_uses_configurable_text_length(self, mock_st_class, mock_ensure_model):
         """Test that analyze uses max_embedding_text_length for text preparation."""
         custom_analyzer = SemanticAnalyzer(max_embedding_text_length=300)
@@ -1295,7 +1288,7 @@ class TestRunFullAnalysis:
         with pytest.raises(ValueError, match="Cannot analyze empty corpus"):
             run_full_analysis(corpus)
 
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_calls_all_analyzers_integration(self, mock_st_class):
         """Test that all analyzers are called and return AnalysisResults.
 
@@ -1314,7 +1307,7 @@ class TestRunFullAnalysis:
                 sender_domain="example.com",
                 subject=f"Test Subject {i}",
                 body_text=f"Test body content for email {i}",
-                received_date=datetime(2024, 1, 1) + timedelta(days=i)
+                received_date=datetime(2024, 1, 1) + timedelta(days=i),
             )
             for i in range(5)
         ]
@@ -1326,18 +1319,18 @@ class TestRunFullAnalysis:
         assert incremental_stats is None
 
         # Verify result is AnalysisResults with all components
-        assert hasattr(result, 'sender_analysis')
-        assert hasattr(result, 'subject_patterns')
-        assert hasattr(result, 'content_clusters')
-        assert hasattr(result, 'temporal_patterns')
-        assert hasattr(result, 'volume_stats')
+        assert hasattr(result, "sender_analysis")
+        assert hasattr(result, "subject_patterns")
+        assert hasattr(result, "content_clusters")
+        assert hasattr(result, "temporal_patterns")
+        assert hasattr(result, "volume_stats")
 
         # Verify components have expected data
         assert result.sender_analysis.unique_senders == 3
         assert result.subject_patterns.total_subjects_analyzed == 5
         assert result.volume_stats.total_emails == 5
 
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_num_clusters_parameter(self, mock_st_class):
         """Test that num_clusters parameter affects semantic analysis.
 
@@ -1354,7 +1347,7 @@ class TestRunFullAnalysis:
                 sender_email="sender@example.com",
                 sender_domain="example.com",
                 subject=f"Test Subject {i}",
-                body_text=f"Test body content {i}"
+                body_text=f"Test body content {i}",
             )
             for i in range(10)
         ]
@@ -1365,7 +1358,7 @@ class TestRunFullAnalysis:
         # Should have clusters (num depends on KMeans results)
         assert isinstance(result.content_clusters, list)
 
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_progress_callback_integration(self, mock_st_class):
         """Test that progress callback is called during full analysis."""
         # Configure the mock SentenceTransformer
@@ -1375,9 +1368,7 @@ class TestRunFullAnalysis:
 
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email="sender@example.com", sender_domain="example.com"
             )
             for i in range(5)
         ]
@@ -1394,7 +1385,7 @@ class TestRunFullAnalysis:
         analyzer_names = {name for name, _, _ in callback_data}
         assert "sender" in analyzer_names or len(callback_data) > 0
 
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_with_embedding_cache_returns_incremental_stats(self, mock_st_class):
         """Test that providing embedding_cache triggers incremental mode and returns stats."""
         import os
@@ -1413,7 +1404,7 @@ class TestRunFullAnalysis:
                 sender_domain="example.com",
                 subject=f"Test Subject {i}",
                 body_text=f"Test body content for email {i}",
-                received_date=datetime(2024, 1, 1) + timedelta(days=i)
+                received_date=datetime(2024, 1, 1) + timedelta(days=i),
             )
             for i in range(5)
         ]
@@ -1432,8 +1423,8 @@ class TestRunFullAnalysis:
             assert "generated_count" in incremental_stats
 
             # Results should still be valid
-            assert hasattr(result, 'sender_analysis')
-            assert hasattr(result, 'content_clusters')
+            assert hasattr(result, "sender_analysis")
+            assert hasattr(result, "content_clusters")
 
 
 # ============================================================================
@@ -1452,7 +1443,7 @@ class TestEdgeCases:
                 email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 15, i, 0)  # Same day, different hours
+                received_date=datetime(2024, 1, 15, i, 0),  # Same day, different hours
             )
             for i in range(5)
         ]
@@ -1475,7 +1466,7 @@ class TestEdgeCases:
                 email_id=str(i),
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                received_date=datetime(2024, 1, 15, i % 24, 0)
+                received_date=datetime(2024, 1, 15, i % 24, 0),
             )
             for i in range(15)
         ]
@@ -1495,14 +1486,14 @@ class TestEdgeCases:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject=""
+                subject="",
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject=""
-            )
+                subject="",
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -1519,7 +1510,7 @@ class TestEdgeCases:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="[Test] Invoice #123 - $500.00 @work"
+                subject="[Test] Invoice #123 - $500.00 @work",
             )
         ]
         corpus = create_corpus(emails)
@@ -1539,7 +1530,7 @@ class TestEdgeCases:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                body_text=""
+                body_text="",
             )
         ]
         corpus = create_corpus(emails)
@@ -1554,17 +1545,17 @@ class TestEdgeCases:
 
         # Test boundary: exactly 2 days average (should be weekly, not daily)
         # 10 emails over 18 days = 2 day intervals
-        dates = [datetime(2024, 1, 1) + timedelta(days=i*2) for i in range(10)]
+        dates = [datetime(2024, 1, 1) + timedelta(days=i * 2) for i in range(10)]
         result = analyzer.classify_frequency(dates)
         assert result == "weekly"  # 2 days is weekly (< 8, not < 2)
 
         # Test boundary: exactly 8 days average (should be monthly, not weekly)
-        dates = [datetime(2024, 1, 1) + timedelta(days=i*8) for i in range(10)]
+        dates = [datetime(2024, 1, 1) + timedelta(days=i * 8) for i in range(10)]
         result = analyzer.classify_frequency(dates)
         assert result == "monthly"  # 8 days is monthly (< 35, not < 8)
 
         # Test boundary: exactly 35 days average (should be occasional)
-        dates = [datetime(2024, 1, 1) + timedelta(days=i*35) for i in range(10)]
+        dates = [datetime(2024, 1, 1) + timedelta(days=i * 35) for i in range(10)]
         result = analyzer.classify_frequency(dates)
         assert result == "occasional"  # 35 days is occasional (>= 35)
 
@@ -1576,14 +1567,14 @@ class TestEdgeCases:
                 email_id="1",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Meeting about cafe resume"
+                subject="Meeting about cafe resume",
             ),
             create_email(
                 email_id="2",
                 sender_email="sender@example.com",
                 sender_domain="example.com",
-                subject="Test unicode characters"
-            )
+                subject="Test unicode characters",
+            ),
         ]
         corpus = create_corpus(emails)
 
@@ -1601,7 +1592,7 @@ class TestEdgeCases:
                 sender_domain=f"domain{i % 10}.com",
                 body_text="x" * (i % 1000),
                 has_attachments=(i % 3 == 0),
-                received_date=datetime(2024, 1, 1) + timedelta(days=i % 365)
+                received_date=datetime(2024, 1, 1) + timedelta(days=i % 365),
             )
             for i in range(500)
         ]
@@ -1627,9 +1618,7 @@ class TestClusterQualityMetrics:
         from src.models.content_cluster import ContentCluster, RepresentativeSample
 
         sample = RepresentativeSample(
-            subject="Test",
-            sender="test@example.com",
-            body_preview="Test body"
+            subject="Test", sender="test@example.com", body_preview="Test body"
         )
 
         cluster = ContentCluster(
@@ -1639,7 +1628,7 @@ class TestClusterQualityMetrics:
             representative_samples=[sample],
             common_domains=[("example.com", 5)],
             email_ids=["1", "2"],
-            silhouette_score=0.75
+            silhouette_score=0.75,
         )
 
         assert cluster.silhouette_score == 0.75
@@ -1649,30 +1638,7 @@ class TestClusterQualityMetrics:
         from src.models.content_cluster import ContentCluster, RepresentativeSample
 
         sample = RepresentativeSample(
-            subject="Test",
-            sender="test@example.com",
-            body_preview="Test body"
-        )
-
-        cluster = ContentCluster(
-            cluster_id=0,
-            size=10,
-            percentage=50.0,
-            representative_samples=[sample],
-            common_domains=[],
-            email_ids=["1"]
-        )
-
-        assert cluster.silhouette_score is None
-
-    def test_content_cluster_has_cohesion_score_field(self):
-        """Test ContentCluster model has cohesion_score field."""
-        from src.models.content_cluster import ContentCluster, RepresentativeSample
-
-        sample = RepresentativeSample(
-            subject="Test",
-            sender="test@example.com",
-            body_preview="Test body"
+            subject="Test", sender="test@example.com", body_preview="Test body"
         )
 
         cluster = ContentCluster(
@@ -1682,7 +1648,26 @@ class TestClusterQualityMetrics:
             representative_samples=[sample],
             common_domains=[],
             email_ids=["1"],
-            cohesion_score=0.85
+        )
+
+        assert cluster.silhouette_score is None
+
+    def test_content_cluster_has_cohesion_score_field(self):
+        """Test ContentCluster model has cohesion_score field."""
+        from src.models.content_cluster import ContentCluster, RepresentativeSample
+
+        sample = RepresentativeSample(
+            subject="Test", sender="test@example.com", body_preview="Test body"
+        )
+
+        cluster = ContentCluster(
+            cluster_id=0,
+            size=10,
+            percentage=50.0,
+            representative_samples=[sample],
+            common_domains=[],
+            email_ids=["1"],
+            cohesion_score=0.85,
         )
 
         assert cluster.cohesion_score == 0.85
@@ -1692,9 +1677,7 @@ class TestClusterQualityMetrics:
         from src.models.content_cluster import ContentCluster, RepresentativeSample
 
         sample = RepresentativeSample(
-            subject="Test",
-            sender="test@example.com",
-            body_preview="Test body"
+            subject="Test", sender="test@example.com", body_preview="Test body"
         )
 
         cluster = ContentCluster(
@@ -1703,13 +1686,13 @@ class TestClusterQualityMetrics:
             percentage=50.0,
             representative_samples=[sample],
             common_domains=[],
-            email_ids=["1"]
+            email_ids=["1"],
         )
 
         assert cluster.cohesion_score is None
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_semantic_analyzer_calculates_quality_metrics(self, mock_st_class, mock_ensure_model):
         """Test that semantic analyzer calculates quality metrics for clusters."""
         analyzer = SemanticAnalyzer()
@@ -1726,7 +1709,7 @@ class TestClusterQualityMetrics:
                 sender_email=f"sender{i % 2}@example.com",
                 sender_domain="example.com",
                 subject=f"Subject {i}",
-                body_text=f"Body content {i}"
+                body_text=f"Body content {i}",
             )
             for i in range(20)
         ]
@@ -1748,8 +1731,8 @@ class TestClusterQualityMetrics:
             assert cluster.cohesion_score is not None
             assert cluster.cohesion_score >= 0.0
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_semantic_analyzer_single_cluster_no_silhouette(self, mock_st_class, mock_ensure_model):
         """Test that silhouette is None for single cluster (k=1)."""
         analyzer = SemanticAnalyzer()
@@ -1759,9 +1742,7 @@ class TestClusterQualityMetrics:
 
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email="sender@example.com", sender_domain="example.com"
             )
             for i in range(5)
         ]
@@ -1777,8 +1758,8 @@ class TestClusterQualityMetrics:
         assert len(result) == 1
         assert result[0].silhouette_score is None
 
-    @patch.object(SemanticAnalyzer, '_ensure_model_loaded')
-    @patch('src.analyzers.semantic_analyzer.SentenceTransformer')
+    @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
     def test_quality_metrics_included_in_json_output(self, mock_st_class, mock_ensure_model):
         """Test that quality metrics are included in model_dump output."""
         analyzer = SemanticAnalyzer()
@@ -1788,9 +1769,7 @@ class TestClusterQualityMetrics:
 
         emails = [
             create_email(
-                email_id=str(i),
-                sender_email="sender@example.com",
-                sender_domain="example.com"
+                email_id=str(i), sender_email="sender@example.com", sender_domain="example.com"
             )
             for i in range(10)
         ]

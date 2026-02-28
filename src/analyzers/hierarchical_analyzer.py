@@ -6,6 +6,7 @@ Performs hierarchical agglomerative clustering of email corpus to generate
 
 Per Task 4A.2 requirements.
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,14 +40,11 @@ class HierarchicalCluster(BaseModel):
     cluster_id: str = Field(..., min_length=1)
     level: int = Field(..., ge=0, description="0=top-level, 1=subcluster")
     parent_cluster_id: str | None = Field(
-        default=None,
-        description="ID of parent cluster (None for top-level)"
+        default=None, description="ID of parent cluster (None for top-level)"
     )
     size: int = Field(..., ge=1)
     percentage: float = Field(..., ge=0, le=100)
-    representative_samples: list[RepresentativeSample] = Field(
-        default_factory=list, max_length=5
-    )
+    representative_samples: list[RepresentativeSample] = Field(default_factory=list, max_length=5)
     common_domains: list[tuple[str, int]] = Field(default_factory=list)
     email_ids: list[str] = Field(default_factory=list)
     subclusters: list[HierarchicalCluster] = Field(default_factory=list)
@@ -189,9 +187,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
 
         if total_emails < 10:
             # Too few for meaningful hierarchy, use flat clustering
-            return self._create_flat_clusters(
-                corpus, self._embeddings, min(3, total_emails)
-            )
+            return self._create_flat_clusters(corpus, self._embeddings, min(3, total_emails))
 
         # Step 2: Build hierarchical clustering
         logger.debug("Building hierarchical clustering with ward linkage")
@@ -206,9 +202,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
 
         logger.debug(f"Target top-level clusters: {target_top_clusters}")
 
-        top_level_cut = self._select_optimal_cut_point(
-            linkage_matrix, target_top_clusters
-        )
+        top_level_cut = self._select_optimal_cut_point(linkage_matrix, target_top_clusters)
         top_labels = fcluster(linkage_matrix, top_level_cut, criterion="distance")
 
         # Step 4: Create top-level clusters
@@ -232,8 +226,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             progress_callback(total_emails, total_emails)
 
         logger.info(
-            f"Hierarchical analysis complete. "
-            f"Generated {len(top_clusters)} top-level clusters"
+            f"Hierarchical analysis complete. Generated {len(top_clusters)} top-level clusters"
         )
 
         return top_clusters
@@ -335,9 +328,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             # Find representative samples (closest to centroid)
             cluster_embeddings = embeddings[cluster_mask]
             centroid = cluster_embeddings.mean(axis=0)
-            distances = cosine_distances(
-                cluster_embeddings, centroid.reshape(1, -1)
-            ).flatten()
+            distances = cosine_distances(cluster_embeddings, centroid.reshape(1, -1)).flatten()
 
             num_samples = min(5, cluster_size)
             closest_indices = np.argsort(distances)[:num_samples]
@@ -391,8 +382,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
         """
         # Get indices of emails in parent cluster
         parent_indices = [
-            i for i, email in enumerate(corpus.emails)
-            if email.id in parent_cluster.email_ids
+            i for i, email in enumerate(corpus.emails) if email.id in parent_cluster.email_ids
         ]
 
         if len(parent_indices) < self.min_subclusters * 2:
@@ -425,6 +415,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
         # Create a mini-corpus with just the parent cluster emails
         parent_emails = [corpus.emails[i] for i in parent_indices]
         from ..models.corpus import Corpus, CorpusMetadata
+
         mini_corpus = Corpus(
             extraction_metadata=CorpusMetadata(
                 extraction_date=corpus.extraction_metadata.extraction_date,
@@ -496,9 +487,7 @@ class HierarchicalAnalyzer(BaseAnalyzer[list[HierarchicalCluster]]):
             cut_distance = self._select_optimal_cut_point(linkage_matrix, num_clusters)
             labels = fcluster(linkage_matrix, cut_distance, criterion="distance")
 
-        clusters = self._build_clusters_from_labels(
-            corpus, embeddings, labels, level=0
-        )
+        clusters = self._build_clusters_from_labels(corpus, embeddings, labels, level=0)
 
         self._flat_clusters = clusters
         return clusters

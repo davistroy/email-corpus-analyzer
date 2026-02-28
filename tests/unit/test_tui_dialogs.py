@@ -27,11 +27,12 @@ def create_test_category(
         source=source,
         source_id="test_source",
         example_email_ids=[],
-        distinguishing_features=[]
+        distinguishing_features=[],
     )
 
 
 # === Task 3B.2: Rename Dialog Tests ===
+
 
 class TestRenameDialogInit:
     """Test RenameDialog initialization."""
@@ -121,6 +122,7 @@ class TestRenameDialogContent:
 
         # Dialog should be a ModalScreen
         from textual.screen import ModalScreen
+
         assert isinstance(dialog, ModalScreen)
 
 
@@ -156,6 +158,7 @@ class TestRenameDialogActions:
 
 
 # === Task 3B.3: Merge Dialog Tests ===
+
 
 class TestMergeDialogInit:
     """Test MergeDialog initialization."""
@@ -279,6 +282,7 @@ class TestMergeDialogActions:
 
 
 # === Dialog Package Tests ===
+
 
 class TestDialogsPackageInit:
     """Test dialogs package initialization."""

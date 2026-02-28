@@ -14,6 +14,7 @@ Commands:
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
 """
+
 import argparse
 import logging
 import sys
@@ -106,53 +107,36 @@ Examples:
   %(prog)s info
 
 For more information, see: specs/001-use-the-document/quickstart.md
-        """
+        """,
     )
 
     # Version flag
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     # Global options (available to all commands)
     parser.add_argument(
-        "--output-dir",
-        type=Path,
-        help="Output directory for all files (default: ~/data/outputs)"
+        "--output-dir", type=Path, help="Output directory for all files (default: ~/data/outputs)"
     )
 
     # Mutually exclusive group for verbose/quiet/json
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable verbose debug logging"
+        "-v", "--verbose", action="store_true", help="Enable verbose debug logging"
     )
     output_group.add_argument(
-        "-q", "--quiet",
+        "-q",
+        "--quiet",
         action="store_true",
-        help="Suppress INFO output, only show warnings and errors"
+        help="Suppress INFO output, only show warnings and errors",
     )
     output_group.add_argument(
-        "--json",
-        action="store_true",
-        help="Output results as machine-readable JSON"
+        "--json", action="store_true", help="Output results as machine-readable JSON"
     )
 
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="Path to custom configuration file (YAML)"
-    )
+    parser.add_argument("--config", type=Path, help="Path to custom configuration file (YAML)")
 
     # Subcommands
-    subparsers = parser.add_subparsers(
-        dest="command",
-        required=True,
-        help="Command to execute"
-    )
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Command to execute")
 
     # Build each command's subparser and register in SUBPARSERS
     # so _apply_config_defaults() can look up defaults without

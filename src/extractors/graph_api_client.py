@@ -9,6 +9,7 @@ Authentication:
     - Subsequent runs: uses cached token (no re-auth needed)
     - Token cache: ~/.email-analyzer/ms_token_cache.json
 """
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -71,9 +72,11 @@ class GraphAPIClient:
         """Persist token cache to disk with restrictive permissions."""
         if cache.has_state_changed:
             import os
+
             self.token_cache_path.parent.mkdir(parents=True, exist_ok=True)
             self.token_cache_path.write_text(cache.serialize())
             import contextlib
+
             with contextlib.suppress(OSError):
                 os.chmod(self.token_cache_path, 0o600)  # Windows may not support chmod
 
@@ -124,9 +127,7 @@ class GraphAPIClient:
 
         flow = app.initiate_device_flow(scopes=SCOPES)
         if "user_code" not in flow:
-            raise RuntimeError(
-                f"Failed to create device flow: {flow.get('error_description')}"
-            )
+            raise RuntimeError(f"Failed to create device flow: {flow.get('error_description')}")
 
         print(flow["message"])
         print("=" * 60 + "\n")

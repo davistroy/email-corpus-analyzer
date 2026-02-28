@@ -4,6 +4,7 @@ Unit tests for cross-entity validation functions.
 Tests the validation functions that ensure data consistency
 across Email, Corpus, ContentCluster, and Category entities.
 """
+
 from datetime import datetime
 
 import pytest
@@ -30,7 +31,7 @@ class TestCorpusValidation:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -40,7 +41,7 @@ class TestCorpusValidation:
                     subject="Test 1",
                     body_text="Body 1",
                     received_date=datetime(2024, 1, 1),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="2",
@@ -49,7 +50,7 @@ class TestCorpusValidation:
                     subject="Test 2",
                     body_text="Body 2",
                     received_date=datetime(2024, 1, 2),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="3",
@@ -58,9 +59,9 @@ class TestCorpusValidation:
                     subject="Test 3",
                     body_text="Body 3",
                     received_date=datetime(2024, 1, 3),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         assert validate_corpus_total_matches_length(corpus) is True
@@ -72,7 +73,7 @@ class TestCorpusValidation:
                 extraction_date=datetime.now(),
                 total_emails=10,  # Says 10 but only has 3
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -85,7 +86,7 @@ class TestCorpusValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="2",
@@ -94,7 +95,7 @@ class TestCorpusValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="3",
@@ -103,9 +104,9 @@ class TestCorpusValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         # Should raise ValueError, not return False
@@ -119,9 +120,9 @@ class TestCorpusValidation:
                 extraction_date=datetime.now(),
                 total_emails=0,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
-            emails=[]
+            emails=[],
         )
 
         assert validate_corpus_total_matches_length(corpus) is True
@@ -133,7 +134,7 @@ class TestCorpusValidation:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -143,7 +144,7 @@ class TestCorpusValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="unique_2",
@@ -152,7 +153,7 @@ class TestCorpusValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="unique_3",
@@ -161,9 +162,9 @@ class TestCorpusValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         assert validate_unique_email_ids(corpus) is True
@@ -175,7 +176,7 @@ class TestCorpusValidation:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -185,7 +186,7 @@ class TestCorpusValidation:
                     subject="Test 1",
                     body_text="Body 1",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="unique_id",
@@ -194,7 +195,7 @@ class TestCorpusValidation:
                     subject="Test 2",
                     body_text="Body 2",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="duplicate_id",  # Same as first
@@ -203,9 +204,9 @@ class TestCorpusValidation:
                     subject="Test 3",
                     body_text="Body 3",
                     received_date=datetime.now(),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         # Should raise ValueError, not return False
@@ -226,7 +227,7 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
+                email_ids=[],
             ),
             ContentCluster(
                 cluster_id=1,
@@ -235,7 +236,7 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
+                email_ids=[],
             ),
             ContentCluster(
                 cluster_id=2,
@@ -244,8 +245,8 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
-            )
+                email_ids=[],
+            ),
         ]
 
         assert validate_cluster_percentages_sum_100(clusters) is True
@@ -261,7 +262,7 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
+                email_ids=[],
             ),
             ContentCluster(
                 cluster_id=1,
@@ -270,8 +271,8 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
-            )
+                email_ids=[],
+            ),
         ]
 
         assert validate_cluster_percentages_sum_100(clusters, tolerance=2.0) is True
@@ -287,7 +288,7 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
+                email_ids=[],
             ),
             ContentCluster(
                 cluster_id=1,
@@ -296,8 +297,8 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
-            )
+                email_ids=[],
+            ),
         ]
 
         # Should raise ValueError, not return False
@@ -315,7 +316,7 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
+                email_ids=[],
             ),
             ContentCluster(
                 cluster_id=1,
@@ -324,8 +325,8 @@ class TestClusterValidation:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=[]
-            )
+                email_ids=[],
+            ),
         ]
 
         # Should raise ValueError, not return False
@@ -349,7 +350,7 @@ class TestCategoryValidation:
                 extraction_date=datetime.now(),
                 total_emails=5,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -359,10 +360,10 @@ class TestCategoryValidation:
                     subject=f"Test {i}",
                     body_text=f"Body {i}",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 )
                 for i in range(1, 6)
-            ]
+            ],
         )
 
         categories = [
@@ -374,7 +375,7 @@ class TestCategoryValidation:
                 email_count=3,
                 percentage=60.0,
                 source=CategorySource.CONTENT_CLUSTER,
-                example_email_ids=["email_1", "email_2", "email_3"]
+                example_email_ids=["email_1", "email_2", "email_3"],
             ),
             Category(
                 category_id="cat_2",
@@ -384,8 +385,8 @@ class TestCategoryValidation:
                 email_count=2,
                 percentage=40.0,
                 source=CategorySource.SENDER,
-                example_email_ids=["email_4", "email_5"]
-            )
+                example_email_ids=["email_4", "email_5"],
+            ),
         ]
 
         assert validate_email_id_references(categories, corpus) is True
@@ -397,7 +398,7 @@ class TestCategoryValidation:
                 extraction_date=datetime.now(),
                 total_emails=2,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -407,7 +408,7 @@ class TestCategoryValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="email_2",
@@ -416,9 +417,9 @@ class TestCategoryValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         categories = [
@@ -430,7 +431,7 @@ class TestCategoryValidation:
                 email_count=3,
                 percentage=100.0,
                 source=CategorySource.TEMPLATE,
-                example_email_ids=["email_1", "email_999", "email_888"]  # 999 and 888 don't exist
+                example_email_ids=["email_1", "email_999", "email_888"],  # 999 and 888 don't exist
             )
         ]
 
@@ -445,7 +446,7 @@ class TestCategoryValidation:
                 extraction_date=datetime.now(),
                 total_emails=1,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -455,9 +456,9 @@ class TestCategoryValidation:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 )
-            ]
+            ],
         )
 
         categories = [
@@ -467,7 +468,7 @@ class TestCategoryValidation:
                 description="No examples",
                 confidence=0.5,
                 source=CategorySource.CUSTOM,
-                example_email_ids=[]  # Empty list
+                example_email_ids=[],  # Empty list
             )
         ]
 
@@ -481,9 +482,9 @@ class TestCategoryValidation:
                 extraction_date=datetime.now(),
                 total_emails=0,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
-            emails=[]
+            emails=[],
         )
 
         categories = [
@@ -493,7 +494,7 @@ class TestCategoryValidation:
                 description="Test",
                 confidence=0.8,
                 source=CategorySource.TEMPLATE,
-                example_email_ids=["email_1"]  # References non-existent email
+                example_email_ids=["email_1"],  # References non-existent email
             )
         ]
 
@@ -512,7 +513,7 @@ class TestValidationIntegration:
                 extraction_date=datetime.now(),
                 total_emails=4,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -522,10 +523,10 @@ class TestValidationIntegration:
                     subject=f"Test {i}",
                     body_text=f"Body {i}",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 )
                 for i in range(1, 5)
-            ]
+            ],
         )
 
         clusters = [
@@ -536,7 +537,7 @@ class TestValidationIntegration:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=["email_1", "email_2"]
+                email_ids=["email_1", "email_2"],
             ),
             ContentCluster(
                 cluster_id=1,
@@ -545,8 +546,8 @@ class TestValidationIntegration:
                 representative_samples=[],
                 common_keywords=[],
                 common_domains=[],
-                email_ids=["email_3", "email_4"]
-            )
+                email_ids=["email_3", "email_4"],
+            ),
         ]
 
         categories = [
@@ -558,7 +559,7 @@ class TestValidationIntegration:
                 email_count=2,
                 percentage=50.0,
                 source=CategorySource.CONTENT_CLUSTER,
-                example_email_ids=["email_1", "email_2"]
+                example_email_ids=["email_1", "email_2"],
             )
         ]
 
@@ -576,7 +577,7 @@ class TestValidationIntegration:
                 extraction_date=datetime.now(),
                 total_emails=10,  # Wrong - should be 3
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -586,7 +587,7 @@ class TestValidationIntegration:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="dup_id",  # Duplicate
@@ -595,7 +596,7 @@ class TestValidationIntegration:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="unique_id",
@@ -604,9 +605,9 @@ class TestValidationIntegration:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         # Clusters that don't sum to 100%
@@ -617,7 +618,7 @@ class TestValidationIntegration:
             representative_samples=[],
             common_keywords=[],
             common_domains=[],
-            email_ids=[]
+            email_ids=[],
         )
 
         # Category referencing non-existent email
@@ -627,7 +628,7 @@ class TestValidationIntegration:
             description="Test",
             confidence=0.8,
             source=CategorySource.TEMPLATE,
-            example_email_ids=["non_existent_id"]
+            example_email_ids=["non_existent_id"],
         )
 
         # Multiple validations should raise errors
@@ -647,9 +648,9 @@ class TestCorpusDateRange:
                 extraction_date=extraction_time,
                 total_emails=0,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
-            emails=[]
+            emails=[],
         )
 
         min_date, max_date = corpus.date_range
@@ -665,7 +666,7 @@ class TestCorpusDateRange:
                 extraction_date=datetime.now(),
                 total_emails=1,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -675,9 +676,9 @@ class TestCorpusDateRange:
                     subject="Single email",
                     body_text="Body",
                     received_date=email_date,
-                    has_attachments=False
+                    has_attachments=False,
                 )
-            ]
+            ],
         )
 
         min_date, max_date = corpus.date_range
@@ -696,7 +697,7 @@ class TestCorpusDateRange:
                 extraction_date=datetime.now(),
                 total_emails=3,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -706,7 +707,7 @@ class TestCorpusDateRange:
                     subject="Middle email",
                     body_text="Body",
                     received_date=middle_date,
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="oldest",
@@ -715,7 +716,7 @@ class TestCorpusDateRange:
                     subject="Oldest email",
                     body_text="Body",
                     received_date=oldest_date,
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="newest",
@@ -724,9 +725,9 @@ class TestCorpusDateRange:
                     subject="Newest email",
                     body_text="Body",
                     received_date=newest_date,
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         min_date, max_date = corpus.date_range
@@ -741,7 +742,7 @@ class TestCorpusDateRange:
                 extraction_date=datetime.now(),
                 total_emails=1,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -751,9 +752,9 @@ class TestCorpusDateRange:
                     subject="Test",
                     body_text="Body",
                     received_date=datetime.now(),
-                    has_attachments=False
+                    has_attachments=False,
                 )
-            ]
+            ],
         )
 
         result = corpus.date_range
@@ -771,7 +772,7 @@ class TestCorpusDateRange:
                 extraction_date=datetime.now(),
                 total_emails=2,
                 source="test",
-                user_email="user@example.com"
+                user_email="user@example.com",
             ),
             emails=[
                 Email(
@@ -781,7 +782,7 @@ class TestCorpusDateRange:
                     subject="Later",
                     body_text="Body",
                     received_date=later,
-                    has_attachments=False
+                    has_attachments=False,
                 ),
                 Email(
                     id="earlier",
@@ -790,9 +791,9 @@ class TestCorpusDateRange:
                     subject="Earlier",
                     body_text="Body",
                     received_date=earlier,
-                    has_attachments=False
-                )
-            ]
+                    has_attachments=False,
+                ),
+            ],
         )
 
         min_date, max_date = corpus.date_range

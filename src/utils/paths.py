@@ -7,6 +7,7 @@ eliminating hardcoded paths and reducing technical debt.
 Default output directory: ~/data/outputs
 Can be overridden via PathConfig.set_output_dir() or CLI arguments.
 """
+
 import os
 from pathlib import Path
 

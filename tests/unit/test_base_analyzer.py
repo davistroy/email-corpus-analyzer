@@ -7,6 +7,7 @@ Tests the abstract base class for all email analyzers with:
 - Name property requirement
 - Incremental analysis support flag
 """
+
 from datetime import datetime
 
 import pytest

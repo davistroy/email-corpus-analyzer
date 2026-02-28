@@ -4,6 +4,7 @@ TF-IDF based name generator for email categories.
 Generates descriptive category names by analyzing distinguishing terms
 in email clusters using TF-IDF (Term Frequency-Inverse Document Frequency).
 """
+
 from dataclasses import dataclass
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -305,7 +306,9 @@ def score_name_quality(name: str) -> NameQualityScore:
 
     # Specificity bonus: reward concrete, specific terms
     specificity_bonus = 0.0
-    specific_count = sum(1 for w in words_lower if len(w) > 5 and w not in GENERIC_WORDS and w not in STOP_WORDS)
+    specific_count = sum(
+        1 for w in words_lower if len(w) > 5 and w not in GENERIC_WORDS and w not in STOP_WORDS
+    )
     specificity_bonus = min(0.15, specific_count * 0.05)
 
     # Proper noun bonus: check for known brands/companies or capitalized words

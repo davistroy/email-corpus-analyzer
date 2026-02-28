@@ -8,6 +8,7 @@ Tests the following cluster optimization components:
 - ElbowOptimizer class - finds optimal k using inertia curve
 - SilhouetteOptimizer class - finds optimal k using silhouette scores
 """
+
 import math
 
 import numpy as np
@@ -95,7 +96,7 @@ class TestComputeMaxK:
         for i in range(len(results) - 1):
             assert results[i] <= results[i + 1], (
                 f"compute_max_k({sizes[i]})={results[i]} > "
-                f"compute_max_k({sizes[i+1]})={results[i+1]}"
+                f"compute_max_k({sizes[i + 1]})={results[i + 1]}"
             )
 
     def test_acceptance_50_email_corpus_max_5_clusters(self):
@@ -150,7 +151,7 @@ class TestSilhouetteToConfidence:
         for i in range(len(confidences) - 1):
             assert confidences[i] < confidences[i + 1], (
                 f"Not monotonic: conf({scores[i]})={confidences[i]} "
-                f">= conf({scores[i+1]})={confidences[i+1]}"
+                f">= conf({scores[i + 1]})={confidences[i + 1]}"
             )
 
     def test_output_always_in_0_1(self):
@@ -163,18 +164,13 @@ class TestSilhouetteToConfidence:
         """Acceptance: negative silhouette scores map to confidence < 0.3."""
         for score in [-0.3, -0.5, -0.8, -1.0]:
             conf = silhouette_to_confidence(score)
-            assert conf < 0.3, (
-                f"Negative score {score} mapped to confidence {conf}, "
-                f"expected < 0.3"
-            )
+            assert conf < 0.3, f"Negative score {score} mapped to confidence {conf}, expected < 0.3"
 
     def test_acceptance_positive_above_0_5_maps_high(self):
         """Acceptance: positive scores above 0.5 map to confidence > 0.9."""
         for score in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
             conf = silhouette_to_confidence(score)
-            assert conf > 0.9, (
-                f"Score {score} mapped to confidence {conf}, expected > 0.9"
-            )
+            assert conf > 0.9, f"Score {score} mapped to confidence {conf}, expected > 0.9"
 
 
 # ============================================================================
@@ -620,10 +616,7 @@ class TestClusterOptimizerIntegration:
         """Test that both methods find similar k for clear cluster structure."""
         np.random.seed(42)
         # Create 4 well-separated clusters
-        clusters = [
-            np.random.randn(25, 10) + np.array([i * 15] * 10)
-            for i in range(4)
-        ]
+        clusters = [np.random.randn(25, 10) + np.array([i * 15] * 10) for i in range(4)]
         embeddings = np.vstack(clusters)
 
         elbow_optimizer = ElbowOptimizer(max_k=10)

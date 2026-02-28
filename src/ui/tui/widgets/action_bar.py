@@ -3,6 +3,7 @@ Action bar widget for the TUI application.
 
 Displays available keyboard commands at the bottom of the screen.
 """
+
 from textual.reactive import reactive
 from textual.widgets import Static
 

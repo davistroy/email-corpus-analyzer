@@ -8,6 +8,7 @@ and learning user preferences over time.
 
 Storage location: ~/.email-analyzer/decisions.jsonl
 """
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -108,12 +109,7 @@ class DecisionLogger:
 
         logger.debug(f"DecisionLogger initialized with path: {self.decisions_path}")
 
-    def log_decision(
-        self,
-        category_name: str,
-        action: DecisionAction,
-        **context
-    ) -> ReviewDecision:
+    def log_decision(self, category_name: str, action: DecisionAction, **context) -> ReviewDecision:
         """
         Log a review decision to the decisions file.
 
@@ -139,10 +135,7 @@ class DecisionLogger:
         logger.debug(f"Logged decision: {action.value} for '{category_name}'")
         return decision
 
-    def get_decisions(
-        self,
-        action_filter: DecisionAction | None = None
-    ) -> list[ReviewDecision]:
+    def get_decisions(self, action_filter: DecisionAction | None = None) -> list[ReviewDecision]:
         """
         Get all logged decisions, optionally filtered by action type.
 
@@ -172,10 +165,7 @@ class DecisionLogger:
 
         return decisions
 
-    def get_decision_count(
-        self,
-        action_filter: DecisionAction | None = None
-    ) -> int:
+    def get_decision_count(self, action_filter: DecisionAction | None = None) -> int:
         """
         Get the count of logged decisions.
 
