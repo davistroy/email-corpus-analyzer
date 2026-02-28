@@ -25,6 +25,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Footer, Header, Input, Static
 
 from src.models.category import Category
+from src.models.rule import CategoryRule
 from src.ui.tui.commands_undo import (
     AcceptCommand,
     DeleteCommand,
@@ -34,6 +35,7 @@ from src.ui.tui.commands_undo import (
     UndoManager,
 )
 from src.ui.tui.dialogs.bulk_action_dialog import BulkActionDialog
+from src.ui.tui.dialogs.rule_editor_dialog import RuleEditorDialog
 from src.ui.tui.state import ReviewState
 from src.ui.tui.theme import APP_CSS
 from src.ui.tui.utils import is_high_contrast_mode, toggle_high_contrast_mode
@@ -226,6 +228,7 @@ class ReviewApp(App):
         Binding("m", "merge", "Merge"),
         Binding("d", "delete", "Delete"),
         Binding("s", "skip", "Skip"),
+        Binding("e", "edit_rule", "Edit Rule"),
         Binding("ctrl+z", "undo", "Undo"),
         Binding("ctrl+y", "redo", "Redo"),
         Binding("ctrl+h", "toggle_high_contrast", "High Contrast", show=False),
@@ -247,7 +250,13 @@ class ReviewApp(App):
     selected_index: reactive[int] = reactive(0)
 
     def __init__(
-        self, categories: list[Category], email_lookup: dict | None = None, *args, **kwargs
+        self,
+        categories: list[Category],
+        email_lookup: dict | None = None,
+        corpus: list | None = None,
+        category_rules: dict[str, CategoryRule] | None = None,
+        *args,
+        **kwargs,
     ):
         """
         Initialize the review application.
@@ -255,11 +264,15 @@ class ReviewApp(App):
         Args:
             categories: List of categories to review
             email_lookup: Optional dictionary mapping email IDs to Email objects
+            corpus: Optional list of Email objects for rule match counting
+            category_rules: Optional mapping of category_id -> CategoryRule
         """
         super().__init__(*args, **kwargs)
         self.state = ReviewState(categories=categories)
         self.undo_manager = UndoManager(max_undo=50)
         self.email_lookup = email_lookup or {}
+        self.corpus = corpus or []
+        self.category_rules: dict[str, CategoryRule] = category_rules or {}
 
     # -------------------------------------------------------------------------
     # Backward-compatible property accessors (delegate to state)
@@ -682,6 +695,33 @@ class ReviewApp(App):
                 f"Skip failed: '{category.category_name}' is no longer pending",
                 severity="warning",
             )
+
+    # -------------------------------------------------------------------------
+    # Rule Editor (Phase 3 Item 3.5)
+    # -------------------------------------------------------------------------
+
+    def action_edit_rule(self) -> None:
+        """Open the rule editor dialog for the selected category (E key)."""
+        category = self.get_selected_category()
+        if not category:
+            return
+
+        # Look up existing rule for this category, or None for new
+        existing_rule = self.category_rules.get(category.category_id)
+
+        def handle_rule_result(result: CategoryRule | None) -> None:
+            if result is not None:
+                self.category_rules[result.category_id or category.category_id] = result
+                self.notify(f"Rule saved: {result.name} ({result.condition_count} conditions)")
+
+        self.push_screen(
+            RuleEditorDialog(
+                rule=existing_rule,
+                category=category,
+                corpus=self.corpus,
+            ),
+            handle_rule_result,
+        )
 
     # -------------------------------------------------------------------------
     # Undo / Redo (Phase 2 Item 2.1)
