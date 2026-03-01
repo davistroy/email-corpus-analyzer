@@ -445,12 +445,14 @@ Build a one-time migration tool that imports existing JSON data into SQLite. Imp
 ---
 
 ### Phase 3 Testing Requirements
+**Status: COMPLETE [2026-02-28]**
 
-- [ ] All existing tests pass
-- [ ] Database tests use temporary file paths (no side effects)
-- [ ] EmailStore round-trip tests verify data integrity
-- [ ] Migration tests use fixtures with known data
-- [ ] All new code has >80% test coverage
+- [x] All existing tests pass (3,934 total)
+- [x] Database tests use temporary file paths (no side effects)
+- [x] EmailStore round-trip tests verify data integrity
+- [x] Migration tests use fixtures with known data
+- [x] All new code has >80% test coverage (database 83%, email_store 95%, migration 83%)
+- [x] Integration tests for complete storage layer — 36 tests in `tests/integration/test_storage.py`
 
 ### Phase 3 Completion Checklist
 
