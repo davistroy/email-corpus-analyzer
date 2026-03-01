@@ -616,8 +616,8 @@ Update the service layer to use SQLite storage when a database is available. `Ex
 
 ### Work Items
 
-#### 5.1 Implement EmailFeedbackStore with Temporal Decay
-**Status: PENDING**
+#### 5.1 Implement EmailFeedbackStore with Temporal Decay ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N3
 **Files Affected:**
 - `src/learning/feedback_store.py` (create)
@@ -627,25 +627,25 @@ Update the service layer to use SQLite storage when a database is available. `Ex
 Create `EmailFeedbackStore` that captures email-level corrections in the `corrections` table and computes temporal decay weights. When a user reclassifies an email from category A to category B, the store records the correction with a timestamp. The `get_weighted_corrections()` method applies exponential temporal decay: `weight = exp(-0.01 * days_old)` (~70-day half-life). Corrections can be queried by category, time range, or weighted importance.
 
 **Tasks:**
-1. [ ] Create `src/learning/feedback_store.py` with `EmailFeedbackStore(database: Database)` class
-2. [ ] Implement `record_correction(email_id, old_category, new_category, embedding: np.ndarray | None)`
-3. [ ] Implement `get_corrections(category: str | None, days: int | None) -> list[Correction]`
-4. [ ] Implement `get_weighted_corrections(min_weight: float = 0.1) -> list[WeightedCorrection]` with temporal decay
-5. [ ] Implement `get_correction_stats() -> dict` (total corrections, per-category counts, correction rate)
-6. [ ] `Correction` and `WeightedCorrection` as Pydantic models
-7. [ ] Write tests: record and retrieve, temporal decay calculation, category filtering, stats
+1. [x] Create `src/learning/feedback_store.py` with `EmailFeedbackStore(database: Database)` class
+2. [x] Implement `record_correction(email_id, old_category, new_category, embedding: np.ndarray | None)`
+3. [x] Implement `get_corrections(category: str | None, days: int | None) -> list[Correction]`
+4. [x] Implement `get_weighted_corrections(min_weight: float = 0.1) -> list[WeightedCorrection]` with temporal decay
+5. [x] Implement `get_correction_stats() -> dict` (total corrections, per-category counts, correction rate)
+6. [x] `Correction` and `WeightedCorrection` as Pydantic models
+7. [x] Write tests: record and retrieve, temporal decay calculation, category filtering, stats
 
 **Acceptance Criteria:**
-- [ ] Corrections are persisted in SQLite
-- [ ] Temporal decay weight is correctly computed (`exp(-0.01 * days_old)`)
-- [ ] 70-day-old correction has ~50% weight of a new correction
-- [ ] Per-category correction rate is accurate
-- [ ] Empty store returns empty results (not errors)
+- [x] Corrections are persisted in SQLite
+- [x] Temporal decay weight is correctly computed (`exp(-0.01 * days_old)`)
+- [x] 70-day-old correction has ~50% weight of a new correction
+- [x] Per-category correction rate is accurate
+- [x] Empty store returns empty results (not errors)
 
 ---
 
 #### 5.2 Build FewShotRetriever with Maximal Marginal Relevance
-**Status: PENDING**
+**Status: IN_PROGRESS**
 **Recommendation Ref:** N3
 **Files Affected:**
 - `src/learning/few_shot_retriever.py` (create)
@@ -670,8 +670,8 @@ Create `FewShotRetriever` that retrieves semantically similar labeled emails as 
 
 ---
 
-#### 5.3 Implement Uncertainty Sampling
-**Status: PENDING**
+#### 5.3 Implement Uncertainty Sampling ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N3
 **Files Affected:**
 - `src/learning/uncertainty_sampler.py` (create)
@@ -681,16 +681,16 @@ Create `FewShotRetriever` that retrieves semantically similar labeled emails as 
 Create `UncertaintySampler` that identifies the lowest-confidence classifications from a batch for user review. Simple implementation: sort classifications by confidence ascending, return top N. Also flag emails where rule engine and LLM classifier disagree (disagreement sampling).
 
 **Tasks:**
-1. [ ] Create `src/learning/uncertainty_sampler.py` with `UncertaintySampler` class
-2. [ ] Implement `get_uncertain(categorizations: list[EmailCategorization], n: int = 10) -> list[EmailCategorization]`
-3. [ ] Implement `get_disagreements(rule_results, llm_results) -> list[tuple[EmailCategorization, EmailCategorization]]`
-4. [ ] Sort by confidence ascending for uncertainty, by confidence gap for disagreements
-5. [ ] Write tests: correct sorting, empty input, n > total
+1. [x] Create `src/learning/uncertainty_sampler.py` with `UncertaintySampler` class
+2. [x] Implement `get_uncertain(categorizations: list[EmailCategorization], n: int = 10) -> list[EmailCategorization]`
+3. [x] Implement `get_disagreements(rule_results, llm_results) -> list[tuple[EmailCategorization, EmailCategorization]]`
+4. [x] Sort by confidence ascending for uncertainty, by confidence gap for disagreements
+5. [x] Write tests: correct sorting, empty input, n > total
 
 **Acceptance Criteria:**
-- [ ] Returns the N least confident classifications
-- [ ] Disagreements correctly identified between rule and LLM results
-- [ ] Handles edge cases (all same confidence, empty input)
+- [x] Returns the N least confident classifications
+- [x] Disagreements correctly identified between rule and LLM results
+- [x] Handles edge cases (all same confidence, empty input)
 
 ---
 
