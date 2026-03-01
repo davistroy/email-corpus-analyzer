@@ -81,3 +81,37 @@
 - Summary: Removed unused Command class fields and lookup functions, wired or removed dead hierarchical methods, normalized naming conventions, added missing type hints. 23 new tests.
 
 **Phase 2 complete.** All 5 TUI advanced feature items delivered.
+
+## 2026-02-28 (Phase 3 — Category Rule Refinement)
+
+### Item 3.1: Rule Data Model
+- Status: Complete
+- Files changed: src/models/rule.py (created)
+- Summary: Created RuleCondition, CategoryRule, and RuleAction Pydantic models. 62 new tests.
+
+### Item 3.2: Rule Engine
+- Status: Complete
+- Files changed: src/rules/engine.py (created)
+- Summary: Created rule evaluation engine with AND/OR condition groups, short-circuit evaluation, and match confidence scoring. 73 new tests.
+
+### Item 3.3: Rule Builder
+- Status: Complete
+- Files changed: src/rules/builder.py (created)
+- Summary: Created rule auto-generation from approved categories (template-sourced, cluster-sourced, sender-sourced). 45 new tests.
+
+### Item 3.4: Rule Tester
+- Status: Complete
+- Files changed: src/rules/tester.py (created)
+- Summary: Created dry-run rule testing against corpus with match counts, overlap detection, and coverage gap reporting. 35 new tests.
+
+### Item 3.5: Rule Editor TUI Dialog
+- Status: Complete
+- Files changed: src/ui/tui/dialogs/rule_editor_dialog.py (created)
+- Summary: Created TUI dialog for viewing/editing category rules with add/remove/edit conditions and live match count testing. 55 new tests.
+
+### Item 3.6: Rules CLI
+- Status: Complete
+- Files changed: src/cli/commands/rules.py (created), src/utils/paths.py
+- Summary: Created CLI commands for rules generate, test, show, and edit. 32 new tests.
+
+**Phase 3 complete.** All 6 category rule refinement items delivered.

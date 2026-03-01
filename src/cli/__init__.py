@@ -10,6 +10,7 @@ Commands:
   config    - Manage configuration (init, show)
   info      - Show corpus statistics
   export    - Export categories to CSV or HTML format
+  rules     - Manage category rules (generate, test, show, edit)
 
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
@@ -35,6 +36,7 @@ from src.cli.commands.extract import build_extract_parser, cmd_extract
 from src.cli.commands.info import build_info_parser, cmd_info
 from src.cli.commands.pipeline import build_pipeline_parser, cmd_pipeline
 from src.cli.commands.review import auto_approve_categories, build_review_parser, cmd_review
+from src.cli.commands.rules import build_rules_parser, cmd_rules
 from src.cli.commands.suggest import build_suggest_parser, cmd_suggest
 from src.cli.formatters import output_json
 from src.cli.parsers import (
@@ -69,6 +71,7 @@ __all__ = [
     "cmd_config_validate",
     "cmd_info",
     "cmd_export",
+    "cmd_rules",
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
@@ -150,6 +153,7 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["info"] = build_info_parser(subparsers)
     SUBPARSERS["export"] = build_export_parser(subparsers)
     SUBPARSERS["config"] = build_config_parser(subparsers)
+    SUBPARSERS["rules"] = build_rules_parser(subparsers)
 
     return parser
 
@@ -197,6 +201,7 @@ def main() -> int:
         "config": cmd_config,
         "info": cmd_info,
         "export": cmd_export,
+        "rules": cmd_rules,
     }
 
     handler = command_handlers.get(args.command)
