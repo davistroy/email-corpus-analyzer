@@ -6,6 +6,7 @@ ClassifierCapability enum, and ClassificationContext dataclass that all classifi
 implementations must use.
 
 Phase 2, Work Item 2.1: Adds EmailSanitizer and SanitizedText for prompt injection defense.
+Phase 2, Work Item 2.2: Adds LLMClassifier with Instructor for structured LLM output.
 """
 
 from src.classifiers.base import (
@@ -14,6 +15,7 @@ from src.classifiers.base import (
     ClassificationResult,
     ClassifierCapability,
 )
+from src.classifiers.llm_classifier import LLMClassificationResponse, LLMClassifier
 from src.classifiers.sanitizer import EmailSanitizer, SanitizedText
 
 __all__ = [
@@ -22,5 +24,7 @@ __all__ = [
     "ClassificationResult",
     "ClassifierCapability",
     "EmailSanitizer",
+    "LLMClassificationResponse",
+    "LLMClassifier",
     "SanitizedText",
 ]

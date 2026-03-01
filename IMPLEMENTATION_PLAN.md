@@ -211,8 +211,8 @@ Create `EmailSanitizer` that strips common injection patterns from email text be
 
 ---
 
-#### 2.2 Implement LLMClassifier with Instructor
-**Status: PENDING**
+#### 2.2 Implement LLMClassifier with Instructor ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N1
 **Files Affected:**
 - `src/classifiers/llm_classifier.py` (create)
@@ -222,22 +222,22 @@ Create `EmailSanitizer` that strips common injection patterns from email text be
 Implement `LLMClassifier(BaseClassifier)` that uses Instructor for structured LLM output. The classifier constructs a prompt with: system instruction (you are an email classifier), category definitions from config, optional few-shot examples from `ClassificationContext`, and the sanitized email content. Output is a Pydantic model with `category: Literal[...categories]`, `confidence: float`, and `reasoning: str`. Supports Ollama (via OpenAI-compatible endpoint), Claude (via Anthropic SDK), and OpenAI (via OpenAI SDK) through Instructor's unified patching.
 
 **Tasks:**
-1. [ ] Create `src/classifiers/llm_classifier.py` with `LLMClassifier` class
-2. [ ] Implement `_build_client()` factory that creates the appropriate Instructor client based on `ClassifierConfig.provider`
-3. [ ] Implement `_build_prompt()` that constructs the classification prompt with system instructions, category definitions, and optional few-shot examples
-4. [ ] Implement `classify()` using `client.chat.completions.create()` with the Pydantic response model
-5. [ ] Handle connection errors (Ollama not running, API key invalid) with `ClassifierConnectionError`
-6. [ ] Handle response parsing errors with `ClassifierResponseError` and retry logic (Instructor has built-in retries)
-7. [ ] Implement `batch_classify()` with tqdm progress bar
-8. [ ] Write tests with mocked Instructor client (test prompt construction, test response parsing, test error handling, test retry behavior)
+1. [x] Create `src/classifiers/llm_classifier.py` with `LLMClassifier` class
+2. [x] Implement `_build_client()` factory that creates the appropriate Instructor client based on `ClassifierConfig.provider`
+3. [x] Implement `_build_prompt()` that constructs the classification prompt with system instructions, category definitions, and optional few-shot examples
+4. [x] Implement `classify()` using `client.chat.completions.create()` with the Pydantic response model
+5. [x] Handle connection errors (Ollama not running, API key invalid) with `ClassifierConnectionError`
+6. [x] Handle response parsing errors with `ClassifierResponseError` and retry logic (Instructor has built-in retries)
+7. [x] Implement `batch_classify()` with tqdm progress bar
+8. [x] Write tests with mocked Instructor client (test prompt construction, test response parsing, test error handling, test retry behavior)
 
 **Acceptance Criteria:**
-- [ ] Classification works with Ollama backend (mocked in tests)
-- [ ] Classification works with cloud API backend (mocked in tests)
-- [ ] Invalid API keys produce actionable error messages
-- [ ] Ollama connection failures produce actionable error messages
-- [ ] Confidence scores are returned in 0.0-1.0 range
-- [ ] Category output is constrained to configured categories
+- [x] Classification works with Ollama backend (mocked in tests)
+- [x] Classification works with cloud API backend (mocked in tests)
+- [x] Invalid API keys produce actionable error messages
+- [x] Ollama connection failures produce actionable error messages
+- [x] Confidence scores are returned in 0.0-1.0 range
+- [x] Category output is constrained to configured categories
 
 ---
 
