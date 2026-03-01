@@ -355,8 +355,8 @@ Create the SQLite database module with connection pooling (WAL mode for concurre
 
 ---
 
-#### 3.2 Implement EmailStore with CRUD Operations
-**Status: PENDING**
+#### 3.2 Implement EmailStore with CRUD Operations ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** A2, N2
 **Files Affected:**
 - `src/storage/email_store.py` (create)
@@ -367,21 +367,21 @@ Create the SQLite database module with connection pooling (WAL mode for concurre
 Implement `EmailStore` that provides CRUD operations for emails using Pydantic models. Add `to_row()` and `from_row()` methods to the `Email` model for SQLite serialization. Implement upsert semantics (insert or update based on provider_message_id) for idempotent extraction. Support batch operations for efficient corpus import.
 
 **Tasks:**
-1. [ ] Add `to_row() -> dict` method to `Email` model (serializes references list to JSON string)
-2. [ ] Add `from_row(row: dict) -> Email` classmethod to `Email` model (deserializes JSON references)
-3. [ ] Create `src/storage/email_store.py` with `EmailStore(database: Database)` class
-4. [ ] Implement `upsert(email: Email)` and `upsert_batch(emails: list[Email])` with INSERT OR REPLACE
-5. [ ] Implement `get(email_id: str) -> Email | None`
-6. [ ] Implement `get_all() -> list[Email]` with pagination support
-7. [ ] Implement `count() -> int`
-8. [ ] Implement `delete(email_id: str)` and `delete_batch(email_ids: list[str])`
-9. [ ] Write tests for all CRUD operations including edge cases (duplicate IDs, missing fields, batch operations)
+1. [x] Add `to_row() -> dict` method to `Email` model (serializes references list to JSON string)
+2. [x] Add `from_row(row: dict) -> Email` classmethod to `Email` model (deserializes JSON references)
+3. [x] Create `src/storage/email_store.py` with `EmailStore(database: Database)` class
+4. [x] Implement `upsert(email: Email)` and `upsert_batch(emails: list[Email])` with INSERT OR REPLACE
+5. [x] Implement `get(email_id: str) -> Email | None`
+6. [x] Implement `get_all() -> list[Email]` with pagination support
+7. [x] Implement `count() -> int`
+8. [x] Implement `delete(email_id: str)` and `delete_batch(email_ids: list[str])`
+9. [x] Write tests for all CRUD operations including edge cases (duplicate IDs, missing fields, batch operations)
 
 **Acceptance Criteria:**
-- [ ] `Email.to_row()` produces a dict that round-trips through `Email.from_row()`
-- [ ] Upsert correctly handles both insert and update cases
-- [ ] Batch operations are wrapped in a single transaction for performance
-- [ ] All existing Email tests still pass after adding to_row/from_row
+- [x] `Email.to_row()` produces a dict that round-trips through `Email.from_row()`
+- [x] Upsert correctly handles both insert and update cases
+- [x] Batch operations are wrapped in a single transaction for performance
+- [x] All existing Email tests still pass after adding to_row/from_row
 
 ---
 

@@ -218,8 +218,13 @@ class Database:
             sqlite3.Cursor with query results.
 
         Raises:
-            StorageError: If the query fails.
+            StorageError: If the connection is closed or the query fails.
         """
+        if self._conn is None:
+            raise StorageError(
+                "Cannot execute SQL on a closed database connection",
+                context={"sql": sql[:200], "db_path": str(self._db_path)},
+            )
         try:
             if params is not None:
                 return self._conn.execute(sql, params)

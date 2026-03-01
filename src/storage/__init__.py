@@ -8,5 +8,6 @@ Phase 3: SQLite Core.
 """
 
 from src.storage.database import Database
+from src.storage.email_store import EmailStore
 
-__all__ = ["Database"]
+__all__ = ["Database", "EmailStore"]
