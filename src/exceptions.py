@@ -327,3 +327,59 @@ class ExportError(EmailAnalyzerError):
             "Check the export configuration and try again. Use --verbose for more details."
         )
         super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+# =============================================================================
+# Action-related exceptions (Phase 5)
+# =============================================================================
+
+
+class ActionError(EmailAnalyzerError):
+    """
+    Raised when a mailbox action fails.
+
+    Base class for all action-related exceptions (folder creation,
+    email moving, rule deployment).
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize action error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context
+        """
+        hint = recovery_hint or (
+            "Check your mailbox connection and permissions. Use --verbose for more details."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+class FolderActionError(ActionError):
+    """
+    Raised when folder creation or management fails.
+
+    Occurs when the Graph API or Gmail API rejects a folder/label
+    operation due to permissions, naming conflicts, or API limits.
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize folder action error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context (e.g., folder name, parent ID)
+        """
+        hint = recovery_hint or (
+            "Check that your account has permission to create folders/labels. "
+            "Verify the folder name is valid and doesn't exceed provider limits."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
