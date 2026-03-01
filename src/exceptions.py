@@ -483,3 +483,59 @@ class FolderActionError(ActionError):
             "Verify the folder name is valid and doesn't exceed provider limits."
         )
         super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+# =============================================================================
+# Storage-related exceptions (Phase 3)
+# =============================================================================
+
+
+class StorageError(EmailAnalyzerError):
+    """
+    Raised when a storage/database operation fails.
+
+    Base class for all storage-related exceptions. Covers SQLite connection
+    failures, query errors, and data integrity issues.
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize storage error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context (e.g., db_path, query)
+        """
+        hint = recovery_hint or (
+            "Check the database file permissions and disk space. Use --verbose for more details."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+class DatabaseSchemaError(StorageError):
+    """
+    Raised when the database schema is invalid or a migration fails.
+
+    Occurs when the schema version is unexpected, a migration script
+    fails, or the database file is from an incompatible version.
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize database schema error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context (e.g., current_version, target_version)
+        """
+        hint = recovery_hint or (
+            "The database schema may be from an incompatible version. "
+            "Try backing up and deleting the database file, then re-running migration."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})

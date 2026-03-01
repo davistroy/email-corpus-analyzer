@@ -326,8 +326,8 @@ Add `instructor>=1.0.0` and `openai>=1.0.0` (Instructor's transport layer) to co
 
 ### Work Items
 
-#### 3.1 Create Database Module with Schema and Connection Management
-**Status: PENDING**
+#### 3.1 Create Database Module with Schema and Connection Management ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** A2, N2
 **Files Affected:**
 - `src/storage/__init__.py` (create)
@@ -338,20 +338,20 @@ Add `instructor>=1.0.0` and `openai>=1.0.0` (Instructor's transport layer) to co
 Create the SQLite database module with connection pooling (WAL mode for concurrent access), schema creation, and migration versioning. Define all tables: `emails` (id, sender_email, sender_name, sender_domain, recipient_email, recipient_name, subject, body_text, received_date, has_attachments, thread_id, in_reply_to, references_json, provider, provider_message_id), `classifications` (email_id, category_name, confidence, source, model_version, classified_at), `corrections` (email_id, old_category, new_category, corrected_at, weight), `sync_state` (provider, sync_token, last_sync_at), `decision_log` (timestamp, category_name, action, context_json), `action_log` (timestamp, action_type, target_id, details_json, success, reversible). Use a `schema_version` table for future migrations.
 
 **Tasks:**
-1. [ ] Create `src/storage/__init__.py` with public exports
-2. [ ] Create `src/storage/database.py` with `Database` class
-3. [ ] Implement `Database.__init__(db_path)` with connection creation and WAL mode
-4. [ ] Implement `_create_schema()` with all CREATE TABLE statements and indexes
-5. [ ] Implement `_get_schema_version()` and `_set_schema_version()` for migration tracking
-6. [ ] Add `get_connection()` context manager for transaction management
-7. [ ] Write tests: schema creation, WAL mode verification, connection reuse, concurrent access
+1. [x] Create `src/storage/__init__.py` with public exports
+2. [x] Create `src/storage/database.py` with `Database` class
+3. [x] Implement `Database.__init__(db_path)` with connection creation and WAL mode
+4. [x] Implement `_create_schema()` with all CREATE TABLE statements and indexes
+5. [x] Implement `_get_schema_version()` and `_set_schema_version()` for migration tracking
+6. [x] Add `get_connection()` context manager for transaction management
+7. [x] Write tests: schema creation, WAL mode verification, connection reuse, concurrent access
 
 **Acceptance Criteria:**
-- [ ] Database file is created at `~/.email-analyzer/email_analyzer.db`
-- [ ] WAL mode is enabled for concurrent read/write
-- [ ] All tables are created with correct column types and constraints
-- [ ] Appropriate indexes exist (email_id on classifications, corrected_at on corrections)
-- [ ] Schema version is tracked for future migrations
+- [x] Database file is created at `~/.email-analyzer/email_analyzer.db`
+- [x] WAL mode is enabled for concurrent read/write
+- [x] All tables are created with correct column types and constraints
+- [x] Appropriate indexes exist (email_id on classifications, corrected_at on corrections)
+- [x] Schema version is tracked for future migrations
 
 ---
 
