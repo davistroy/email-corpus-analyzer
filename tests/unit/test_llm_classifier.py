@@ -293,6 +293,66 @@ class TestBuildClient:
             # The recovery hint should mention installing anthropic
             assert "anthropic" in (exc_info.value.recovery_hint or "").lower()
 
+    @patch("src.classifiers.llm_classifier.openai.OpenAI")
+    @patch("src.classifiers.llm_classifier.instructor.from_openai")
+    def test_runpod_client_uses_openai_compatible(self, mock_from_openai, mock_openai_cls):
+        """RunPod provider creates an OpenAI client with RunPod base_url."""
+        from src.classifiers.llm_classifier import LLMClassifier
+
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_instructor = MagicMock()
+        mock_from_openai.return_value = mock_instructor
+
+        config = create_test_config(
+            provider="runpod",
+            model_name="qwen2.5:72b",
+            api_key_env_var="RUNPOD_API_KEY",
+            runpod_endpoint_id="1fgb26fi1t0e4u",
+        )
+
+        with patch.dict(os.environ, {"RUNPOD_API_KEY": "rp-test-key-123"}):
+            classifier = LLMClassifier(config)
+            client = classifier._build_client()
+
+        mock_openai_cls.assert_called_once()
+        call_kwargs = mock_openai_cls.call_args
+        assert "https://api.runpod.ai/v2/1fgb26fi1t0e4u/openai/v1" in str(call_kwargs)
+        assert "rp-test-key-123" in str(call_kwargs)
+        assert client is mock_instructor
+
+    def test_runpod_missing_endpoint_id_raises(self):
+        """RunPod provider without endpoint_id raises ClassifierConnectionError."""
+        from src.classifiers.llm_classifier import LLMClassifier
+
+        config = create_test_config(
+            provider="runpod",
+            api_key_env_var="RUNPOD_API_KEY",
+        )
+
+        with patch.dict(os.environ, {"RUNPOD_API_KEY": "rp-test-key-123"}):
+            classifier = LLMClassifier(config)
+            with pytest.raises(ClassifierConnectionError) as exc_info:
+                classifier._build_client()
+            assert "runpod_endpoint_id" in (exc_info.value.recovery_hint or "")
+
+    def test_runpod_missing_api_key_raises(self):
+        """RunPod provider with missing API key raises ClassifierConnectionError."""
+        from src.classifiers.llm_classifier import LLMClassifier
+
+        config = create_test_config(
+            provider="runpod",
+            api_key_env_var="MISSING_RUNPOD_KEY_XYZ",
+            runpod_endpoint_id="abc123",
+        )
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MISSING_RUNPOD_KEY_XYZ", None)
+            classifier = LLMClassifier(config)
+            with pytest.raises(ClassifierConnectionError) as exc_info:
+                classifier._build_client()
+            assert "MISSING_RUNPOD_KEY_XYZ" in (exc_info.value.recovery_hint or "")
+
 
 # ============================================================================
 # Test _build_prompt

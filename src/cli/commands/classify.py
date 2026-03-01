@@ -34,7 +34,7 @@ def build_classify_parser(subparsers) -> argparse.ArgumentParser:
     """Add classify subparser to the CLI and return it."""
     classify_parser = subparsers.add_parser(
         "classify",
-        help="Classify emails using LLM (Ollama, OpenAI, or Claude)",
+        help="Classify emails using LLM (Ollama, OpenAI, Claude, or RunPod)",
         description="Run LLM-based classification on an email corpus. "
         "Assigns each email to a category using a language model. "
         "Does NOT require rules -- only requires an extracted corpus and category definitions.",
@@ -66,7 +66,7 @@ Examples:
 
     classify_parser.add_argument(
         "--provider",
-        choices=["ollama", "openai", "claude"],
+        choices=["ollama", "openai", "claude", "runpod"],
         default=None,
         help="LLM provider (default: from config, or 'ollama'). Ollama runs locally at no cost.",
     )
@@ -76,6 +76,13 @@ Examples:
         default=None,
         help="Model name (default: from config, or 'qwen2.5:7b' for Ollama). "
         "Examples: qwen2.5:7b, gpt-4o-mini, claude-sonnet-4-20250514",
+    )
+    classify_parser.add_argument(
+        "--endpoint-id",
+        type=str,
+        default=None,
+        help="RunPod serverless endpoint ID (required when --provider is 'runpod'). "
+        "The endpoint URL is constructed as https://api.runpod.ai/v2/{endpoint-id}/openai/v1",
     )
     classify_parser.add_argument(
         "--categories",
@@ -358,21 +365,31 @@ def cmd_classify(args: argparse.Namespace) -> int:
     cli_provider = getattr(args, "provider", None)
     cli_model = getattr(args, "model", None)
     cli_threshold = getattr(args, "confidence_threshold", None)
+    cli_endpoint_id = getattr(args, "endpoint_id", None)
 
     provider = cli_provider or classifier_config.provider
     model_name = cli_model or classifier_config.model_name
     confidence_threshold = (
         cli_threshold if cli_threshold is not None else classifier_config.confidence_threshold
     )
+    runpod_endpoint_id = cli_endpoint_id or classifier_config.runpod_endpoint_id
 
     # Build effective classifier config:
     # When YAML categories or CLI overrides are present, construct a new config.
     # Otherwise, use the config's classifier config as-is.
-    if yaml_categories is not None or cli_provider or cli_model or cli_threshold is not None:
+    has_overrides = (
+        yaml_categories is not None
+        or cli_provider
+        or cli_model
+        or cli_threshold is not None
+        or cli_endpoint_id
+    )
+    if has_overrides:
         effective_config = ClassifierConfig(
             provider=provider,
             model_name=model_name,
             ollama_base_url=classifier_config.ollama_base_url,
+            runpod_endpoint_id=runpod_endpoint_id,
             api_key_env_var=classifier_config.api_key_env_var,
             confidence_threshold=confidence_threshold,
             max_tokens=classifier_config.max_tokens,

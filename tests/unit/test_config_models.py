@@ -1540,6 +1540,21 @@ class TestClassifierConfig:
         config = ClassifierConfig(provider="openai")
         assert config.provider == "openai"
 
+    def test_classifier_config_provider_runpod(self):
+        """Test ClassifierConfig accepts runpod provider."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig(provider="runpod", runpod_endpoint_id="abc123")
+        assert config.provider == "runpod"
+        assert config.runpod_endpoint_id == "abc123"
+
+    def test_classifier_config_runpod_endpoint_id_default_none(self):
+        """Test runpod_endpoint_id defaults to None."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig()
+        assert config.runpod_endpoint_id is None
+
     def test_classifier_config_invalid_provider(self):
         """Test ClassifierConfig rejects invalid provider."""
         from pydantic import ValidationError

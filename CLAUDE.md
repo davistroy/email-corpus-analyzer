@@ -163,6 +163,7 @@ The system supports multiple classification strategies, from zero-config rules t
 - **Ollama** (default): Local LLM, zero cost, requires Ollama running at localhost:11434
 - **OpenAI**: Cloud API, requires `OPENAI_API_KEY` env var
 - **Claude**: Anthropic API, requires `ANTHROPIC_API_KEY` env var and `pip install -e ".[cloud]"`
+- **RunPod**: RunPod serverless endpoints (OpenAI-compatible), requires `RUNPOD_API_KEY` env var and `--endpoint-id`
 
 ### Prompt Injection Defense
 
@@ -236,9 +237,10 @@ suggest:
     merge_name_similarity: 0.8
     merge_email_overlap: 0.7
 classifier:
-  provider: "ollama"                # ollama | openai | claude
+  provider: "ollama"                # ollama | openai | claude | runpod
   model_name: "qwen2.5:7b"         # LLM model name
   ollama_base_url: "http://localhost:11434"
+  runpod_endpoint_id: ""            # RunPod serverless endpoint ID (for runpod provider)
   api_key_env_var: ""               # env var name for cloud API keys
   confidence_threshold: 0.6         # minimum confidence to accept result
   max_tokens: 200
@@ -312,6 +314,7 @@ Generate template: `python -m src.cli config init`
 ### LLM Classification (Cloud)
 - **OpenAI**: Set `OPENAI_API_KEY` env var, configure `classifier.provider: openai`
 - **Claude**: Install `pip install -e ".[cloud]"`, set `ANTHROPIC_API_KEY` env var, configure `classifier.provider: claude`
+- **RunPod**: Set `RUNPOD_API_KEY` env var, configure `classifier.provider: runpod` and `classifier.runpod_endpoint_id` (or pass `--endpoint-id` on CLI)
 
 ### Optional Dependencies
 - `matplotlib` -- required only for `--cluster-viz` flag (not in core requirements)
