@@ -6,12 +6,16 @@ Decoupled from CLI for independent use.
 
 Per Phase 7, Track 7B specification.
 Work Item 3.4: All critical JSON outputs use atomic writes.
+Phase 4, Work Item 4.3: SQLite integration — passes database to sub-services.
 """
+
+from __future__ import annotations
 
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.config.models import AppConfig
 from src.models.analysis_results import AnalysisResults
@@ -21,6 +25,9 @@ from src.services.analysis_service import AnalysisService
 from src.services.extraction_service import ExtractionService
 from src.services.suggestion_service import SuggestionService
 from src.utils.file_manager import atomic_write_text
+
+if TYPE_CHECKING:
+    from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -43,14 +50,18 @@ class PipelineService:
     Coordinates extraction, analysis, and suggestion services.
     """
 
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, database: Database | None = None):
         """
         Initialize pipeline service.
 
         Args:
             config: Application configuration
+            database: Optional Database instance. When provided, it is passed
+                     to ExtractionService (for SQLite email upserts) and
+                     AnalysisService (for sqlite-vec embedding cache).
         """
         self.config = config
+        self._database = database
 
     def run(
         self,
@@ -97,6 +108,7 @@ class PipelineService:
                 config=self.config.extract,
                 user_email=str(self.config.user_email) if self.config.user_email else "",
                 output_dir=output_dir,
+                database=self._database,
             )
 
             corpus = extraction_service.run(
@@ -114,7 +126,7 @@ class PipelineService:
         if progress_callback:
             progress_callback("Starting analysis phase...")
 
-        analysis_service = AnalysisService(config=self.config.analyze)
+        analysis_service = AnalysisService(config=self.config.analyze, database=self._database)
 
         analysis, _incremental_stats = analysis_service.run(
             corpus=corpus,

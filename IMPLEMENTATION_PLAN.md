@@ -539,29 +539,30 @@ Add `sqlite-vec>=0.1.0` to `pyproject.toml` dependencies. sqlite-vec has zero C 
 
 ---
 
-#### 4.3 Update Service Layer for SQLite Storage
-**Status: PENDING**
+#### 4.3 Update Service Layer for SQLite Storage ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N2
 **Files Affected:**
 - `src/services/pipeline_service.py` (modify)
 - `src/services/extraction_service.py` (modify)
+- `src/services/analysis_service.py` (modify)
 - `tests/unit/test_services.py` (modify)
 
 **Description:**
 Update the service layer to use SQLite storage when a database is available. `ExtractionService` saves extracted emails to both JSON (backward compat) and SQLite. `PipelineService` passes the database instance through to sub-services. `AnalysisService` uses the sqlite-vec-backed `EmbeddingCache` when available.
 
 **Tasks:**
-1. [ ] Add `database: Database | None = None` parameter to `PipelineService.__init__()`
-2. [ ] Pass database to `ExtractionService` and `AnalysisService`
-3. [ ] In `ExtractionService`: after saving corpus JSON, upsert emails into SQLite via `EmailStore`
-4. [ ] In `AnalysisService.run()`: pass database to `EmbeddingCache` when available
-5. [ ] Update tests to verify SQLite integration path (with mocked Database)
+1. [x] Add `database: Database | None = None` parameter to `PipelineService.__init__()`
+2. [x] Pass database to `ExtractionService` and `AnalysisService`
+3. [x] In `ExtractionService`: after saving corpus JSON, upsert emails into SQLite via `EmailStore`
+4. [x] In `AnalysisService.run()`: pass database to `EmbeddingCache` when available
+5. [x] Update tests to verify SQLite integration path (with mocked Database)
 
 **Acceptance Criteria:**
-- [ ] Pipeline works unchanged without database (all existing tests pass)
-- [ ] When database is provided, emails are stored in SQLite
-- [ ] Embeddings use sqlite-vec when database is available
-- [ ] No duplicate code paths — JSON remains for backward compat, SQLite is additive
+- [x] Pipeline works unchanged without database (all existing tests pass)
+- [x] When database is provided, emails are stored in SQLite
+- [x] Embeddings use sqlite-vec when database is available
+- [x] No duplicate code paths — JSON remains for backward compat, SQLite is additive
 
 ---
 

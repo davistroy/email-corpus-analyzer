@@ -7,6 +7,7 @@ Decoupled from CLI for independent use.
 Per Phase 7, Track 7B specification.
 Work Item 2.1: Expanded to be the single source of truth for all analysis,
 delegating to run_full_analysis() with full feature parity.
+Phase 4, Work Item 4.3: SQLite integration — auto-creates sqlite-vec EmbeddingCache.
 """
 
 import logging
@@ -28,6 +29,7 @@ from src.models.corpus import Corpus
 
 if TYPE_CHECKING:
     from src.cache.embedding_cache import EmbeddingCache
+    from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +54,18 @@ class AnalysisService:
     analysis, and cluster visualization.
     """
 
-    def __init__(self, config: AnalyzeConfig):
+    def __init__(self, config: AnalyzeConfig, database: "Database | None" = None):
         """
         Initialize analysis service.
 
         Args:
             config: Analysis configuration
+            database: Optional Database instance. When provided, run() creates
+                     an EmbeddingCache backed by sqlite-vec via EmbeddingStore
+                     (unless an explicit cache is passed to run()).
         """
         self.config = config
+        self._database = database
         self._analyzers = self._build_analyzers()
 
     def _build_analyzers(self) -> list[BaseAnalyzer]:
@@ -120,6 +126,21 @@ class AnalysisService:
 
         if progress_callback:
             progress_callback("Starting analysis...")
+
+        # When database is available and no explicit cache was provided,
+        # create a sqlite-vec-backed EmbeddingCache automatically.
+        if embedding_cache is None and self._database is not None:
+            from src.cache.embedding_cache import EmbeddingCache as _EmbeddingCache
+
+            embedding_cache = _EmbeddingCache(
+                model_name=self.config.thresholds.model_name
+                if hasattr(self.config.thresholds, "model_name")
+                else "mixedbread-ai/mxbai-embed-large-v1",
+                embedding_dim=1024,
+                max_text_length=self.config.max_embedding_text_length,
+                database=self._database,
+            )
+            logger.info("Auto-created sqlite-vec EmbeddingCache from database")
 
         # Adapt single-arg progress callback to 3-arg format for run_full_analysis
         rfa_progress: Callable[[str, int, int], None] | None = None

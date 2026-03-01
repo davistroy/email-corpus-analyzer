@@ -2561,7 +2561,7 @@ class TestPipelineServiceConfigPropagation:
         with tempfile.TemporaryDirectory() as tmpdir:
             service.run(output_dir=Path(tmpdir))
 
-            mock_analyze.assert_called_once_with(config=analyze_config)
+            mock_analyze.assert_called_once_with(config=analyze_config, database=None)
 
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
@@ -2910,3 +2910,505 @@ class TestExtractionServiceProgressDetails:
         assert len(merged_msgs) == 1
         assert "8 emails" in merged_msgs[0]
         assert "5 + 3" in merged_msgs[0]
+
+
+# =============================================================================
+# Test Service Layer SQLite Integration (Phase 4, Work Item 4.3)
+# =============================================================================
+
+
+class TestPipelineServiceSQLiteInit:
+    """Test PipelineService initialization with optional database parameter."""
+
+    def test_init_accepts_database_parameter(self, tmp_path):
+        """Test that PipelineService accepts an optional database parameter."""
+        from src.services.pipeline_service import PipelineService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            config = AppConfig(user_email="test@example.com")
+            service = PipelineService(config, database=db)
+            assert service._database is db
+        finally:
+            db.close()
+
+    def test_init_without_database_defaults_to_none(self):
+        """Test that database defaults to None when not provided."""
+        from src.services.pipeline_service import PipelineService
+
+        config = AppConfig(user_email="test@example.com")
+        service = PipelineService(config)
+        assert service._database is None
+
+    def test_init_backward_compatible_positional_config(self):
+        """Test that existing code using PipelineService(config) still works."""
+        from src.services.pipeline_service import PipelineService
+
+        config = AppConfig()
+        service = PipelineService(config)
+        assert service.config is config
+        assert service._database is None
+
+
+class TestPipelineServicePassesDatabase:
+    """Test that PipelineService passes database to sub-services."""
+
+    @patch("src.services.pipeline_service.ExtractionService")
+    @patch("src.services.pipeline_service.AnalysisService")
+    @patch("src.services.pipeline_service.SuggestionService")
+    def test_database_passed_to_extraction_service(
+        self, mock_suggest, mock_analyze, mock_extract, tmp_path
+    ):
+        """Test that database is passed to ExtractionService when provided."""
+        from src.services.pipeline_service import PipelineService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            mock_corpus = create_test_corpus()
+            mock_analysis = create_test_analysis_results()
+            mock_categories = create_test_categories()
+
+            mock_extract.return_value.run.return_value = mock_corpus
+            mock_analyze.return_value.run.return_value = (mock_analysis, None)
+            mock_suggest.return_value.run.return_value = mock_categories
+
+            config = AppConfig(user_email="test@example.com")
+            service = PipelineService(config, database=db)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                service.run(output_dir=Path(tmpdir))
+
+            # ExtractionService should have been created with database kwarg
+            _, kwargs = mock_extract.call_args
+            assert kwargs.get("database") is db
+        finally:
+            db.close()
+
+    @patch("src.services.pipeline_service.ExtractionService")
+    @patch("src.services.pipeline_service.AnalysisService")
+    @patch("src.services.pipeline_service.SuggestionService")
+    def test_database_passed_to_analysis_service(
+        self, mock_suggest, mock_analyze, mock_extract, tmp_path
+    ):
+        """Test that database is passed to AnalysisService when provided."""
+        from src.services.pipeline_service import PipelineService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            mock_corpus = create_test_corpus()
+            mock_analysis = create_test_analysis_results()
+            mock_categories = create_test_categories()
+
+            mock_extract.return_value.run.return_value = mock_corpus
+            mock_analyze.return_value.run.return_value = (mock_analysis, None)
+            mock_suggest.return_value.run.return_value = mock_categories
+
+            config = AppConfig(user_email="test@example.com")
+            service = PipelineService(config, database=db)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                service.run(output_dir=Path(tmpdir))
+
+            # AnalysisService should have been created with database kwarg
+            _, kwargs = mock_analyze.call_args
+            assert kwargs.get("database") is db
+        finally:
+            db.close()
+
+    @patch("src.services.pipeline_service.ExtractionService")
+    @patch("src.services.pipeline_service.AnalysisService")
+    @patch("src.services.pipeline_service.SuggestionService")
+    def test_no_database_does_not_pass_database(self, mock_suggest, mock_analyze, mock_extract):
+        """Test that None database is not passed to sub-services."""
+        from src.services.pipeline_service import PipelineService
+
+        mock_corpus = create_test_corpus()
+        mock_analysis = create_test_analysis_results()
+        mock_categories = create_test_categories()
+
+        mock_extract.return_value.run.return_value = mock_corpus
+        mock_analyze.return_value.run.return_value = (mock_analysis, None)
+        mock_suggest.return_value.run.return_value = mock_categories
+
+        config = AppConfig(user_email="test@example.com")
+        service = PipelineService(config)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            service.run(output_dir=Path(tmpdir))
+
+        # ExtractionService should NOT receive database keyword (or get None)
+        _, kwargs = mock_extract.call_args
+        assert kwargs.get("database") is None
+
+        # AnalysisService should NOT receive database keyword (or get None)
+        _, kwargs = mock_analyze.call_args
+        assert kwargs.get("database") is None
+
+    @patch("src.services.pipeline_service.AnalysisService")
+    @patch("src.services.pipeline_service.SuggestionService")
+    def test_skip_extraction_still_passes_database_to_analysis(
+        self, mock_suggest, mock_analyze, tmp_path
+    ):
+        """Test database is passed to AnalysisService even when extraction is skipped."""
+        from src.services.pipeline_service import PipelineService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            mock_corpus = create_test_corpus()
+            mock_analysis = create_test_analysis_results()
+            mock_categories = create_test_categories()
+
+            mock_analyze.return_value.run.return_value = (mock_analysis, None)
+            mock_suggest.return_value.run.return_value = mock_categories
+
+            config = AppConfig(user_email="test@example.com")
+            service = PipelineService(config, database=db)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                service.run(
+                    output_dir=Path(tmpdir),
+                    skip_extraction=True,
+                    existing_corpus=mock_corpus,
+                )
+
+            _, kwargs = mock_analyze.call_args
+            assert kwargs.get("database") is db
+        finally:
+            db.close()
+
+
+class TestExtractionServiceSQLiteInit:
+    """Test ExtractionService initialization with optional database parameter."""
+
+    def test_init_accepts_database_parameter(self, tmp_path):
+        """Test that ExtractionService accepts a database parameter."""
+        from src.services.extraction_service import ExtractionService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            config = ExtractConfig()
+            service = ExtractionService(config, user_email="test@example.com", database=db)
+            assert service._database is db
+        finally:
+            db.close()
+
+    def test_init_without_database_defaults_to_none(self):
+        """Test that database defaults to None when not provided."""
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig()
+        service = ExtractionService(config, user_email="test@example.com")
+        assert service._database is None
+
+    def test_init_backward_compatible(self):
+        """Test existing code still works without database parameter."""
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig()
+        service = ExtractionService(
+            config=config,
+            user_email="test@example.com",
+            output_dir=Path("/tmp/test"),
+        )
+        assert service._database is None
+        assert service.user_email == "test@example.com"
+
+
+class TestExtractionServiceSQLiteUpsert:
+    """Test that ExtractionService upserts emails to SQLite after extraction."""
+
+    def test_save_corpus_upserts_to_sqlite_when_database_provided(self, tmp_path):
+        """Test that save_corpus also upserts emails into SQLite via EmailStore."""
+        from src.services.extraction_service import ExtractionService
+        from src.storage.database import Database
+        from src.storage.email_store import EmailStore
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            config = ExtractConfig()
+            service = ExtractionService(config, user_email="test@example.com", database=db)
+
+            emails = [create_test_email(email_id=f"sql_email_{i}") for i in range(5)]
+            corpus = create_test_corpus(emails=emails)
+
+            corpus_path = tmp_path / "email_corpus.json"
+            service.save_corpus(corpus, corpus_path)
+
+            # Verify emails were upserted into SQLite
+            store = EmailStore(db)
+            assert store.count() == 5
+
+            # Verify individual emails are retrievable
+            email = store.get("sql_email_0")
+            assert email is not None
+            assert email.sender_email == "sender@example.com"
+        finally:
+            db.close()
+
+    def test_save_corpus_still_writes_json_when_database_provided(self, tmp_path):
+        """Test that JSON file is STILL written even when database is provided."""
+        from src.services.extraction_service import ExtractionService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            config = ExtractConfig()
+            service = ExtractionService(config, user_email="test@example.com", database=db)
+
+            corpus = create_test_corpus()
+            corpus_path = tmp_path / "email_corpus.json"
+            service.save_corpus(corpus, corpus_path)
+
+            # JSON file should still exist (backward compat)
+            assert corpus_path.exists()
+            data = json.loads(corpus_path.read_text(encoding="utf-8"))
+            assert "emails" in data
+        finally:
+            db.close()
+
+    def test_save_corpus_no_sqlite_when_no_database(self, tmp_path):
+        """Test that no SQLite operations happen when database is None."""
+        from src.services.extraction_service import ExtractionService
+
+        config = ExtractConfig()
+        service = ExtractionService(config, user_email="test@example.com")
+
+        corpus = create_test_corpus()
+        corpus_path = tmp_path / "email_corpus.json"
+        service.save_corpus(corpus, corpus_path)
+
+        # JSON file should exist
+        assert corpus_path.exists()
+
+    def test_save_corpus_upsert_is_idempotent(self, tmp_path):
+        """Test that saving same corpus twice doesn't duplicate emails."""
+        from src.services.extraction_service import ExtractionService
+        from src.storage.database import Database
+        from src.storage.email_store import EmailStore
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            config = ExtractConfig()
+            service = ExtractionService(config, user_email="test@example.com", database=db)
+
+            emails = [create_test_email(email_id=f"idem_{i}") for i in range(3)]
+            corpus = create_test_corpus(emails=emails)
+
+            corpus_path = tmp_path / "email_corpus.json"
+            service.save_corpus(corpus, corpus_path)
+            service.save_corpus(corpus, corpus_path)
+
+            # Should still have exactly 3 emails (upsert, not insert)
+            store = EmailStore(db)
+            assert store.count() == 3
+        finally:
+            db.close()
+
+
+class TestAnalysisServiceSQLiteInit:
+    """Test AnalysisService initialization with optional database parameter."""
+
+    def test_init_accepts_database_parameter(self, tmp_path):
+        """Test that AnalysisService accepts a database parameter."""
+        from src.services.analysis_service import AnalysisService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            config = AnalyzeConfig(num_clusters=5)
+            service = AnalysisService(config, database=db)
+            assert service._database is db
+        finally:
+            db.close()
+
+    def test_init_without_database_defaults_to_none(self):
+        """Test that database defaults to None when not provided."""
+        from src.services.analysis_service import AnalysisService
+
+        config = AnalyzeConfig(num_clusters=5)
+        service = AnalysisService(config)
+        assert service._database is None
+
+    def test_init_backward_compatible(self):
+        """Test existing code still works without database parameter."""
+        from src.services.analysis_service import AnalysisService
+
+        config = AnalyzeConfig()
+        service = AnalysisService(config)
+        assert service.config is config
+        assert service._database is None
+
+
+class TestAnalysisServiceSQLiteEmbeddingCache:
+    """Test AnalysisService creates EmbeddingCache with database when available."""
+
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    def test_run_creates_embedding_cache_with_database(self, mock_st, tmp_path):
+        """Test that run() creates EmbeddingCache with database when available."""
+        import numpy as np
+
+        from src.services.analysis_service import AnalysisService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            # Setup mock SentenceTransformer
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.random.rand(10, 1024).astype(np.float32)
+            mock_st.return_value = mock_model
+
+            config = AnalyzeConfig(num_clusters=2)
+            service = AnalysisService(config, database=db)
+
+            corpus = create_test_corpus()
+
+            # Patch run_full_analysis to capture the embedding_cache argument
+            with patch("src.services.analysis_service.run_full_analysis") as mock_rfa:
+                mock_rfa.return_value = (create_test_analysis_results(), None)
+                service.run(corpus=corpus)
+
+                # The embedding_cache argument should have been created with database
+                call_kwargs = mock_rfa.call_args[1]
+                embedding_cache = call_kwargs.get("embedding_cache")
+                assert embedding_cache is not None
+                # Verify it's using the sqlite-vec store
+                assert embedding_cache._store is not None
+        finally:
+            db.close()
+
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    def test_run_no_embedding_cache_when_no_database(self, mock_st):
+        """Test that run() does not auto-create embedding_cache without database."""
+        import numpy as np
+
+        from src.services.analysis_service import AnalysisService
+
+        mock_model = MagicMock()
+        mock_model.encode.return_value = np.random.rand(10, 1024).astype(np.float32)
+        mock_st.return_value = mock_model
+
+        config = AnalyzeConfig(num_clusters=2)
+        service = AnalysisService(config)
+
+        corpus = create_test_corpus()
+
+        with patch("src.services.analysis_service.run_full_analysis") as mock_rfa:
+            mock_rfa.return_value = (create_test_analysis_results(), None)
+            service.run(corpus=corpus)
+
+            # embedding_cache should be None when no database
+            call_kwargs = mock_rfa.call_args[1]
+            embedding_cache = call_kwargs.get("embedding_cache")
+            assert embedding_cache is None
+
+    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    def test_run_explicit_cache_overrides_database_cache(self, mock_st, tmp_path):
+        """Test that explicitly passed embedding_cache takes precedence over database."""
+        import numpy as np
+
+        from src.cache.embedding_cache import EmbeddingCache
+        from src.services.analysis_service import AnalysisService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.random.rand(10, 1024).astype(np.float32)
+            mock_st.return_value = mock_model
+
+            config = AnalyzeConfig(num_clusters=2)
+            service = AnalysisService(config, database=db)
+
+            corpus = create_test_corpus()
+            explicit_cache = EmbeddingCache(cache_path=tmp_path / "explicit.npz")
+
+            with patch("src.services.analysis_service.run_full_analysis") as mock_rfa:
+                mock_rfa.return_value = (create_test_analysis_results(), None)
+                service.run(corpus=corpus, embedding_cache=explicit_cache)
+
+                # The explicit cache should be used, not the database-backed one
+                call_kwargs = mock_rfa.call_args[1]
+                assert call_kwargs["embedding_cache"] is explicit_cache
+        finally:
+            db.close()
+
+
+class TestPipelineServiceSQLiteEndToEnd:
+    """End-to-end test: database flows through the full pipeline."""
+
+    @patch("src.services.pipeline_service.ExtractionService")
+    @patch("src.services.pipeline_service.AnalysisService")
+    @patch("src.services.pipeline_service.SuggestionService")
+    def test_pipeline_works_unchanged_without_database(
+        self, mock_suggest, mock_analyze, mock_extract
+    ):
+        """Test that the full pipeline works without any database (backward compat)."""
+        from src.services.pipeline_service import PipelineResult, PipelineService
+
+        mock_corpus = create_test_corpus()
+        mock_analysis = create_test_analysis_results()
+        mock_categories = create_test_categories()
+
+        mock_extract.return_value.run.return_value = mock_corpus
+        mock_analyze.return_value.run.return_value = (mock_analysis, None)
+        mock_suggest.return_value.run.return_value = mock_categories
+
+        config = AppConfig(user_email="test@example.com")
+        service = PipelineService(config)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = service.run(output_dir=Path(tmpdir))
+            assert isinstance(result, PipelineResult)
+            assert result.corpus is not None
+
+    @patch("src.services.pipeline_service.ExtractionService")
+    @patch("src.services.pipeline_service.AnalysisService")
+    @patch("src.services.pipeline_service.SuggestionService")
+    def test_pipeline_with_database_passes_to_all_services(
+        self, mock_suggest, mock_analyze, mock_extract, tmp_path
+    ):
+        """Test that database is threaded through all sub-services."""
+        from src.services.pipeline_service import PipelineService
+        from src.storage.database import Database
+
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            mock_corpus = create_test_corpus()
+            mock_analysis = create_test_analysis_results()
+            mock_categories = create_test_categories()
+
+            mock_extract.return_value.run.return_value = mock_corpus
+            mock_analyze.return_value.run.return_value = (mock_analysis, None)
+            mock_suggest.return_value.run.return_value = mock_categories
+
+            config = AppConfig(user_email="test@example.com")
+            service = PipelineService(config, database=db)
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                service.run(output_dir=Path(tmpdir))
+
+            # Both services should have received the database
+            _, extract_kwargs = mock_extract.call_args
+            assert extract_kwargs.get("database") is db
+
+            _, analyze_kwargs = mock_analyze.call_args
+            assert analyze_kwargs.get("database") is db
+        finally:
+            db.close()
