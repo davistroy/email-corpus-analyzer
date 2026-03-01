@@ -144,3 +144,32 @@
 - Summary: Created CLI commands for categorize, --report, --resolve, and --dry-run. 32 new tests.
 
 **Phase 4 complete.** All 5 email-by-email categorization items delivered.
+
+## 2026-02-28 (Phase 5 — Email Filtering & Moving)
+
+### Item 5.1: Folder Manager
+- Status: Complete
+- Files changed: src/actions/folder_manager.py (created)
+- Summary: Created folder manager for creating/managing mailbox folders matching category hierarchy via Graph API and Gmail Labels API. 43 new tests.
+
+### Item 5.2: Email Mover
+- Status: Complete
+- Files changed: src/actions/email_mover.py (created)
+- Summary: Created email mover for batch-moving emails to categorized folders with rollback support and idempotent operations. 43 new tests.
+
+### Item 5.3: Rule Deployer
+- Status: Complete
+- Files changed: src/actions/rule_deployer.py (created)
+- Summary: Created rule deployer for converting CategoryRules to server-side inbox rules via Graph API and Gmail Filters API with conflict detection and dry-run mode. 60 new tests.
+
+### Item 5.4: Action Logger
+- Status: Complete
+- Files changed: src/actions/action_logger.py (created)
+- Summary: Created append-only JSONL audit trail for all mailbox modifications with rollback support via reverse log replay. 66 new tests.
+
+### Item 5.5: Apply CLI
+- Status: Complete
+- Files changed: src/cli/commands/apply.py (created)
+- Summary: Created CLI commands for apply --dry-run, apply folders, apply move, apply rules, and apply --rollback with mandatory confirmation prompts and --source flag support. 45 new tests.
+
+**Phase 5 complete.** All 5 email filtering & moving items delivered.

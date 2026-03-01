@@ -15,12 +15,22 @@ from src.actions.action_logger import (
     RollbackResult,
     get_default_action_log_path,
 )
+from src.actions.email_mover import (
+    EmailMover,
+    GmailMoveBackend,
+    M365MoveBackend,
+    MoveResult,
+)
 
 __all__ = [
     "ActionLog",
     "ActionLogger",
     "ActionRecord",
     "ActionType",
+    "EmailMover",
+    "GmailMoveBackend",
+    "M365MoveBackend",
+    "MoveResult",
     "RollbackResult",
     "get_default_action_log_path",
 ]

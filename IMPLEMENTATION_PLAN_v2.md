@@ -499,7 +499,7 @@ src/actions/
 
 ### Work Items
 
-#### 5.1 Folder Manager
+#### 5.1 Folder Manager — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/actions/folder_manager.py` (NEW)
@@ -514,7 +514,7 @@ src/actions/
 
 ---
 
-#### 5.2 Email Mover
+#### 5.2 Email Mover — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/actions/email_mover.py` (NEW)
@@ -530,7 +530,7 @@ src/actions/
 
 ---
 
-#### 5.3 Rule Deployer
+#### 5.3 Rule Deployer — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/actions/rule_deployer.py` (NEW)
@@ -545,7 +545,7 @@ src/actions/
 
 ---
 
-#### 5.4 Action Logger
+#### 5.4 Action Logger — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/actions/action_logger.py` (NEW)
@@ -558,7 +558,7 @@ src/actions/
 
 ---
 
-#### 5.5 CLI Integration
+#### 5.5 CLI Integration — COMPLETE (2026-02-28)
 
 **Files Affected:**
 - `src/cli/commands/apply.py` (NEW)

@@ -12,6 +12,7 @@ Commands:
   export     - Export categories to CSV or HTML format
   rules      - Manage category rules (generate, test, show, edit)
   categorize - Categorize emails using approved rules
+  apply      - Apply results to live mailbox (folders, move, rules, rollback)
 
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
@@ -24,6 +25,7 @@ from pathlib import Path
 
 from src import __version__
 from src.cli.commands.analyze import build_analyze_parser, cmd_analyze
+from src.cli.commands.apply import build_apply_parser, cmd_apply
 from src.cli.commands.categorize import build_categorize_parser, cmd_categorize
 from src.cli.commands.config import (
     build_config_parser,
@@ -75,6 +77,7 @@ __all__ = [
     "cmd_export",
     "cmd_rules",
     "cmd_categorize",
+    "cmd_apply",
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
@@ -158,6 +161,7 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["config"] = build_config_parser(subparsers)
     SUBPARSERS["rules"] = build_rules_parser(subparsers)
     SUBPARSERS["categorize"] = build_categorize_parser(subparsers)
+    SUBPARSERS["apply"] = build_apply_parser(subparsers)
 
     return parser
 
@@ -207,6 +211,7 @@ def main() -> int:
         "export": cmd_export,
         "rules": cmd_rules,
         "categorize": cmd_categorize,
+        "apply": cmd_apply,
     }
 
     handler = command_handlers.get(args.command)
