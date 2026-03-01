@@ -753,8 +753,8 @@ Connect the feedback loop: when `LLMClassifier.classify()` is called and a `FewS
 
 ### Work Items
 
-#### 6.1 Implement SetFitClassifier
-**Status: PENDING**
+#### 6.1 Implement SetFitClassifier ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N4
 **Files Affected:**
 - `src/classifiers/setfit_classifier.py` (create)
@@ -764,23 +764,23 @@ Connect the feedback loop: when `LLMClassifier.classify()` is called and a `FewS
 Implement `SetFitClassifier(BaseClassifier)` that uses the SetFit library for few-shot fine-tuning. SetFit achieves competitive accuracy with 8-16 examples per class. The classifier loads a pre-trained model, accepts a training set of (text, label) pairs, and classifies new emails. Model is saved locally and loaded on startup.
 
 **Tasks:**
-1. [ ] Create `src/classifiers/setfit_classifier.py` with `SetFitClassifier` class
-2. [ ] Implement `train(examples: list[tuple[str, str]])` — fine-tune SetFit model on labeled examples
-3. [ ] Implement `classify()` per BaseClassifier contract
-4. [ ] Implement `save_model(path: Path)` and `load_model(path: Path)`
-5. [ ] Add confidence scoring via prediction probability
-6. [ ] Write tests with small synthetic training sets (mocked SetFit for CI speed)
+1. [x] Create `src/classifiers/setfit_classifier.py` with `SetFitClassifier` class
+2. [x] Implement `train(examples: list[tuple[str, str]])` — fine-tune SetFit model on labeled examples
+3. [x] Implement `classify()` per BaseClassifier contract
+4. [x] Implement `save_model(path: Path)` and `load_model(path: Path)`
+5. [x] Add confidence scoring via prediction probability
+6. [x] Write tests with small synthetic training sets (mocked SetFit for CI speed)
 
 **Acceptance Criteria:**
-- [ ] Training completes successfully with 8+ examples per class
-- [ ] Model can be saved and loaded from disk
-- [ ] Classification output matches BaseClassifier contract
-- [ ] Confidence scores are meaningful (not all 1.0 or all 0.5)
+- [x] Training completes successfully with 8+ examples per class
+- [x] Model can be saved and loaded from disk
+- [x] Classification output matches BaseClassifier contract
+- [x] Confidence scores are meaningful (not all 1.0 or all 0.5)
 
 ---
 
-#### 6.2 Implement EnsembleClassifier
-**Status: PENDING**
+#### 6.2 Implement EnsembleClassifier ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N4
 **Files Affected:**
 - `src/classifiers/ensemble.py` (create)
@@ -790,19 +790,19 @@ Implement `SetFitClassifier(BaseClassifier)` that uses the SetFit library for fe
 Implement `EnsembleClassifier(BaseClassifier)` that chains multiple classifiers in priority order. Default chain: rules → SetFit → LLM. Each classifier is tried in order; if confidence exceeds the configured threshold, that result is used. If all classifiers are below threshold, the highest-confidence result is returned. Track which classifier produced the final result for accuracy monitoring.
 
 **Tasks:**
-1. [ ] Create `src/classifiers/ensemble.py` with `EnsembleClassifier` class
-2. [ ] Accept ordered list of `(classifier, confidence_threshold)` tuples
-3. [ ] Implement `classify()`: try each classifier in order, accept first result above threshold
-4. [ ] Track classifier usage statistics (per-classifier hit rate)
-5. [ ] Log which classifier produced each result
-6. [ ] Write tests: first classifier confident → used, all below threshold → highest wins, missing classifier → skip
+1. [x] Create `src/classifiers/ensemble.py` with `EnsembleClassifier` class
+2. [x] Accept ordered list of `(classifier, confidence_threshold)` tuples
+3. [x] Implement `classify()`: try each classifier in order, accept first result above threshold
+4. [x] Track classifier usage statistics (per-classifier hit rate)
+5. [x] Log which classifier produced each result
+6. [x] Write tests: first classifier confident → used, all below threshold → highest wins, missing classifier → skip
 
 **Acceptance Criteria:**
-- [ ] Classifiers are tried in order (rules first)
-- [ ] First classifier above threshold wins
-- [ ] If all below threshold, highest confidence wins
-- [ ] Usage statistics are tracked accurately
-- [ ] Missing/failed classifiers are gracefully skipped
+- [x] Classifiers are tried in order (rules first)
+- [x] First classifier above threshold wins
+- [x] If all below threshold, highest confidence wins
+- [x] Usage statistics are tracked accurately
+- [x] Missing/failed classifiers are gracefully skipped
 
 ---
 
@@ -861,8 +861,8 @@ Create `AccuracyTracker` that monitors per-category correction rates over a roll
 
 ---
 
-#### 6.5 Add SetFit and Training Dependencies
-**Status: PENDING**
+#### 6.5 Add SetFit and Training Dependencies ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N4
 **Files Affected:**
 - `pyproject.toml` (modify)
