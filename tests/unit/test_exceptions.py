@@ -7,6 +7,7 @@ Tests cover:
 - Configuration exceptions: ConfigurationError, ConfigValidationError
 - Analysis exceptions: AnalysisError, ClusteringError
 - Extraction exceptions: ExtractionError, M365AuthError
+- Classification exceptions: ClassificationError, ClassifierConnectionError, ClassifierResponseError
 
 Per Phase 6 Track 6A specification.
 """
@@ -271,6 +272,169 @@ class TestExtractionExceptions:
         assert "error_code" in error.context
 
 
+class TestClassificationExceptions:
+    """Test cases for classification-related exceptions."""
+
+    def test_classification_error_with_message(self):
+        """Test ClassificationError with just a message."""
+        from src.exceptions import ClassificationError, EmailAnalyzerError
+
+        error = ClassificationError("Classification failed")
+
+        assert isinstance(error, EmailAnalyzerError)
+        assert error.message == "Classification failed"
+        assert error.recovery_hint is not None
+
+    def test_classification_error_default_recovery_hint(self):
+        """Test ClassificationError provides actionable default recovery hint."""
+        from src.exceptions import ClassificationError
+
+        error = ClassificationError("Classification failed")
+
+        assert error.recovery_hint is not None
+        assert len(error.recovery_hint) > 0
+
+    def test_classification_error_with_custom_hint(self):
+        """Test ClassificationError with custom recovery hint."""
+        from src.exceptions import ClassificationError
+
+        error = ClassificationError(
+            "Classification failed", recovery_hint="Check your classifier config"
+        )
+
+        assert error.recovery_hint == "Check your classifier config"
+
+    def test_classification_error_with_context(self):
+        """Test ClassificationError with context dictionary."""
+        from src.exceptions import ClassificationError
+
+        error = ClassificationError(
+            "Classification failed",
+            context={"email_id": "abc123", "classifier": "llm"},
+        )
+
+        assert error.context["email_id"] == "abc123"
+        assert error.context["classifier"] == "llm"
+
+    def test_classification_error_is_raisable(self):
+        """Test ClassificationError can be raised and caught."""
+        from src.exceptions import ClassificationError
+
+        with pytest.raises(ClassificationError):
+            raise ClassificationError("Test error")
+
+    def test_classifier_connection_error(self):
+        """Test ClassifierConnectionError with provider and URL context."""
+        from src.exceptions import ClassificationError, ClassifierConnectionError
+
+        error = ClassifierConnectionError(provider="ollama", url="http://localhost:11434")
+
+        assert isinstance(error, ClassificationError)
+        assert "ollama" in error.message.lower() or "ollama" in str(error.context)
+        assert error.recovery_hint is not None
+        assert error.context["provider"] == "ollama"
+        assert error.context["url"] == "http://localhost:11434"
+
+    def test_classifier_connection_error_recovery_hint_is_actionable(self):
+        """Test ClassifierConnectionError recovery hint mentions checking the service."""
+        from src.exceptions import ClassifierConnectionError
+
+        error = ClassifierConnectionError(provider="ollama", url="http://localhost:11434")
+
+        hint_lower = error.recovery_hint.lower()
+        # Recovery hint should be actionable — mention checking service or URL
+        assert "ollama" in hint_lower or "running" in hint_lower or "url" in hint_lower
+
+    def test_classifier_connection_error_with_custom_hint(self):
+        """Test ClassifierConnectionError with custom recovery hint."""
+        from src.exceptions import ClassifierConnectionError
+
+        error = ClassifierConnectionError(
+            provider="claude",
+            url="https://api.anthropic.com",
+            recovery_hint="Check your API key",
+        )
+
+        assert error.recovery_hint == "Check your API key"
+
+    def test_classifier_connection_error_with_extra_context(self):
+        """Test ClassifierConnectionError with additional context fields."""
+        from src.exceptions import ClassifierConnectionError
+
+        error = ClassifierConnectionError(
+            provider="openai",
+            url="https://api.openai.com",
+            context={"status_code": 503, "retry_count": 3},
+        )
+
+        assert error.context["provider"] == "openai"
+        assert error.context["url"] == "https://api.openai.com"
+        assert error.context["status_code"] == 503
+        assert error.context["retry_count"] == 3
+
+    def test_classifier_response_error(self):
+        """Test ClassifierResponseError with raw response context."""
+        from src.exceptions import ClassificationError, ClassifierResponseError
+
+        error = ClassifierResponseError(
+            message="Failed to parse classifier response",
+            raw_response='{"invalid": "json structure"}',
+        )
+
+        assert isinstance(error, ClassificationError)
+        assert error.recovery_hint is not None
+        assert error.context["raw_response"] == '{"invalid": "json structure"}'
+
+    def test_classifier_response_error_default_recovery_hint(self):
+        """Test ClassifierResponseError provides actionable default recovery hint."""
+        from src.exceptions import ClassifierResponseError
+
+        error = ClassifierResponseError(
+            message="Unparseable response",
+            raw_response="gibberish",
+        )
+
+        assert error.recovery_hint is not None
+        assert len(error.recovery_hint) > 0
+
+    def test_classifier_response_error_with_custom_hint(self):
+        """Test ClassifierResponseError with custom recovery hint."""
+        from src.exceptions import ClassifierResponseError
+
+        error = ClassifierResponseError(
+            message="Bad response",
+            raw_response="",
+            recovery_hint="Try a different model",
+        )
+
+        assert error.recovery_hint == "Try a different model"
+
+    def test_classifier_response_error_with_extra_context(self):
+        """Test ClassifierResponseError with additional context fields."""
+        from src.exceptions import ClassifierResponseError
+
+        error = ClassifierResponseError(
+            message="Response validation failed",
+            raw_response='{"category": null}',
+            context={"model": "qwen2.5:7b", "attempt": 2},
+        )
+
+        assert error.context["raw_response"] == '{"category": null}'
+        assert error.context["model"] == "qwen2.5:7b"
+        assert error.context["attempt"] == 2
+
+    def test_classifier_response_error_str_representation(self):
+        """Test string representation of ClassifierResponseError."""
+        from src.exceptions import ClassifierResponseError
+
+        error = ClassifierResponseError(
+            message="Failed to parse classifier response",
+            raw_response="bad data",
+        )
+
+        assert str(error) == "Failed to parse classifier response"
+
+
 class TestExceptionHierarchy:
     """Test exception class hierarchy relationships."""
 
@@ -278,6 +442,9 @@ class TestExceptionHierarchy:
         """Test all custom exceptions inherit from EmailAnalyzerError."""
         from src.exceptions import (
             AnalysisError,
+            ClassificationError,
+            ClassifierConnectionError,
+            ClassifierResponseError,
             ClusteringError,
             ConfigurationError,
             ConfigValidationError,
@@ -296,6 +463,9 @@ class TestExceptionHierarchy:
         assert issubclass(ClusteringError, EmailAnalyzerError)
         assert issubclass(ExtractionError, EmailAnalyzerError)
         assert issubclass(M365AuthError, EmailAnalyzerError)
+        assert issubclass(ClassificationError, EmailAnalyzerError)
+        assert issubclass(ClassifierConnectionError, EmailAnalyzerError)
+        assert issubclass(ClassifierResponseError, EmailAnalyzerError)
 
     def test_config_validation_inherits_from_configuration_error(self):
         """Test ConfigValidationError inherits from ConfigurationError."""
@@ -315,10 +485,25 @@ class TestExceptionHierarchy:
 
         assert issubclass(M365AuthError, ExtractionError)
 
+    def test_classifier_connection_error_inherits_from_classification_error(self):
+        """Test ClassifierConnectionError inherits from ClassificationError."""
+        from src.exceptions import ClassificationError, ClassifierConnectionError
+
+        assert issubclass(ClassifierConnectionError, ClassificationError)
+
+    def test_classifier_response_error_inherits_from_classification_error(self):
+        """Test ClassifierResponseError inherits from ClassificationError."""
+        from src.exceptions import ClassificationError, ClassifierResponseError
+
+        assert issubclass(ClassifierResponseError, ClassificationError)
+
     def test_can_catch_base_exception(self):
         """Test catching base exception catches all derived exceptions."""
         from src.exceptions import (
             AnalysisError,
+            ClassificationError,
+            ClassifierConnectionError,
+            ClassifierResponseError,
             ConfigurationError,
             CorpusNotFoundError,
             EmailAnalyzerError,
@@ -330,10 +515,32 @@ class TestExceptionHierarchy:
             ConfigurationError("Config error"),
             AnalysisError("Analysis error"),
             ExtractionError("Extraction error"),
+            ClassificationError("Classification error"),
+            ClassifierConnectionError(provider="ollama", url="http://localhost:11434"),
+            ClassifierResponseError(message="Bad response", raw_response="bad"),
         ]
 
         for exc in exceptions:
             try:
                 raise exc
             except EmailAnalyzerError as e:
+                assert e is exc
+
+    def test_can_catch_classification_error_for_subtypes(self):
+        """Test catching ClassificationError catches connection and response errors."""
+        from src.exceptions import (
+            ClassificationError,
+            ClassifierConnectionError,
+            ClassifierResponseError,
+        )
+
+        exceptions = [
+            ClassifierConnectionError(provider="ollama", url="http://localhost:11434"),
+            ClassifierResponseError(message="Bad response", raw_response="bad"),
+        ]
+
+        for exc in exceptions:
+            try:
+                raise exc
+            except ClassificationError as e:
                 assert e is exc

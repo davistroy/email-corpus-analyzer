@@ -1399,3 +1399,393 @@ class TestAppConfigWithSchedulerAndMonitoring:
 
         assert result.scheduler.enabled is True
         assert result.scheduler.interval_hours == 12
+
+
+class TestCategoryDefinition:
+    """Test cases for CategoryDefinition model (Work Item 1.2)."""
+
+    def test_category_definition_required_fields(self):
+        """Test CategoryDefinition requires name and description."""
+        from src.config.models import CategoryDefinition
+
+        cat = CategoryDefinition(name="Newsletters", description="Periodic newsletter emails")
+
+        assert cat.name == "Newsletters"
+        assert cat.description == "Periodic newsletter emails"
+
+    def test_category_definition_with_keywords(self):
+        """Test CategoryDefinition accepts optional keywords list."""
+        from src.config.models import CategoryDefinition
+
+        cat = CategoryDefinition(
+            name="Shopping",
+            description="Order confirmations and receipts",
+            keywords=["order", "receipt", "shipping"],
+        )
+
+        assert cat.keywords == ["order", "receipt", "shipping"]
+
+    def test_category_definition_keywords_default_empty(self):
+        """Test CategoryDefinition keywords defaults to empty list."""
+        from src.config.models import CategoryDefinition
+
+        cat = CategoryDefinition(name="Work", description="Work-related emails")
+
+        assert cat.keywords == []
+
+    def test_category_definition_name_cannot_be_empty(self):
+        """Test CategoryDefinition name cannot be empty string."""
+        from pydantic import ValidationError
+
+        from src.config.models import CategoryDefinition
+
+        with pytest.raises(ValidationError):
+            CategoryDefinition(name="", description="Some description")
+
+    def test_category_definition_description_cannot_be_empty(self):
+        """Test CategoryDefinition description cannot be empty string."""
+        from pydantic import ValidationError
+
+        from src.config.models import CategoryDefinition
+
+        with pytest.raises(ValidationError):
+            CategoryDefinition(name="Test", description="")
+
+    def test_category_definition_name_stripped(self):
+        """Test CategoryDefinition name has whitespace stripped."""
+        from src.config.models import CategoryDefinition
+
+        cat = CategoryDefinition(name="  Newsletters  ", description="Newsletter emails")
+
+        assert cat.name == "Newsletters"
+
+    def test_category_definition_serialization(self):
+        """Test CategoryDefinition serializes to dict correctly."""
+        from src.config.models import CategoryDefinition
+
+        cat = CategoryDefinition(
+            name="Finance",
+            description="Financial statements and alerts",
+            keywords=["bank", "statement"],
+        )
+        data = cat.model_dump()
+
+        assert data["name"] == "Finance"
+        assert data["description"] == "Financial statements and alerts"
+        assert data["keywords"] == ["bank", "statement"]
+
+
+class TestClassifierConfig:
+    """Test cases for ClassifierConfig model (Work Item 1.2)."""
+
+    def test_classifier_config_default_values(self):
+        """Test ClassifierConfig has sensible defaults."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig()
+
+        assert config.provider == "ollama"
+        assert config.model_name == "qwen2.5:7b"
+        assert config.ollama_base_url == "http://localhost:11434"
+        assert config.api_key_env_var is None
+        assert config.confidence_threshold == 0.6
+        assert config.max_tokens == 200
+        assert config.temperature == 0.0
+        assert config.categories == []
+
+    def test_classifier_config_custom_values(self):
+        """Test ClassifierConfig accepts custom values."""
+        from src.config.models import CategoryDefinition, ClassifierConfig
+
+        categories = [
+            CategoryDefinition(name="Work", description="Work emails"),
+            CategoryDefinition(name="Personal", description="Personal emails"),
+        ]
+        config = ClassifierConfig(
+            provider="claude",
+            model_name="claude-sonnet-4-20250514",
+            api_key_env_var="ANTHROPIC_API_KEY",
+            confidence_threshold=0.8,
+            max_tokens=500,
+            temperature=0.1,
+            categories=categories,
+        )
+
+        assert config.provider == "claude"
+        assert config.model_name == "claude-sonnet-4-20250514"
+        assert config.api_key_env_var == "ANTHROPIC_API_KEY"
+        assert config.confidence_threshold == 0.8
+        assert config.max_tokens == 500
+        assert config.temperature == 0.1
+        assert len(config.categories) == 2
+
+    def test_classifier_config_provider_ollama(self):
+        """Test ClassifierConfig accepts ollama provider."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig(provider="ollama")
+        assert config.provider == "ollama"
+
+    def test_classifier_config_provider_claude(self):
+        """Test ClassifierConfig accepts claude provider."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig(provider="claude")
+        assert config.provider == "claude"
+
+    def test_classifier_config_provider_openai(self):
+        """Test ClassifierConfig accepts openai provider."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig(provider="openai")
+        assert config.provider == "openai"
+
+    def test_classifier_config_invalid_provider(self):
+        """Test ClassifierConfig rejects invalid provider."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            ClassifierConfig(provider="invalid_provider")
+
+        assert "provider" in str(exc_info.value)
+
+    def test_classifier_config_invalid_ollama_url(self):
+        """Test ClassifierConfig rejects invalid ollama_base_url."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            ClassifierConfig(ollama_base_url="not-a-valid-url")
+
+        assert "ollama_base_url" in str(exc_info.value)
+
+    def test_classifier_config_ollama_url_accepts_valid_urls(self):
+        """Test ClassifierConfig accepts valid HTTP/HTTPS URLs."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig(ollama_base_url="http://192.168.1.100:11434")
+        assert config.ollama_base_url == "http://192.168.1.100:11434"
+
+        config2 = ClassifierConfig(ollama_base_url="https://ollama.example.com")
+        assert config2.ollama_base_url == "https://ollama.example.com"
+
+    def test_classifier_config_ollama_url_trailing_slash_stripped(self):
+        """Test ClassifierConfig strips trailing slash from ollama_base_url."""
+        from src.config.models import ClassifierConfig
+
+        config = ClassifierConfig(ollama_base_url="http://localhost:11434/")
+        assert config.ollama_base_url == "http://localhost:11434"
+
+    def test_classifier_config_confidence_threshold_min(self):
+        """Test confidence_threshold must be >= 0.0."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError):
+            ClassifierConfig(confidence_threshold=-0.1)
+
+    def test_classifier_config_confidence_threshold_max(self):
+        """Test confidence_threshold must be <= 1.0."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError):
+            ClassifierConfig(confidence_threshold=1.1)
+
+    def test_classifier_config_confidence_threshold_boundaries(self):
+        """Test confidence_threshold accepts boundary values."""
+        from src.config.models import ClassifierConfig
+
+        config_zero = ClassifierConfig(confidence_threshold=0.0)
+        assert config_zero.confidence_threshold == 0.0
+
+        config_one = ClassifierConfig(confidence_threshold=1.0)
+        assert config_one.confidence_threshold == 1.0
+
+    def test_classifier_config_max_tokens_must_be_positive(self):
+        """Test max_tokens must be > 0."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError):
+            ClassifierConfig(max_tokens=0)
+
+    def test_classifier_config_max_tokens_upper_limit(self):
+        """Test max_tokens has a reasonable upper limit."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError):
+            ClassifierConfig(max_tokens=100001)
+
+    def test_classifier_config_temperature_min(self):
+        """Test temperature must be >= 0.0."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError):
+            ClassifierConfig(temperature=-0.1)
+
+    def test_classifier_config_temperature_max(self):
+        """Test temperature must be <= 2.0."""
+        from pydantic import ValidationError
+
+        from src.config.models import ClassifierConfig
+
+        with pytest.raises(ValidationError):
+            ClassifierConfig(temperature=2.1)
+
+    def test_classifier_config_from_dict(self):
+        """Test ClassifierConfig can be created from dictionary (YAML parsing)."""
+        from src.config.models import ClassifierConfig
+
+        data = {
+            "provider": "openai",
+            "model_name": "gpt-4o-mini",
+            "api_key_env_var": "OPENAI_API_KEY",
+            "confidence_threshold": 0.7,
+            "categories": [
+                {"name": "Newsletters", "description": "Periodic newsletters"},
+                {
+                    "name": "Shopping",
+                    "description": "Orders and receipts",
+                    "keywords": ["order", "receipt"],
+                },
+            ],
+        }
+        config = ClassifierConfig(**data)
+
+        assert config.provider == "openai"
+        assert config.model_name == "gpt-4o-mini"
+        assert len(config.categories) == 2
+        assert config.categories[0].name == "Newsletters"
+        assert config.categories[1].keywords == ["order", "receipt"]
+
+    def test_classifier_config_serialization(self):
+        """Test ClassifierConfig serializes to dict correctly."""
+        from src.config.models import CategoryDefinition, ClassifierConfig
+
+        config = ClassifierConfig(
+            provider="claude",
+            categories=[
+                CategoryDefinition(name="Work", description="Work emails", keywords=["meeting"]),
+            ],
+        )
+        data = config.model_dump()
+
+        assert data["provider"] == "claude"
+        assert len(data["categories"]) == 1
+        assert data["categories"][0]["name"] == "Work"
+        assert data["categories"][0]["keywords"] == ["meeting"]
+
+
+class TestAppConfigWithClassifier:
+    """Test AppConfig integration with ClassifierConfig (Work Item 1.2)."""
+
+    def test_app_config_has_classifier_default(self):
+        """Test AppConfig includes ClassifierConfig with defaults."""
+        from src.config.models import AppConfig, ClassifierConfig
+
+        config = AppConfig()
+        assert isinstance(config.classifier, ClassifierConfig)
+        assert config.classifier.provider == "ollama"
+        assert config.classifier.model_name == "qwen2.5:7b"
+
+    def test_app_config_with_custom_classifier(self):
+        """Test AppConfig accepts custom classifier config."""
+        from src.config.models import AppConfig, ClassifierConfig
+
+        classifier = ClassifierConfig(provider="claude", model_name="claude-sonnet-4-20250514")
+        config = AppConfig(classifier=classifier)
+
+        assert config.classifier.provider == "claude"
+        assert config.classifier.model_name == "claude-sonnet-4-20250514"
+
+    def test_app_config_from_dict_with_classifier(self):
+        """Test AppConfig can be created from dict with classifier section."""
+        from src.config.models import AppConfig
+
+        data = {
+            "classifier": {
+                "provider": "openai",
+                "model_name": "gpt-4o-mini",
+                "confidence_threshold": 0.7,
+                "categories": [
+                    {"name": "Work", "description": "Work emails"},
+                    {"name": "Personal", "description": "Personal emails"},
+                ],
+            }
+        }
+        config = AppConfig(**data)
+
+        assert config.classifier.provider == "openai"
+        assert config.classifier.model_name == "gpt-4o-mini"
+        assert len(config.classifier.categories) == 2
+
+    def test_app_config_serialization_with_classifier(self):
+        """Test AppConfig serialization includes classifier section."""
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        data = config.model_dump()
+
+        assert "classifier" in data
+        assert data["classifier"]["provider"] == "ollama"
+        assert data["classifier"]["model_name"] == "qwen2.5:7b"
+
+    def test_merge_configs_with_classifier(self):
+        """Test merge_configs handles classifier section."""
+        from src.config.models import AppConfig, ClassifierConfig, merge_configs
+
+        base = AppConfig(classifier=ClassifierConfig(provider="ollama", model_name="llama3:8b"))
+        override = AppConfig(
+            classifier=ClassifierConfig(provider="claude", model_name="claude-sonnet-4-20250514")
+        )
+
+        result = merge_configs(base, override)
+
+        assert result.classifier.provider == "claude"
+        assert result.classifier.model_name == "claude-sonnet-4-20250514"
+
+    def test_merge_configs_classifier_unset_preserves_base(self):
+        """Test merge preserves base classifier when override doesn't set it."""
+        from src.config.models import AppConfig, ClassifierConfig, merge_configs
+
+        base = AppConfig(
+            classifier=ClassifierConfig(provider="claude", model_name="claude-sonnet-4-20250514")
+        )
+        override = AppConfig()  # No classifier set
+
+        result = merge_configs(base, override)
+
+        assert result.classifier.provider == "claude"
+        assert result.classifier.model_name == "claude-sonnet-4-20250514"
+
+    def test_merge_configs_classifier_partial_override(self):
+        """Test merge handles partial classifier override."""
+        from src.config.models import AppConfig, ClassifierConfig, merge_configs
+
+        base = AppConfig(
+            classifier=ClassifierConfig(
+                provider="ollama",
+                model_name="qwen2.5:7b",
+                confidence_threshold=0.6,
+            )
+        )
+        override = AppConfig(classifier=ClassifierConfig(confidence_threshold=0.8))
+
+        result = merge_configs(base, override)
+
+        # Overridden value
+        assert result.classifier.confidence_threshold == 0.8
+        # Base values preserved for non-overridden fields
+        assert result.classifier.provider == "ollama"
+        assert result.classifier.model_name == "qwen2.5:7b"

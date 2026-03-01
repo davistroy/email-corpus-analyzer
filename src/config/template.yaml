@@ -107,3 +107,46 @@ pipeline:
 
   # Skip cleanup of intermediate files
   no_cleanup: false
+
+# Classifier Settings (Phase 1 - LLM Classification)
+# ---------------------------------------------------
+# classifier:
+#   # LLM provider: ollama (local), claude, or openai
+#   provider: ollama
+#
+#   # Model to use for classification
+#   model_name: "qwen2.5:7b"
+#
+#   # Ollama API server URL (only used when provider is ollama)
+#   ollama_base_url: "http://localhost:11434"
+#
+#   # Environment variable containing API key (for cloud providers)
+#   # api_key_env_var: ANTHROPIC_API_KEY
+#
+#   # Minimum confidence to accept a classification result (0.0-1.0)
+#   confidence_threshold: 0.6
+#
+#   # Maximum tokens for LLM response
+#   max_tokens: 200
+#
+#   # Temperature (0.0 = deterministic)
+#   temperature: 0.0
+#
+#   # Category definitions for classification
+#   # Each category needs a name and description; keywords are optional hints
+#   categories:
+#     - name: "Newsletters"
+#       description: "Periodic newsletter emails, digests, and subscriptions"
+#       keywords: ["newsletter", "digest", "weekly", "monthly"]
+#     - name: "Shopping"
+#       description: "Order confirmations, shipping notifications, and receipts"
+#       keywords: ["order", "receipt", "shipping", "delivered"]
+#     - name: "Finance"
+#       description: "Bank statements, payment notifications, and financial alerts"
+#       keywords: ["bank", "payment", "statement", "transaction"]
+#     - name: "Social"
+#       description: "Social media notifications and messages"
+#       keywords: ["liked", "commented", "followed", "mentioned"]
+#     - name: "Work"
+#       description: "Work-related emails, meetings, and project updates"
+#       keywords: ["meeting", "project", "deadline", "review"]

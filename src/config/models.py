@@ -17,6 +17,12 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
+# Valid classifier provider names
+VALID_CLASSIFIER_PROVIDERS = ("ollama", "claude", "openai")
+
+# Regex for validating HTTP/HTTPS URLs
+URL_FORMAT_RE = re.compile(r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE)
+
 # Valid task names for scheduler
 VALID_SCHEDULER_TASKS = ("extract", "analyze", "categorize", "move")
 
@@ -447,6 +453,103 @@ class MonitoringConfig(BaseModel):
         return v
 
 
+class CategoryDefinition(BaseModel):
+    """
+    Definition of a single email category for LLM classification.
+
+    Each category has a human-readable name, a description that guides
+    the LLM's classification, and optional keywords as hints.
+    """
+
+    name: str = Field(
+        ..., min_length=1, description="Category name (e.g., 'Newsletters', 'Shopping')"
+    )
+    description: str = Field(
+        ...,
+        min_length=1,
+        description="Description guiding the LLM on what belongs in this category",
+    )
+    keywords: list[str] = Field(
+        default_factory=list,
+        description="Optional keyword hints to help the classifier identify this category",
+    )
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        """Strip whitespace from category name."""
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be empty or whitespace-only")
+        return stripped
+
+
+class ClassifierConfig(BaseModel):
+    """
+    Configuration for the LLM email classifier.
+
+    Supports Ollama (local), Claude (Anthropic), and OpenAI providers.
+    Default configuration uses Ollama with qwen2.5:7b for zero-cost
+    local classification.
+    """
+
+    provider: str = Field(
+        default="ollama",
+        description="LLM provider: ollama, claude, or openai",
+    )
+    model_name: str = Field(
+        default="qwen2.5:7b",
+        description="Model identifier (e.g., 'qwen2.5:7b', 'claude-sonnet-4-20250514', 'gpt-4o-mini')",
+    )
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Base URL for Ollama API server",
+    )
+    api_key_env_var: str | None = Field(
+        default=None,
+        description="Environment variable name containing the API key (for cloud providers)",
+    )
+    confidence_threshold: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence to accept an LLM classification result (0.0-1.0)",
+    )
+    max_tokens: int = Field(
+        default=200,
+        gt=0,
+        le=100000,
+        description="Maximum tokens for LLM response",
+    )
+    temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        description="LLM temperature (0.0 = deterministic, higher = more creative)",
+    )
+    categories: list[CategoryDefinition] = Field(
+        default_factory=list,
+        description="Category definitions for classification",
+    )
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        """Validate provider is one of the allowed values."""
+        if v not in VALID_CLASSIFIER_PROVIDERS:
+            raise ValueError(f"provider must be one of {VALID_CLASSIFIER_PROVIDERS}, got '{v}'")
+        return v
+
+    @field_validator("ollama_base_url")
+    @classmethod
+    def validate_ollama_base_url(cls, v: str) -> str:
+        """Validate ollama_base_url is a valid HTTP/HTTPS URL and strip trailing slash."""
+        stripped = v.rstrip("/")
+        if not URL_FORMAT_RE.match(stripped):
+            raise ValueError(f"ollama_base_url must be a valid HTTP/HTTPS URL, got '{v}'")
+        return stripped
+
+
 class AppConfig(BaseModel):
     """Root application configuration containing all options."""
 
@@ -462,6 +565,9 @@ class AppConfig(BaseModel):
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     learning: LearningConfig = Field(default_factory=LearningConfig)
+
+    # Classifier configuration (Phase 1 - Work Item 1.2)
+    classifier: ClassifierConfig = Field(default_factory=ClassifierConfig)
 
     # Automation configurations (Phase 6)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
@@ -553,6 +659,7 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
         ("review", ReviewConfig),
         ("pipeline", PipelineConfig),
         ("learning", LearningConfig),
+        ("classifier", ClassifierConfig),
         ("scheduler", SchedulerConfig),
         ("monitoring", MonitoringConfig),
     ]:

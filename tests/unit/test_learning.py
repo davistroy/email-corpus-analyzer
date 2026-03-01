@@ -2,9 +2,11 @@
 Unit tests for the feedback learning decision logger module.
 
 Tests the DecisionLogger class for logging review decisions to JSONL format,
-supporting pattern detection and learned preferences.
+supporting pattern detection and learned preferences. Also tests the
+SQLite backend path (Phase 4, Work Item 4.1).
 
 Task 5B.1: Decision Logging
+Phase 4, Item 4.1: SQLite migration
 """
 
 import json
@@ -19,6 +21,7 @@ from src.learning.decision_logger import (
     ReviewDecision,
     get_default_decisions_path,
 )
+from src.storage.database import Database
 
 
 class TestDecisionAction:
@@ -479,3 +482,282 @@ class TestDecisionLoggerDecisionCount:
             assert logger.get_decision_count(action_filter=DecisionAction.ACCEPT) == 2
             assert logger.get_decision_count(action_filter=DecisionAction.DELETE) == 1
             assert logger.get_decision_count(action_filter=DecisionAction.RENAME) == 1
+
+
+# =============================================================================
+# DecisionLogger SQLite backend tests (Phase 4, Work Item 4.1)
+# =============================================================================
+
+
+class TestDecisionLoggerSQLiteInit:
+    """Test DecisionLogger initialization with SQLite database."""
+
+    def test_init_with_database_parameter(self, tmp_path):
+        """Test that DecisionLogger accepts a database parameter."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+            assert logger._database is db
+        finally:
+            db.close()
+
+    def test_init_without_database_defaults_to_none(self):
+        """Test that database defaults to None when not provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=path)
+            assert logger._database is None
+
+
+class TestDecisionLoggerSQLiteLogDecision:
+    """Test logging decisions to SQLite backend."""
+
+    def test_log_decision_writes_to_sqlite(self, tmp_path):
+        """Test that log_decision writes to SQLite when database is provided."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            decision = logger.log_decision(
+                category_name="Newsletters",
+                action=DecisionAction.ACCEPT,
+            )
+
+            # Verify it's in SQLite
+            cursor = db.execute(
+                "SELECT * FROM decision_log WHERE category_name = ?",
+                ("Newsletters",),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert decision.category_name == "Newsletters"
+        finally:
+            db.close()
+
+    def test_log_decision_does_not_write_jsonl_when_database_provided(self, tmp_path):
+        """Test that JSONL file is NOT written when database is provided."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision("Test", DecisionAction.ACCEPT)
+
+            # JSONL file should not exist
+            assert not decisions_path.exists()
+        finally:
+            db.close()
+
+    def test_log_decision_sqlite_stores_all_fields(self, tmp_path):
+        """Test that all ReviewDecision fields are stored in SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision(
+                category_name="Old Name",
+                action=DecisionAction.RENAME,
+                old_name="Old Name",
+                new_name="New Name",
+            )
+
+            cursor = db.execute(
+                "SELECT timestamp, category_name, action, context_json "
+                "FROM decision_log WHERE category_name = ?",
+                ("Old Name",),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            timestamp, category_name, action, context_json = row
+            assert category_name == "Old Name"
+            assert action == "rename"
+            context = json.loads(context_json)
+            assert context["old_name"] == "Old Name"
+            assert context["new_name"] == "New Name"
+        finally:
+            db.close()
+
+    def test_log_multiple_decisions_to_sqlite(self, tmp_path):
+        """Test logging multiple decisions to SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision("Cat1", DecisionAction.ACCEPT)
+            logger.log_decision("Cat2", DecisionAction.DELETE)
+            logger.log_decision("Cat3", DecisionAction.RENAME, old_name="Old", new_name="Cat3")
+
+            cursor = db.execute("SELECT COUNT(*) FROM decision_log")
+            count = cursor.fetchone()[0]
+            assert count == 3
+        finally:
+            db.close()
+
+
+class TestDecisionLoggerSQLiteGetDecisions:
+    """Test retrieving decisions from SQLite backend."""
+
+    def test_get_decisions_from_sqlite(self, tmp_path):
+        """Test that get_decisions reads from SQLite when database is provided."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision("Cat1", DecisionAction.ACCEPT)
+            logger.log_decision("Cat2", DecisionAction.DELETE)
+
+            decisions = logger.get_decisions()
+            assert len(decisions) == 2
+            assert decisions[0].category_name == "Cat1"
+            assert decisions[0].action == DecisionAction.ACCEPT
+            assert decisions[1].category_name == "Cat2"
+            assert decisions[1].action == DecisionAction.DELETE
+        finally:
+            db.close()
+
+    def test_get_decisions_with_action_filter_from_sqlite(self, tmp_path):
+        """Test filtering decisions by action type from SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision("Cat1", DecisionAction.ACCEPT)
+            logger.log_decision("Cat2", DecisionAction.DELETE)
+            logger.log_decision("Cat3", DecisionAction.ACCEPT)
+
+            accept_decisions = logger.get_decisions(action_filter=DecisionAction.ACCEPT)
+            delete_decisions = logger.get_decisions(action_filter=DecisionAction.DELETE)
+
+            assert len(accept_decisions) == 2
+            assert len(delete_decisions) == 1
+        finally:
+            db.close()
+
+    def test_get_decisions_empty_sqlite(self, tmp_path):
+        """Test getting decisions from empty SQLite database."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            decisions = logger.get_decisions()
+            assert decisions == []
+        finally:
+            db.close()
+
+    def test_get_decision_count_from_sqlite(self, tmp_path):
+        """Test decision count from SQLite backend."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision("Cat1", DecisionAction.ACCEPT)
+            logger.log_decision("Cat2", DecisionAction.ACCEPT)
+            logger.log_decision("Cat3", DecisionAction.DELETE)
+
+            assert logger.get_decision_count() == 3
+            assert logger.get_decision_count(action_filter=DecisionAction.ACCEPT) == 2
+            assert logger.get_decision_count(action_filter=DecisionAction.DELETE) == 1
+        finally:
+            db.close()
+
+
+class TestDecisionLoggerSQLiteClearDecisions:
+    """Test clearing decisions with SQLite backend."""
+
+    def test_clear_decisions_clears_sqlite(self, tmp_path):
+        """Test that clear_decisions removes records from SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision("Cat1", DecisionAction.ACCEPT)
+            assert logger.get_decision_count() == 1
+
+            logger.clear_decisions()
+
+            assert logger.get_decision_count() == 0
+            cursor = db.execute("SELECT COUNT(*) FROM decision_log")
+            assert cursor.fetchone()[0] == 0
+        finally:
+            db.close()
+
+    def test_clear_empty_sqlite_no_error(self, tmp_path):
+        """Test that clearing empty SQLite table doesn't raise."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+            logger.clear_decisions()  # Should not raise
+        finally:
+            db.close()
+
+
+class TestDecisionLoggerSQLiteContextPreserved:
+    """Test that context data round-trips correctly through SQLite."""
+
+    def test_context_round_trip(self, tmp_path):
+        """Test that context dict survives SQLite serialization."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            decisions_path = tmp_path / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=decisions_path, database=db)
+
+            logger.log_decision(
+                "Test",
+                DecisionAction.MERGE,
+                merge_target="Target",
+                confidence=0.95,
+                custom_list=[1, 2, 3],
+            )
+
+            decisions = logger.get_decisions()
+            assert len(decisions) == 1
+            assert decisions[0].context["merge_target"] == "Target"
+            assert decisions[0].context["confidence"] == 0.95
+            assert decisions[0].context["custom_list"] == [1, 2, 3]
+        finally:
+            db.close()
+
+
+class TestDecisionLoggerJSONLFallbackUnchanged:
+    """Test that JSONL behavior is completely unchanged when no database is provided."""
+
+    def test_jsonl_fallback_log_and_retrieve(self):
+        """Test original JSONL path still works without database."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "decisions.jsonl"
+            logger = DecisionLogger(decisions_path=path)
+
+            logger.log_decision("Cat1", DecisionAction.ACCEPT)
+
+            # Verify JSONL file was written
+            assert path.exists()
+            with open(path, encoding="utf-8") as f:
+                data = json.loads(f.readline())
+            assert data["category_name"] == "Cat1"
+
+            # Verify get_decisions works via JSONL
+            decisions = logger.get_decisions()
+            assert len(decisions) == 1
+            assert decisions[0].category_name == "Cat1"

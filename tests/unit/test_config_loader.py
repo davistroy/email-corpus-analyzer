@@ -707,3 +707,135 @@ class TestValidateConfigSchedulerMonitoring:
 
         monitoring_results = [r for r in results if r["field"].startswith("monitoring")]
         assert all(r["status"] in ("ok", "warning") for r in monitoring_results)
+
+
+class TestGenerateTemplateClassifier:
+    """Test cases for generate_template with classifier section (Work Item 1.2)."""
+
+    def test_generate_template_contains_classifier_section(self):
+        """Test template contains classifier configuration section."""
+        from src.config.loader import generate_template
+
+        template = generate_template()
+
+        assert "classifier" in template.lower()
+        assert "provider" in template
+        assert "model_name" in template
+        assert "confidence_threshold" in template
+        assert "categories" in template
+
+    def test_generate_template_classifier_defaults_documented(self):
+        """Test template documents classifier defaults."""
+        from src.config.loader import generate_template
+
+        template = generate_template()
+
+        assert "ollama" in template
+        assert "qwen2.5:7b" in template
+        assert "0.6" in template
+
+    def test_generate_template_with_classifier_is_valid_yaml(self):
+        """Test generated template with classifier section is still valid YAML."""
+        import yaml
+
+        from src.config.loader import generate_template
+
+        template = generate_template()
+        parsed = yaml.safe_load(template)
+
+        assert isinstance(parsed, dict)
+
+
+class TestShowResolvedConfigClassifier:
+    """Test show_resolved_config includes classifier section (Work Item 1.2)."""
+
+    def test_show_resolved_config_includes_classifier(self):
+        """Test output includes classifier section."""
+        from src.config.loader import show_resolved_config
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        output = show_resolved_config(config)
+
+        assert "classifier" in output
+        assert "provider" in output
+        assert "ollama" in output
+
+
+class TestLoadConfigClassifier:
+    """Test load_config with classifier YAML section (Work Item 1.2)."""
+
+    def test_load_config_with_classifier_section(self):
+        """Test load_config loads classifier section from YAML."""
+        from src.config.loader import load_config
+
+        yaml_data = {
+            "classifier": {
+                "provider": "claude",
+                "model_name": "claude-sonnet-4-20250514",
+                "api_key_env_var": "ANTHROPIC_API_KEY",
+                "confidence_threshold": 0.8,
+                "categories": [
+                    {"name": "Work", "description": "Work-related emails"},
+                    {
+                        "name": "Shopping",
+                        "description": "Orders and receipts",
+                        "keywords": ["order", "receipt"],
+                    },
+                ],
+            }
+        }
+
+        with patch("src.config.loader.load_yaml_file", return_value=yaml_data):
+            config = load_config()
+
+        assert config.classifier.provider == "claude"
+        assert config.classifier.model_name == "claude-sonnet-4-20250514"
+        assert config.classifier.api_key_env_var == "ANTHROPIC_API_KEY"
+        assert config.classifier.confidence_threshold == 0.8
+        assert len(config.classifier.categories) == 2
+        assert config.classifier.categories[0].name == "Work"
+        assert config.classifier.categories[1].keywords == ["order", "receipt"]
+
+    def test_load_config_invalid_classifier_provider_raises_error(self):
+        """Test load_config raises error for invalid classifier provider."""
+        from src.config.loader import ConfigLoadError, load_config
+
+        yaml_data = {
+            "classifier": {
+                "provider": "invalid_provider",
+            }
+        }
+
+        with (
+            patch("src.config.loader.load_yaml_file", return_value=yaml_data),
+            pytest.raises(ConfigLoadError),
+        ):
+            load_config()
+
+    def test_load_config_invalid_classifier_url_raises_error(self):
+        """Test load_config raises error for invalid ollama_base_url."""
+        from src.config.loader import ConfigLoadError, load_config
+
+        yaml_data = {
+            "classifier": {
+                "ollama_base_url": "not-a-url",
+            }
+        }
+
+        with (
+            patch("src.config.loader.load_yaml_file", return_value=yaml_data),
+            pytest.raises(ConfigLoadError),
+        ):
+            load_config()
+
+    def test_load_config_classifier_defaults_when_absent(self):
+        """Test load_config uses classifier defaults when section is absent."""
+        from src.config.loader import load_config
+
+        with patch("src.config.loader.load_yaml_file", return_value={}):
+            config = load_config()
+
+        assert config.classifier.provider == "ollama"
+        assert config.classifier.model_name == "qwen2.5:7b"
+        assert config.classifier.categories == []

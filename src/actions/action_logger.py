@@ -2,13 +2,21 @@
 Action logger for tracking all mailbox modifications.
 
 Phase 5, Item 5.4: Action Logger
+Phase 4, Item 4.1: SQLite migration — dual backend (JSONL fallback + SQLite)
 
-Maintains an append-only JSONL audit trail of all email actions:
+Maintains an append-only audit trail of all email actions:
 folder creation, email moves, rule deployments, rollbacks.
 Supports rollback replay by reading the log and generating reverse operations.
 
-Storage location: ~/.email-analyzer/action_log.jsonl
+When a Database instance is provided, all reads/writes go to the SQLite
+action_log table. When no database is provided, falls back to the
+original JSONL file behavior for backward compatibility.
+
+Storage location (JSONL fallback): ~/.email-analyzer/action_log.jsonl
+Storage location (SQLite): ~/.email-analyzer/email_analyzer.db → action_log table
 """
+
+from __future__ import annotations
 
 import json
 import threading
@@ -16,8 +24,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from src.storage.database import Database
 
 logger = get_logger(__name__)
 
@@ -80,7 +92,7 @@ class ActionRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ActionRecord":
+    def from_dict(cls, data: dict) -> ActionRecord:
         """Create ActionRecord from dictionary."""
         return cls(
             timestamp=datetime.fromisoformat(data["timestamp"]),
@@ -188,21 +200,25 @@ class ActionLogger:
         result = logger.replay_rollback(rollback_actions)
     """
 
-    def __init__(self, log_path: Path | None = None):
+    def __init__(self, log_path: Path | None = None, database: Database | None = None):
         """
         Initialize the action logger.
 
         Args:
             log_path: Custom path for action log file.
                      Defaults to ~/.email-analyzer/action_log.jsonl
+            database: Optional Database instance. When provided, all reads/writes
+                     go to the SQLite action_log table instead of JSONL.
         """
         self.log_path = log_path or get_default_action_log_path()
+        self._database = database
         self._lock = threading.Lock()
 
-        # Ensure parent directory exists
+        # Ensure parent directory exists (needed for JSONL fallback)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.debug(f"ActionLogger initialized with path: {self.log_path}")
+        backend = "SQLite" if database else "JSONL"
+        logger.debug(f"ActionLogger initialized with {backend} backend, path: {self.log_path}")
 
     def log_action(
         self,
@@ -216,6 +232,7 @@ class ActionLogger:
         Log a mailbox action to the audit trail.
 
         Thread-safe: uses a lock to prevent interleaved writes.
+        When a database is configured, writes to SQLite instead of JSONL.
 
         Args:
             action_type: Type of action performed
@@ -236,8 +253,11 @@ class ActionLogger:
             reversible=reversible,
         )
 
-        with self._lock, open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record.to_dict()) + "\n")
+        if self._database is not None:
+            self._write_record_to_sqlite(record)
+        else:
+            with self._lock, open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record.to_dict()) + "\n")
 
         logger.debug(f"Logged action: {action_type.value} for '{target_id}' (success={success})")
         return record
@@ -246,12 +266,17 @@ class ActionLogger:
         """
         Get all logged actions, optionally filtered by action type.
 
+        When a database is configured, reads from SQLite. Otherwise reads from JSONL.
+
         Args:
             action_type_filter: If provided, only return actions of this type
 
         Returns:
             List of ActionRecord objects, oldest first
         """
+        if self._database is not None:
+            return self._get_actions_from_sqlite(action_type_filter)
+
         if not self.log_path.exists():
             return []
 
@@ -368,8 +393,11 @@ class ActionLogger:
 
             try:
                 # Log the rollback record to the audit trail
-                with self._lock, open(self.log_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(reverse.to_dict()) + "\n")
+                if self._database is not None:
+                    self._write_record_to_sqlite(reverse)
+                else:
+                    with self._lock, open(self.log_path, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(reverse.to_dict()) + "\n")
                 successful += 1
                 logger.debug(f"Rolled back: {action.action_type.value} for '{action.target_id}'")
             except Exception as e:
@@ -440,12 +468,91 @@ class ActionLogger:
 
     def clear_actions(self) -> None:
         """
-        Clear all logged actions by removing the action log file.
+        Clear all logged actions.
+
+        When using SQLite, deletes all rows from the action_log table.
+        When using JSONL, removes the action log file.
 
         This operation is irreversible.
         """
-        if self.log_path.exists():
+        if self._database is not None:
+            self._database.execute("DELETE FROM action_log")
+            logger.info("Cleared action log (SQLite)")
+        elif self.log_path.exists():
             self.log_path.unlink()
             logger.info(f"Cleared action log: {self.log_path}")
         else:
             logger.debug("No action log file to clear")
+
+    # -------------------------------------------------------------------------
+    # SQLite backend helpers
+    # -------------------------------------------------------------------------
+
+    def _write_record_to_sqlite(self, record: ActionRecord) -> None:
+        """
+        Write a single ActionRecord to the SQLite action_log table.
+
+        Each write is atomic (single INSERT in autocommit mode).
+        Thread-safe via the existing threading lock.
+
+        Args:
+            record: The ActionRecord to persist.
+        """
+        assert self._database is not None
+        sql = (
+            "INSERT INTO action_log "
+            "(timestamp, action_type, target_id, details_json, success, reversible) "
+            "VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        params = (
+            record.timestamp.isoformat(),
+            record.action_type.value,
+            record.target_id,
+            json.dumps(record.details),
+            int(record.success),
+            int(record.reversible),
+        )
+        with self._lock:
+            self._database.execute(sql, params)
+
+    def _get_actions_from_sqlite(
+        self, action_type_filter: ActionType | None = None
+    ) -> list[ActionRecord]:
+        """
+        Read ActionRecords from the SQLite action_log table.
+
+        Args:
+            action_type_filter: If provided, only return actions of this type.
+
+        Returns:
+            List of ActionRecord objects, oldest first (ordered by rowid).
+        """
+        assert self._database is not None
+
+        if action_type_filter is not None:
+            sql = (
+                "SELECT timestamp, action_type, target_id, details_json, success, reversible "
+                "FROM action_log WHERE action_type = ? ORDER BY id"
+            )
+            cursor = self._database.execute(sql, (action_type_filter.value,))
+        else:
+            sql = (
+                "SELECT timestamp, action_type, target_id, details_json, success, reversible "
+                "FROM action_log ORDER BY id"
+            )
+            cursor = self._database.execute(sql)
+
+        records: list[ActionRecord] = []
+        for row in cursor.fetchall():
+            timestamp_str, action_type_val, target_id, details_json, success, reversible = row
+            records.append(
+                ActionRecord(
+                    timestamp=datetime.fromisoformat(timestamp_str),
+                    action_type=ActionType(action_type_val),
+                    target_id=target_id or "",
+                    details=json.loads(details_json) if details_json else {},
+                    success=bool(success),
+                    reversible=bool(reversible),
+                )
+            )
+        return records

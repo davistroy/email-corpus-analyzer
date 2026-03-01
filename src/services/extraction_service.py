@@ -7,6 +7,7 @@ Decoupled from CLI for independent use.
 Per Phase 7, Track 7B specification.
 Rewired in Work Item 1.1 to use real extractors instead of MCP stubs.
 Updated in Work Item 1.2 to support Gmail and multi-source extraction.
+Phase 4, Work Item 4.3: SQLite integration — upserts emails via EmailStore.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from src.models.corpus import Corpus, CorpusMetadata
 if TYPE_CHECKING:
     from src.extractors.gmail_extractor import GmailExtractor
     from src.extractors.m365_extractor import EmailExtractor
+    from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,7 @@ class ExtractionService:
         config: ExtractConfig,
         user_email: str,
         output_dir: Path | None = None,
+        database: Database | None = None,
     ):
         """
         Initialize extraction service.
@@ -71,10 +74,13 @@ class ExtractionService:
             config: Extraction configuration (includes source and gmail_email)
             user_email: Primary email address (M365/Hotmail)
             output_dir: Optional output directory for corpus file
+            database: Optional Database instance. When provided, save_corpus()
+                     also upserts emails into SQLite via EmailStore.
         """
         self.config = config
         self.user_email = user_email
         self.output_dir = output_dir
+        self._database = database
         self._m365_extractor: EmailExtractor | None = None
         self._gmail_extractor: GmailExtractor | None = None
 
@@ -301,10 +307,14 @@ class ExtractionService:
 
     def save_corpus(self, corpus: Corpus, output_path: Path) -> None:
         """
-        Save corpus to file atomically.
+        Save corpus to file atomically, and optionally upsert to SQLite.
 
         Uses atomic_write_text to ensure the file is either fully written or
         not modified at all. An interrupted write cannot corrupt an existing file.
+
+        When a database is configured, also upserts all emails into the SQLite
+        emails table via EmailStore for relational query access. JSON remains
+        the primary format for backward compatibility.
 
         Args:
             corpus: Corpus to save
@@ -315,6 +325,14 @@ class ExtractionService:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(output_path, corpus.model_dump_json(indent=2))
         logger.info(f"Saved corpus to {output_path} (atomic)")
+
+        # Upsert emails into SQLite when database is available
+        if self._database is not None and corpus.emails:
+            from src.storage.email_store import EmailStore
+
+            store = EmailStore(self._database)
+            store.upsert_batch(corpus.emails)
+            logger.info(f"Upserted {len(corpus.emails)} emails to SQLite")
 
 
 __all__ = ["ExtractionService"]

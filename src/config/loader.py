@@ -240,6 +240,26 @@ pipeline:
   # Skip cleanup of intermediate files
   no_cleanup: false
 
+# Classifier Settings (Phase 1 - LLM Classification)
+# ---------------------------------------------------
+# Configure the LLM-based email classifier.
+# Default uses Ollama with qwen2.5:7b for local, zero-cost classification.
+# classifier:
+#   provider: ollama              # ollama, claude, or openai
+#   model_name: "qwen2.5:7b"     # Model identifier
+#   ollama_base_url: "http://localhost:11434"
+#   # api_key_env_var: ANTHROPIC_API_KEY  # For cloud providers
+#   confidence_threshold: 0.6    # Minimum confidence to accept result
+#   max_tokens: 200
+#   temperature: 0.0             # 0.0 = deterministic
+#   categories:
+#     - name: "Newsletters"
+#       description: "Periodic newsletter emails and digests"
+#       keywords: ["newsletter", "digest", "weekly"]
+#     - name: "Shopping"
+#       description: "Order confirmations, shipping, and receipts"
+#       keywords: ["order", "receipt", "shipping"]
+
 # Scheduler Settings (Phase 6 - Automated Processing)
 # ---------------------------------------------------
 scheduler:
