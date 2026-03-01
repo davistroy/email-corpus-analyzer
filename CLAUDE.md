@@ -168,10 +168,6 @@ The system supports multiple classification strategies, from zero-config rules t
 
 `EmailSanitizer` strips injection patterns (role prefixes, instruction tags, code fences) from email content before LLM classification. All email text is wrapped in `<email_content>` XML delimiters to create a clear boundary between email content and system instructions.
 
-### Ensemble Classification
-
-`EnsembleClassifier` tries classifiers in priority order with per-classifier confidence thresholds. The first classifier exceeding its threshold wins. If none exceed their threshold, the highest-confidence result is used as fallback. Per-classifier usage statistics are tracked for monitoring and cost optimization.
-
 ## Storage
 
 ### SQLite Database
@@ -202,7 +198,7 @@ Primary storage is SQLite at `~/.email-analyzer/email_analyzer.db` with WAL mode
 
 1. User corrects a classification (reclassifies email from category A to B)
 2. `EmailFeedbackStore` records the correction with timestamp in SQLite
-3. Temporal decay (exponential, ~70-day half-life) weights recent corrections higher
+3. Temporal decay (exponential, ~70-day half-life, hardcoded in `feedback_store.py`) weights recent corrections higher
 4. `UncertaintySampler` surfaces low-confidence and classifier-disagreement emails for review
 5. `AccuracyTracker` monitors per-category correction rates over a rolling window
 6. When correction rate exceeds threshold (default 20% in 7 days), `Retrainer` triggers retraining
@@ -253,7 +249,7 @@ classifier:
     - name: "Promotions"
       description: "Marketing emails, sales, and promotional offers"
 learning:
-  pattern_half_life_days: 90.0     # temporal decay for pattern detection
+  pattern_half_life_days: 90.0     # temporal decay for review decision patterns (separate from correction decay ~70d)
 scheduler:
   enabled: false
   interval_hours: 24
@@ -267,18 +263,6 @@ monitoring:
 ```
 
 Generate template: `python -m src.cli config init`
-
-## Constitutional Principles
-
-This project follows strict principles defined in `.specify/memory/constitution.md`:
-
-1. **TDD Mandatory** - Tests must be written before implementation (Red-Green-Refactor)
-2. **Documentation-First** - Specs before code. Design docs in `specs/001-use-the-document/`
-3. **Context7 Research** - All library usage must be researched via Context7 MCP before use
-4. **Privacy** - Email data stays local only, never transmitted externally (exception: LLM API calls for classification when using cloud providers)
-5. **Modular Components** - Each analyzer/classifier independently testable
-6. **Error Resilience** - Continue processing on individual failures, log with context
-7. **Progress Transparency** - Show progress for operations >10 seconds
 
 ## Key Design Decisions
 
