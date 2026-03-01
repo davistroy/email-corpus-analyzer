@@ -23,9 +23,14 @@ dependencies = [
     "google-auth>=2.22.0",
     "google-auth-oauthlib>=1.0.0",
     "google-api-python-client>=2.90.0",
+    "instructor>=1.0.0",
+    "openai>=1.0.0",
 ]
 
 [project.optional-dependencies]
+cloud = [
+    "anthropic>=0.30.0",
+]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",

@@ -12,6 +12,10 @@ pyyaml>=6.0.0                 # YAML configuration
 textual>=0.50.0               # TUI framework
 jinja2>=3.0.0                 # HTML templating
 
+# LLM Classification (Instructor + OpenAI transport)
+instructor>=1.0.0             # Structured LLM outputs
+openai>=1.0.0                 # LLM API transport layer
+
 # Testing & Development
 pytest>=7.4.0                 # Test framework
 pytest-cov>=4.1.0             # Coverage reporting

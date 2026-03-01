@@ -186,8 +186,8 @@ This is a small addition (~40 LOC) but is listed separately because exceptions s
 
 ### Work Items
 
-#### 2.1 Implement EmailSanitizer for Prompt Injection Defense
-**Status: PENDING**
+#### 2.1 Implement EmailSanitizer for Prompt Injection Defense ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** S1
 **Files Affected:**
 - `src/classifiers/sanitizer.py` (create)
@@ -197,17 +197,17 @@ This is a small addition (~40 LOC) but is listed separately because exceptions s
 Create `EmailSanitizer` that strips common injection patterns from email text before LLM input. Patterns to strip: `SYSTEM:`, `ASSISTANT:`, `USER:`, `[INST]`, `<<SYS>>`, `</s>`, and markdown code fence delimiters that could confuse the model. Wrap sanitized content in XML delimiters (`<email_content>...</email_content>`) to clearly separate email text from system instructions. Log when sanitization patterns fire.
 
 **Tasks:**
-1. [ ] Create `src/classifiers/sanitizer.py` with `EmailSanitizer` class
-2. [ ] Define `INJECTION_PATTERNS` as compiled regex list (case-insensitive)
-3. [ ] Implement `sanitize(text: str) -> SanitizedText` where `SanitizedText` tracks original length, sanitized length, and patterns matched
-4. [ ] Implement `wrap_for_prompt(subject: str, body: str) -> str` that sanitizes and wraps in XML delimiters
-5. [ ] Write comprehensive tests: known injection patterns, edge cases (legitimate use of "system:" in email), empty input, very long input
+1. [x] Create `src/classifiers/sanitizer.py` with `EmailSanitizer` class
+2. [x] Define `INJECTION_PATTERNS` as compiled regex list (case-insensitive)
+3. [x] Implement `sanitize(text: str) -> SanitizedText` where `SanitizedText` tracks original length, sanitized length, and patterns matched
+4. [x] Implement `wrap_for_prompt(subject: str, body: str) -> str` that sanitizes and wraps in XML delimiters
+5. [x] Write comprehensive tests: known injection patterns, edge cases (legitimate use of "system:" in email), empty input, very long input
 
 **Acceptance Criteria:**
-- [ ] All known injection patterns are stripped
-- [ ] Legitimate email content is preserved (e.g., "Our system: is down" keeps the content)
-- [ ] Sanitization is logged for monitoring
-- [ ] XML delimiters clearly separate content from instructions
+- [x] All known injection patterns are stripped
+- [x] Legitimate email content is preserved (e.g., "Our system: is down" keeps the content)
+- [x] Sanitization is logged for monitoring
+- [x] XML delimiters clearly separate content from instructions
 
 ---
 
@@ -271,8 +271,8 @@ Add a `classify` subcommand to the CLI that runs LLM classification directly on 
 
 ---
 
-#### 2.4 Add Dependencies to pyproject.toml
-**Status: PENDING**
+#### 2.4 Add Dependencies to pyproject.toml ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N1
 **Files Affected:**
 - `pyproject.toml` (modify)
@@ -282,16 +282,16 @@ Add a `classify` subcommand to the CLI that runs LLM classification directly on 
 Add `instructor>=1.0.0` and `openai>=1.0.0` (Instructor's transport layer) to core dependencies. These are required for LLM classification. The `anthropic` SDK is optional (only needed for Claude provider).
 
 **Tasks:**
-1. [ ] Add `instructor>=1.0.0` to `[project.dependencies]`
-2. [ ] Add `openai>=1.0.0` to `[project.dependencies]`
-3. [ ] Add `anthropic>=0.30.0` to `[project.optional-dependencies]` as `cloud` extra
-4. [ ] Update `requirements.txt` to match
-5. [ ] Verify `pip install -e .` succeeds with new dependencies
+1. [x] Add `instructor>=1.0.0` to `[project.dependencies]`
+2. [x] Add `openai>=1.0.0` to `[project.dependencies]`
+3. [x] Add `anthropic>=0.30.0` to `[project.optional-dependencies]` as `cloud` extra
+4. [x] Update `requirements.txt` to match
+5. [x] Verify `pip install -e .` succeeds with new dependencies
 
 **Acceptance Criteria:**
-- [ ] `pip install -e .` installs instructor and openai
-- [ ] `pip install -e ".[cloud]"` additionally installs anthropic
-- [ ] No dependency conflicts with existing packages
+- [x] `pip install -e .` installs instructor and openai
+- [x] `pip install -e ".[cloud]"` additionally installs anthropic
+- [x] No dependency conflicts with existing packages
 
 ---
 
