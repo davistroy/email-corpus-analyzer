@@ -2,15 +2,16 @@
 Email Corpus Extraction and Analysis System - CLI Entry Point.
 
 Commands:
-  extract   - Extract emails from M365/Hotmail
-  analyze   - Analyze email corpus for patterns
-  suggest   - Generate category suggestions
-  review    - Interactively review and approve categories
-  pipeline  - Run complete end-to-end workflow
-  config    - Manage configuration (init, show)
-  info      - Show corpus statistics
-  export    - Export categories to CSV or HTML format
-  rules     - Manage category rules (generate, test, show, edit)
+  extract    - Extract emails from M365/Hotmail
+  analyze    - Analyze email corpus for patterns
+  suggest    - Generate category suggestions
+  review     - Interactively review and approve categories
+  pipeline   - Run complete end-to-end workflow
+  config     - Manage configuration (init, show)
+  info       - Show corpus statistics
+  export     - Export categories to CSV or HTML format
+  rules      - Manage category rules (generate, test, show, edit)
+  categorize - Categorize emails using approved rules
 
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
@@ -23,6 +24,7 @@ from pathlib import Path
 
 from src import __version__
 from src.cli.commands.analyze import build_analyze_parser, cmd_analyze
+from src.cli.commands.categorize import build_categorize_parser, cmd_categorize
 from src.cli.commands.config import (
     build_config_parser,
     cmd_config,
@@ -72,6 +74,7 @@ __all__ = [
     "cmd_info",
     "cmd_export",
     "cmd_rules",
+    "cmd_categorize",
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
@@ -154,6 +157,7 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["export"] = build_export_parser(subparsers)
     SUBPARSERS["config"] = build_config_parser(subparsers)
     SUBPARSERS["rules"] = build_rules_parser(subparsers)
+    SUBPARSERS["categorize"] = build_categorize_parser(subparsers)
 
     return parser
 
@@ -202,6 +206,7 @@ def main() -> int:
         "info": cmd_info,
         "export": cmd_export,
         "rules": cmd_rules,
+        "categorize": cmd_categorize,
     }
 
     handler = command_handlers.get(args.command)

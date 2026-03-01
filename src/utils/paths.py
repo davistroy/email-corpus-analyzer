@@ -99,6 +99,11 @@ class PathConfig:
         return cls.get_output_dir() / "rules.json"
 
     @classmethod
+    def get_categorization_report_path(cls) -> Path:
+        """Get path for categorization report JSON file."""
+        return cls.get_output_dir() / "categorization_report.json"
+
+    @classmethod
     def get_error_log_path(cls) -> Path:
         """Get path for extraction errors log file."""
         return cls.get_output_dir() / "extraction_errors.log"

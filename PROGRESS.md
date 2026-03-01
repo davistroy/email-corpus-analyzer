@@ -115,3 +115,32 @@
 - Summary: Created CLI commands for rules generate, test, show, and edit. 32 new tests.
 
 **Phase 3 complete.** All 6 category rule refinement items delivered.
+
+## 2026-02-28 (Phase 4 — Email-by-Email Categorization)
+
+### Item 4.1: Categorization Data Model
+- Status: Complete
+- Files changed: src/models/categorization.py (created)
+- Summary: Created EmailCategorization and CategorizationReport Pydantic models. 47 new tests.
+
+### Item 4.2: Email Categorizer
+- Status: Complete
+- Files changed: src/categorizer/categorizer.py (created)
+- Summary: Created main categorization engine with batch processing, primary/secondary category assignment, and progress callbacks. 29 new tests.
+
+### Item 4.3: Conflict Resolver
+- Status: Complete
+- Files changed: src/categorizer/conflict_resolver.py (created)
+- Summary: Created conflict resolution using rule priority, condition specificity, and historical user decisions. 36 new tests.
+
+### Item 4.4: Coverage Reporter
+- Status: Complete
+- Files changed: src/categorizer/coverage_reporter.py (created)
+- Summary: Created coverage reporting with categorization statistics, uncategorized pattern analysis, and cluster comparison. 37 new tests.
+
+### Item 4.5: Categorize CLI
+- Status: Complete
+- Files changed: src/cli/commands/categorize.py (created), src/utils/paths.py
+- Summary: Created CLI commands for categorize, --report, --resolve, and --dry-run. 32 new tests.
+
+**Phase 4 complete.** All 5 email-by-email categorization items delivered.
