@@ -2,7 +2,10 @@
 Rename dialog for the TUI application.
 
 Modal text input dialog for renaming a category with validation.
+Error handling improved per Phase 2 Item 1.6.
 """
+
+import logging
 
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -10,6 +13,8 @@ from textual.containers import Container
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import Input, Static
+
+logger = logging.getLogger(__name__)
 
 # Maximum reasonable length for category names
 MAX_NAME_LENGTH = 100
@@ -33,7 +38,9 @@ class RenameDialog(ModalScreen[str | None]):
     CSS = """
     #rename-dialog {
         align: center middle;
-        width: 60;
+        width: 70%;
+        min-width: 50;
+        max-width: 80;
         height: auto;
         border: thick $primary;
         background: $surface;
@@ -95,7 +102,7 @@ class RenameDialog(ModalScreen[str | None]):
             input_widget = self.query_one("#rename-input", Input)
             input_widget.focus()
         except NoMatches:
-            pass  # Input widget may not be mounted yet
+            logger.debug("Rename input widget not mounted yet, cannot focus")
 
     def validate_name(self, name: str) -> bool:
         """
@@ -140,7 +147,7 @@ class RenameDialog(ModalScreen[str | None]):
             error_widget = self.query_one("#validation-error", Static)
             error_widget.update(error)
         except NoMatches:
-            pass  # Validation error widget may not be mounted yet
+            logger.debug("Validation error widget not mounted, cannot show: %s", error)
 
     def _clear_validation_error(self) -> None:
         """Clear the validation error message."""
@@ -148,7 +155,7 @@ class RenameDialog(ModalScreen[str | None]):
             error_widget = self.query_one("#validation-error", Static)
             error_widget.update("")
         except NoMatches:
-            pass  # Validation error widget may not be mounted yet
+            logger.debug("Validation error widget not mounted, cannot clear error")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""

@@ -5,17 +5,180 @@ A scrollable, navigable table displaying categories with their properties.
 Supports hierarchical categories with expand/collapse functionality (Task 4A.4).
 Phase 8 Track 8B.1: Added multi-select and bulk operations.
 Phase 8 Track 8B.2: Added search/filter functionality.
+Phase 2 Item 2.3: Added column sorting with F1-F4 keys.
 """
 
+from __future__ import annotations
+
 import re
+from dataclasses import dataclass
 
 from textual.reactive import reactive
 from textual.widgets import DataTable
+from textual.widgets.data_table import ColumnKey
 
 from src.models.category import Category, CategorySource
+from src.ui.tui.utils import MAX_NAME_DISPLAY, format_confidence_bar
 
 # Table column definitions
 TABLE_COLUMNS = ["#", "Name", "Confidence", "Emails", "Source"]
+
+# Fixed column widths (these don't change with terminal size)
+FIXED_COL_INDEX_WIDTH = 4
+FIXED_COL_CONFIDENCE_WIDTH = 18
+FIXED_COL_EMAILS_WIDTH = 8
+FIXED_COL_SOURCE_WIDTH = 10
+
+# Sum of fixed columns (excluding Name which is dynamic)
+_FIXED_WIDTH_TOTAL = (
+    FIXED_COL_INDEX_WIDTH
+    + FIXED_COL_CONFIDENCE_WIDTH
+    + FIXED_COL_EMAILS_WIDTH
+    + FIXED_COL_SOURCE_WIDTH
+)
+
+# Minimum name column width to keep text readable
+MIN_NAME_COLUMN_WIDTH = 15
+
+
+def calculate_name_column_width(terminal_width: int) -> int:
+    """
+    Calculate the name column width based on available terminal width.
+
+    The name column gets whatever space remains after fixed-width columns
+    (index, confidence, emails, source) and estimated borders/padding.
+    The result is clamped to a minimum of MIN_NAME_COLUMN_WIDTH.
+
+    Args:
+        terminal_width: Total terminal width in columns.
+
+    Returns:
+        Width in characters for the Name column.
+    """
+    # The category list pane gets ~60% of terminal width
+    # (3fr out of 5fr total), minus borders (~4 chars)
+    pane_width = int(terminal_width * 3 / 5) - 4
+    available = pane_width - _FIXED_WIDTH_TOTAL
+    return max(MIN_NAME_COLUMN_WIDTH, available)
+
+
+# ---------------------------------------------------------------------------
+# Sort key mapping: F-key -> column name (Phase 2 Item 2.3)
+# ---------------------------------------------------------------------------
+
+SORT_KEY_MAP: dict[str, str] = {
+    "f1": "name",
+    "f2": "confidence",
+    "f3": "source",
+    "f4": "emails",
+}
+
+# Default sort directions when switching TO a column for the first time.
+# Name/source are alphabetical (ascending), numeric columns are descending (highest first).
+_DEFAULT_ASCENDING: dict[str, bool] = {
+    "name": True,
+    "confidence": False,
+    "emails": False,
+    "source": True,
+}
+
+# Sort indicator characters
+_SORT_INDICATOR_ASC = "\u25b2"  # ▲
+_SORT_INDICATOR_DESC = "\u25bc"  # ▼
+
+
+@dataclass
+class SortState:
+    """
+    Tracks the current sort column and direction.
+
+    Default sort is confidence descending (highest confidence first),
+    matching the original behavior before sorting was added.
+    """
+
+    column: str = "confidence"
+    ascending: bool = False
+
+    @property
+    def indicator(self) -> str:
+        """Return the Unicode arrow indicator for the current direction."""
+        return _SORT_INDICATOR_ASC if self.ascending else _SORT_INDICATOR_DESC
+
+    def toggle(self, column: str) -> None:
+        """
+        Toggle sort for the given column.
+
+        If the column is already active, flip ascending/descending.
+        If switching to a new column, use the default direction for that column.
+
+        Args:
+            column: The column key to sort by.
+        """
+        if column == self.column:
+            self.ascending = not self.ascending
+        else:
+            self.column = column
+            self.ascending = _DEFAULT_ASCENDING.get(column, True)
+
+
+def sort_categories(categories: list[Category], state: SortState) -> list[Category]:
+    """
+    Return a new list of categories sorted according to the given SortState.
+
+    Does NOT mutate the original list.
+
+    Args:
+        categories: Categories to sort.
+        state: Current sort configuration.
+
+    Returns:
+        A new sorted list of Category objects.
+    """
+    if not categories:
+        return []
+
+    def _sort_key(cat: Category):
+        if state.column == "name":
+            return cat.category_name.lower()
+        if state.column == "confidence":
+            return cat.confidence
+        if state.column == "emails":
+            # None email_count sorts last regardless of direction
+            if cat.email_count is None:
+                return float("-inf") if state.ascending else float("-inf")
+            return cat.email_count
+        if state.column == "source":
+            return cat.source.value.lower()
+        # Fallback
+        return cat.category_name.lower()
+
+    # For email_count with None values, we need special handling:
+    # None always sorts to the end (last position) regardless of direction.
+    if state.column == "emails":
+        has_count = [c for c in categories if c.email_count is not None]
+        no_count = [c for c in categories if c.email_count is None]
+        sorted_with = sorted(has_count, key=_sort_key, reverse=not state.ascending)
+        return sorted_with + no_count
+
+    return sorted(categories, key=_sort_key, reverse=not state.ascending)
+
+
+def get_sort_header(display_name: str, column_key: str, state: SortState) -> str:
+    """
+    Return a column header string with sort indicator if this column is active.
+
+    Args:
+        display_name: The human-readable column label (e.g. "Name").
+        column_key: The internal sort key (e.g. "name").
+        state: Current sort state.
+
+    Returns:
+        The display name, optionally followed by an arrow indicator.
+    """
+    if state.column == column_key:
+        return f"{display_name} {state.indicator}"
+    return display_name
+
 
 # Hierarchy indicators
 EXPAND_INDICATOR = "+"
@@ -25,24 +188,6 @@ CHILD_INDICATOR = "|--"
 
 # Selection indicator
 SELECTED_INDICATOR = "*"
-
-
-def format_confidence_bar(confidence: float, width: int = 10) -> str:
-    """
-    Format confidence as a visual bar.
-
-    Args:
-        confidence: Confidence value between 0 and 1
-        width: Width of the bar in characters
-
-    Returns:
-        String representing the confidence bar
-    """
-    filled = int(confidence * width)
-    empty = width - filled
-    bar = "\u2588" * filled + "\u2591" * empty
-    percentage = f"{confidence * 100:.0f}%"
-    return f"{bar} {percentage}"
 
 
 def format_source(source: CategorySource) -> str:
@@ -148,6 +293,9 @@ class CategoryTable(DataTable):
         self._filter_query: str = ""
         self._filtered_categories: list[Category] | None = None
 
+        # Sort support (Phase 2 Item 2.3)
+        self.sort_state = SortState()
+
     def on_mount(self) -> None:
         """Set up the table when mounted."""
         if not self._table_initialized:
@@ -167,7 +315,7 @@ class CategoryTable(DataTable):
         self._populate_rows()
 
     def _populate_rows(self) -> None:
-        """Populate table with category data, respecting hierarchy and expansion."""
+        """Populate table with category data, respecting hierarchy, expansion, and selection."""
         self.clear()
         visible_categories = self.get_visible_categories()
 
@@ -178,12 +326,16 @@ class CategoryTable(DataTable):
                 has_children=category.has_children,
                 expanded=self.is_expanded(category.category_id),
             )
+
+            # Add selection indicator (Phase 2 Item 2.2)
+            selected_mark = SELECTED_INDICATOR if category.category_id in self.selected_ids else " "
+
             display_name = f"{indicator} {category.category_name}"
 
             confidence_bar = format_confidence_bar(category.confidence)
             self.add_row(
-                str(idx),
-                display_name[:28],  # Truncate long names
+                f"{selected_mark}{idx}",
+                display_name[:MAX_NAME_DISPLAY],  # Truncate long names
                 confidence_bar,
                 format_email_count(category.email_count),
                 format_source(category.source),
@@ -192,7 +344,7 @@ class CategoryTable(DataTable):
 
     def get_visible_categories(self) -> list[Category]:
         """
-        Get list of categories currently visible (respecting expanded state and filter).
+        Get list of categories currently visible (respecting sort, expanded state, and filter).
 
         Returns:
             List of Category objects that should be displayed
@@ -202,8 +354,11 @@ class CategoryTable(DataTable):
             self._filtered_categories if self._filtered_categories is not None else self.categories
         )
 
+        # Apply sort (Phase 2 Item 2.3)
+        sorted_categories = sort_categories(base_categories, self.sort_state)
+
         visible = []
-        for category in base_categories:
+        for category in sorted_categories:
             visible.append(category)
             # Add children if expanded
             if category.has_children and self.is_expanded(category.category_id):
@@ -289,29 +444,44 @@ class CategoryTable(DataTable):
         """
         Remove a category from the table.
 
+        Preserves sort order. Selection adjusts to stay within bounds.
+
         Args:
             category: Category to remove
         """
         if category in self.categories:
-            idx = self.categories.index(category)
+            # Remember current selection identity before removal
+            selected_cat = self.get_selected_category()
+            selected_id = selected_cat.category_id if selected_cat else None
+
             self.categories.remove(category)
 
-            # Adjust selection if needed
+            # Adjust selection: try to keep same category, else clamp
             visible = self.get_visible_categories()
-            if visible:
-                if self.selected_row >= len(visible):
-                    self.selected_row = len(visible) - 1
-                elif self.selected_row > idx:
-                    self.selected_row -= 1
-            else:
+            if not visible:
                 self.selected_row = 0
+            elif selected_id and selected_id != category.category_id:
+                # Find the same category in the new visible list
+                for i, cat in enumerate(visible):
+                    if cat.category_id == selected_id:
+                        self.selected_row = i
+                        break
+                else:
+                    self.selected_row = min(self.selected_row, len(visible) - 1)
+            else:
+                # Selected category was the one removed; clamp
+                self.selected_row = min(self.selected_row, len(visible) - 1)
 
             # Rebuild table
-            self._populate_rows()
+            if self._table_initialized:
+                self._populate_rows()
 
     def update_category(self, old_category: Category, new_category: Category) -> None:
         """
         Update a category in the table.
+
+        Re-applies current sort after update so the new values
+        appear in the correct position.
 
         Args:
             old_category: Category to replace
@@ -320,71 +490,79 @@ class CategoryTable(DataTable):
         if old_category in self.categories:
             idx = self.categories.index(old_category)
             self.categories[idx] = new_category
-            self._populate_rows()
+            # Re-populate; sort is applied automatically via get_visible_categories
+            if self._table_initialized:
+                self._populate_rows()
 
     def refresh_display(self) -> None:
         """Refresh the table display."""
         self._populate_rows()
 
+    # -------------------------------------------------------------------------
+    # Column Sorting (Phase 2 Item 2.3)
+    # -------------------------------------------------------------------------
+
+    def apply_sort(self, column: str) -> None:
+        """
+        Apply or toggle sort for the given column.
+
+        If the column is already the active sort column, toggles
+        ascending/descending. Otherwise, switches to the new column
+        with its default sort direction.
+
+        Preserves the currently selected category identity (not row index)
+        so the user's selection tracks across sort changes.
+
+        Args:
+            column: Column key to sort by (name, confidence, emails, source).
+        """
+        # Remember current selection
+        selected_cat = self.get_selected_category()
+        selected_id = selected_cat.category_id if selected_cat else None
+
+        # Toggle sort state
+        self.sort_state.toggle(column)
+
+        # Re-populate rows (get_visible_categories will apply the new sort)
+        if self._table_initialized:
+            self._populate_rows()
+
+        # Restore selection to the same category
+        if selected_id is not None:
+            visible = self.get_visible_categories()
+            for i, cat in enumerate(visible):
+                if cat.category_id == selected_id:
+                    self.selected_row = i
+                    break
+
+    def update_column_widths(self, terminal_width: int) -> None:
+        """
+        Recalculate column widths based on terminal width (Phase 2 Item 1.5).
+
+        Updates the Name column to use available space while keeping
+        fixed-width columns unchanged. Repopulates rows to apply
+        new truncation lengths.
+
+        Args:
+            terminal_width: Current terminal width in columns.
+        """
+        new_name_width = calculate_name_column_width(terminal_width)
+        # Update the column width in the DataTable if columns exist
+        if self._table_initialized and self.columns:
+            try:
+                name_col = self.columns.get(ColumnKey("name"))
+                if name_col is not None:
+                    name_col.width = new_name_width
+            except (KeyError, AttributeError):
+                pass  # Column may not exist yet
+        # Re-populate rows so name truncation uses the new width
+        if self._table_initialized:
+            self._populate_rows()
+
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Handle row highlight event."""
         if event.cursor_row is not None:
             self.selected_row = event.cursor_row
-
-    # -------------------------------------------------------------------------
-    # Hierarchical Actions (Task 4A.4)
-    # -------------------------------------------------------------------------
-
-    def promote_to_top_level(self, category: Category) -> None:
-        """
-        Promote a subcategory to top level.
-
-        Args:
-            category: Subcategory to promote
-        """
-        if category.level == 0:
-            return  # Already top level
-
-        # Find parent and remove from its subcategories
-        for parent in self.categories:
-            if category in parent.subcategories:
-                parent.subcategories.remove(category)
-                break
-
-        # Update category properties
-        category.level = 0
-        category.parent_category_id = None
-
-        # Add to main categories list
-        self.categories.append(category)
-        self._populate_rows()
-
-    def demote_to_subcategory(self, category: Category, new_parent: Category) -> None:
-        """
-        Demote a top-level category to subcategory of another.
-
-        Args:
-            category: Category to demote
-            new_parent: Category that will become the parent
-        """
-        if category.level != 0:
-            return  # Already a subcategory
-        if category == new_parent:
-            return  # Cannot demote to self
-        if new_parent not in self.categories:
-            return  # Parent must be top-level
-
-        # Remove from top-level
-        if category in self.categories:
-            self.categories.remove(category)
-
-        # Update category properties
-        category.level = 1
-        category.parent_category_id = new_parent.category_id
-
-        # Add to new parent's subcategories
-        new_parent.subcategories.append(category)
-        self._populate_rows()
 
     def expand_all(self) -> None:
         """Expand all hierarchical categories."""
@@ -537,8 +715,17 @@ class CategoryTable(DataTable):
                     break
 
         self._filtered_categories = filtered
+        self._clamp_selected_row()
         if self._table_initialized:
             self._populate_rows()
+
+    def _clamp_selected_row(self) -> None:
+        """Clamp selected_row to valid range for currently visible categories."""
+        visible = self.get_visible_categories()
+        if not visible:
+            self.selected_row = 0
+        elif self.selected_row >= len(visible):
+            self.selected_row = len(visible) - 1
 
     def _matches_filter(self, category: Category, query: str) -> bool:
         """
@@ -567,8 +754,10 @@ class CategoryTable(DataTable):
                 return category.confidence > threshold
             return category.confidence < threshold
 
-        # Default: fuzzy match on name (case insensitive)
-        return query_lower in category.category_name.lower()
+        # Default: fuzzy match on name or description (case insensitive)
+        return query_lower in category.category_name.lower() or (
+            bool(category.description) and query_lower in category.description.lower()
+        )
 
     def clear_filter(self) -> None:
         """Clear the current filter."""

@@ -629,19 +629,31 @@ class TestTuiFallbackBehavior:
         assert set(stats.keys()) == expected_keys
 
     def test_get_selected_category_out_of_bounds(self):
-        """Test get_selected_category returns None when index is out of bounds."""
+        """Test get_selected_category clamps out-of-bounds index to valid range.
+
+        With centralized state management (Phase 2 Item 1.4), invalid indexes
+        are clamped rather than producing None. This prevents invalid state.
+        """
         from src.ui.tui.app import ReviewApp
 
         app = ReviewApp(categories=[create_test_category()])
         app._selected_index = 999
 
-        assert app.get_selected_category() is None
+        # Index is clamped to 0 (last valid index), so we get the category
+        assert app.get_selected_category() is not None
+        assert app._selected_index == 0
 
     def test_get_selected_category_negative_index(self):
-        """Test get_selected_category returns None for negative index."""
+        """Test get_selected_category clamps negative index to 0.
+
+        With centralized state management (Phase 2 Item 1.4), negative indexes
+        are clamped to 0 rather than producing None. This prevents invalid state.
+        """
         from src.ui.tui.app import ReviewApp
 
         app = ReviewApp(categories=[create_test_category()])
         app._selected_index = -1
 
-        assert app.get_selected_category() is None
+        # Index is clamped to 0, so we get the category
+        assert app.get_selected_category() is not None
+        assert app._selected_index == 0

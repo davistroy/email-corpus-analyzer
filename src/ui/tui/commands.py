@@ -14,7 +14,6 @@ class Command:
     key: str
     description: str
     action: str
-    enabled: bool = True
 
 
 # Default commands for category review
@@ -37,38 +36,6 @@ def get_all_commands() -> list[Command]:
         List of Command objects
     """
     return DEFAULT_COMMANDS.copy()
-
-
-def get_command_by_key(key: str) -> Command | None:
-    """
-    Get a command by its key.
-
-    Args:
-        key: The keyboard key for the command
-
-    Returns:
-        Command object or None if not found
-    """
-    for cmd in DEFAULT_COMMANDS:
-        if cmd.key == key.lower():
-            return cmd
-    return None
-
-
-def get_command_by_action(action: str) -> Command | None:
-    """
-    Get a command by its action name.
-
-    Args:
-        action: The action name (e.g., "accept", "delete")
-
-    Returns:
-        Command object or None if not found
-    """
-    for cmd in DEFAULT_COMMANDS:
-        if cmd.action == action:
-            return cmd
-    return None
 
 
 def format_command_help() -> str:

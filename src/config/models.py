@@ -8,12 +8,23 @@ Provides Pydantic models for all CLI configuration options with:
 
 Per Task 1A.1 specification.
 Task 2.2: Added AnalyzerThresholds and GeneratorThresholds for externalizing magic numbers.
+Phase 6, Item 6.5: Added SchedulerConfig and MonitoringConfig for automation.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+
+# Valid task names for scheduler
+VALID_SCHEDULER_TASKS = ("extract", "analyze", "categorize", "move")
+
+# Valid alert channel names for monitoring
+VALID_ALERT_CHANNELS = ("desktop", "log", "email", "console")
+
+# Regex for HH:MM time format (00:00 - 23:59)
+TIME_FORMAT_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 class ExtractConfig(BaseModel):
@@ -333,6 +344,109 @@ class PipelineConfig(BaseModel):
     )
 
 
+class SchedulerConfig(BaseModel):
+    """
+    Configuration for automated scheduled processing.
+
+    Controls when and how the system runs automated extraction,
+    analysis, categorization, and email-moving tasks.
+    """
+
+    enabled: bool = Field(default=False, description="Enable scheduled automated processing")
+    interval_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Hours between scheduled runs (1-168, i.e. up to one week)",
+    )
+    run_at: str = Field(
+        default="02:00",
+        description="Time of day to run scheduled tasks (HH:MM, 24-hour format)",
+    )
+    tasks: list[str] = Field(
+        default=["extract", "analyze", "categorize", "move"],
+        min_length=1,
+        description="Ordered list of tasks to run: extract, analyze, categorize, move",
+    )
+    auto_categorize: bool = Field(
+        default=False,
+        description="Automatically apply rules to new emails without review",
+    )
+    notification_threshold: int = Field(
+        default=10,
+        ge=1,
+        le=10000,
+        description="Minimum new uncategorized emails before sending notification",
+    )
+
+    @field_validator("run_at")
+    @classmethod
+    def validate_run_at_format(cls, v: str) -> str:
+        """Validate run_at is in HH:MM 24-hour format."""
+        if not TIME_FORMAT_RE.match(v):
+            raise ValueError(f"run_at must be in HH:MM 24-hour format (00:00-23:59), got '{v}'")
+        return v
+
+    @field_validator("tasks")
+    @classmethod
+    def validate_task_names(cls, v: list[str]) -> list[str]:
+        """Validate all task names are recognized."""
+        for task in v:
+            if task not in VALID_SCHEDULER_TASKS:
+                raise ValueError(f"Invalid task '{task}'. Must be one of {VALID_SCHEDULER_TASKS}")
+        return v
+
+
+class MonitoringConfig(BaseModel):
+    """
+    Configuration for change detection and alerting.
+
+    Controls thresholds for detecting category drift, volume anomalies,
+    and new cluster emergence, plus alert delivery channels.
+    """
+
+    drift_threshold: float = Field(
+        default=0.15,
+        gt=0.0,
+        le=1.0,
+        description="Category match rate drop threshold to trigger drift alert (0.0-1.0)",
+    )
+    volume_anomaly_stddev: float = Field(
+        default=2.0,
+        gt=0.0,
+        le=10.0,
+        description="Standard deviations above mean volume to flag as anomaly",
+    )
+    alert_channels: list[str] = Field(
+        default=["log"],
+        min_length=1,
+        description="Alert delivery channels: desktop, log, email, console",
+    )
+    check_interval_hours: int = Field(
+        default=6,
+        ge=1,
+        le=168,
+        description="Hours between monitoring checks (1-168)",
+    )
+    new_cluster_threshold: int = Field(
+        default=10,
+        ge=1,
+        le=10000,
+        description="Minimum emails in a new cluster before suggesting a new category",
+    )
+
+    @field_validator("alert_channels")
+    @classmethod
+    def validate_alert_channel_names(cls, v: list[str]) -> list[str]:
+        """Validate all alert channel names are recognized."""
+        for channel in v:
+            if channel not in VALID_ALERT_CHANNELS:
+                raise ValueError(
+                    f"Invalid alert channel '{channel}'. Must be one of {VALID_ALERT_CHANNELS}"
+                )
+        return v
+
+
 class AppConfig(BaseModel):
     """Root application configuration containing all options."""
 
@@ -348,6 +462,10 @@ class AppConfig(BaseModel):
     review: ReviewConfig = Field(default_factory=ReviewConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     learning: LearningConfig = Field(default_factory=LearningConfig)
+
+    # Automation configurations (Phase 6)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
 
     @field_validator("output_dir", mode="before")
     @classmethod
@@ -435,6 +553,8 @@ def merge_configs(base: AppConfig, override: AppConfig) -> AppConfig:
         ("review", ReviewConfig),
         ("pipeline", PipelineConfig),
         ("learning", LearningConfig),
+        ("scheduler", SchedulerConfig),
+        ("monitoring", MonitoringConfig),
     ]:
         base_nested = getattr(base, config_name)
         override_nested = getattr(override, config_name)

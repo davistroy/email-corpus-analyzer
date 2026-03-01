@@ -1002,3 +1002,400 @@ class TestConfigMergePrecedence:
 
         assert result.user_email == "override@example.com"
         assert result.output_dir == Path("/base/output")
+
+
+class TestSchedulerConfig:
+    """Test cases for SchedulerConfig model (Phase 6, Item 6.5)."""
+
+    def test_scheduler_config_default_values(self):
+        """Test SchedulerConfig has correct default values."""
+        from src.config.models import SchedulerConfig
+
+        config = SchedulerConfig()
+
+        assert config.enabled is False
+        assert config.interval_hours == 24
+        assert config.run_at == "02:00"
+        assert config.tasks == ["extract", "analyze", "categorize", "move"]
+        assert config.auto_categorize is False
+        assert config.notification_threshold == 10
+
+    def test_scheduler_config_custom_values(self):
+        """Test SchedulerConfig accepts custom values."""
+        from src.config.models import SchedulerConfig
+
+        config = SchedulerConfig(
+            enabled=True,
+            interval_hours=12,
+            run_at="03:30",
+            tasks=["extract", "analyze"],
+            auto_categorize=True,
+            notification_threshold=5,
+        )
+
+        assert config.enabled is True
+        assert config.interval_hours == 12
+        assert config.run_at == "03:30"
+        assert config.tasks == ["extract", "analyze"]
+        assert config.auto_categorize is True
+        assert config.notification_threshold == 5
+
+    def test_scheduler_config_interval_hours_must_be_positive(self):
+        """Test interval_hours must be >= 1."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(interval_hours=0)
+
+    def test_scheduler_config_interval_hours_max_limit(self):
+        """Test interval_hours must be <= 168 (one week)."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        # Exactly 168 should work
+        config = SchedulerConfig(interval_hours=168)
+        assert config.interval_hours == 168
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(interval_hours=169)
+
+    def test_scheduler_config_run_at_valid_times(self):
+        """Test run_at accepts valid HH:MM time formats."""
+        from src.config.models import SchedulerConfig
+
+        valid_times = ["00:00", "02:00", "12:30", "23:59", "09:05"]
+        for time_str in valid_times:
+            config = SchedulerConfig(run_at=time_str)
+            assert config.run_at == time_str
+
+    def test_scheduler_config_run_at_invalid_format(self):
+        """Test run_at rejects invalid time formats."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        invalid_times = ["25:00", "12:60", "2:00", "abc", "12:0", "24:00", ""]
+        for time_str in invalid_times:
+            with pytest.raises(ValidationError):
+                SchedulerConfig(run_at=time_str)
+
+    def test_scheduler_config_tasks_valid_values(self):
+        """Test tasks accepts valid task names."""
+        from src.config.models import SchedulerConfig
+
+        config = SchedulerConfig(tasks=["extract"])
+        assert config.tasks == ["extract"]
+
+        config = SchedulerConfig(tasks=["extract", "analyze", "categorize", "move"])
+        assert len(config.tasks) == 4
+
+    def test_scheduler_config_tasks_invalid_values(self):
+        """Test tasks rejects invalid task names."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(tasks=["extract", "invalid_task"])
+
+    def test_scheduler_config_tasks_empty_list(self):
+        """Test tasks rejects empty list."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(tasks=[])
+
+    def test_scheduler_config_notification_threshold_min(self):
+        """Test notification_threshold must be >= 1."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(notification_threshold=0)
+
+    def test_scheduler_config_notification_threshold_max(self):
+        """Test notification_threshold must be <= 10000."""
+        from pydantic import ValidationError
+
+        from src.config.models import SchedulerConfig
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(notification_threshold=10001)
+
+    def test_scheduler_config_from_dict(self):
+        """Test SchedulerConfig can be created from dict (YAML support)."""
+        from src.config.models import SchedulerConfig
+
+        data = {
+            "enabled": True,
+            "interval_hours": 6,
+            "run_at": "04:00",
+            "tasks": ["extract", "analyze"],
+            "auto_categorize": True,
+            "notification_threshold": 20,
+        }
+        config = SchedulerConfig(**data)
+
+        assert config.enabled is True
+        assert config.interval_hours == 6
+        assert config.run_at == "04:00"
+        assert config.tasks == ["extract", "analyze"]
+
+
+class TestMonitoringConfig:
+    """Test cases for MonitoringConfig model (Phase 6, Item 6.5)."""
+
+    def test_monitoring_config_default_values(self):
+        """Test MonitoringConfig has correct default values."""
+        from src.config.models import MonitoringConfig
+
+        config = MonitoringConfig()
+
+        assert config.drift_threshold == 0.15
+        assert config.volume_anomaly_stddev == 2.0
+        assert config.alert_channels == ["log"]
+        assert config.check_interval_hours == 6
+        assert config.new_cluster_threshold == 10
+
+    def test_monitoring_config_custom_values(self):
+        """Test MonitoringConfig accepts custom values."""
+        from src.config.models import MonitoringConfig
+
+        config = MonitoringConfig(
+            drift_threshold=0.25,
+            volume_anomaly_stddev=3.0,
+            alert_channels=["desktop", "log", "email"],
+            check_interval_hours=12,
+            new_cluster_threshold=20,
+        )
+
+        assert config.drift_threshold == 0.25
+        assert config.volume_anomaly_stddev == 3.0
+        assert config.alert_channels == ["desktop", "log", "email"]
+        assert config.check_interval_hours == 12
+        assert config.new_cluster_threshold == 20
+
+    def test_monitoring_config_drift_threshold_range(self):
+        """Test drift_threshold must be between 0.0 and 1.0."""
+        from pydantic import ValidationError
+
+        from src.config.models import MonitoringConfig
+
+        # Valid boundary values
+        MonitoringConfig(drift_threshold=0.01)
+        MonitoringConfig(drift_threshold=1.0)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(drift_threshold=0.0)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(drift_threshold=1.1)
+
+    def test_monitoring_config_volume_anomaly_stddev_range(self):
+        """Test volume_anomaly_stddev must be > 0 and <= 10."""
+        from pydantic import ValidationError
+
+        from src.config.models import MonitoringConfig
+
+        MonitoringConfig(volume_anomaly_stddev=0.5)
+        MonitoringConfig(volume_anomaly_stddev=10.0)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(volume_anomaly_stddev=0.0)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(volume_anomaly_stddev=10.1)
+
+    def test_monitoring_config_alert_channels_valid(self):
+        """Test alert_channels accepts valid channel names."""
+        from src.config.models import MonitoringConfig
+
+        config = MonitoringConfig(alert_channels=["desktop"])
+        assert config.alert_channels == ["desktop"]
+
+        config = MonitoringConfig(alert_channels=["desktop", "log", "email"])
+        assert len(config.alert_channels) == 3
+
+    def test_monitoring_config_alert_channels_invalid(self):
+        """Test alert_channels rejects invalid channel names."""
+        from pydantic import ValidationError
+
+        from src.config.models import MonitoringConfig
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(alert_channels=["desktop", "sms"])
+
+    def test_monitoring_config_alert_channels_empty(self):
+        """Test alert_channels rejects empty list."""
+        from pydantic import ValidationError
+
+        from src.config.models import MonitoringConfig
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(alert_channels=[])
+
+    def test_monitoring_config_check_interval_hours_range(self):
+        """Test check_interval_hours must be >= 1 and <= 168."""
+        from pydantic import ValidationError
+
+        from src.config.models import MonitoringConfig
+
+        MonitoringConfig(check_interval_hours=1)
+        MonitoringConfig(check_interval_hours=168)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(check_interval_hours=0)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(check_interval_hours=169)
+
+    def test_monitoring_config_new_cluster_threshold_range(self):
+        """Test new_cluster_threshold must be >= 1 and <= 10000."""
+        from pydantic import ValidationError
+
+        from src.config.models import MonitoringConfig
+
+        MonitoringConfig(new_cluster_threshold=1)
+        MonitoringConfig(new_cluster_threshold=10000)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(new_cluster_threshold=0)
+
+        with pytest.raises(ValidationError):
+            MonitoringConfig(new_cluster_threshold=10001)
+
+    def test_monitoring_config_from_dict(self):
+        """Test MonitoringConfig can be created from dict (YAML support)."""
+        from src.config.models import MonitoringConfig
+
+        data = {
+            "drift_threshold": 0.20,
+            "volume_anomaly_stddev": 2.5,
+            "alert_channels": ["desktop", "email"],
+            "check_interval_hours": 8,
+            "new_cluster_threshold": 15,
+        }
+        config = MonitoringConfig(**data)
+
+        assert config.drift_threshold == 0.20
+        assert config.volume_anomaly_stddev == 2.5
+        assert config.alert_channels == ["desktop", "email"]
+
+
+class TestAppConfigWithSchedulerAndMonitoring:
+    """Test AppConfig integration with SchedulerConfig and MonitoringConfig."""
+
+    def test_app_config_has_scheduler_default(self):
+        """Test AppConfig includes SchedulerConfig with defaults."""
+        from src.config.models import AppConfig, SchedulerConfig
+
+        config = AppConfig()
+        assert isinstance(config.scheduler, SchedulerConfig)
+        assert config.scheduler.enabled is False
+        assert config.scheduler.interval_hours == 24
+
+    def test_app_config_has_monitoring_default(self):
+        """Test AppConfig includes MonitoringConfig with defaults."""
+        from src.config.models import AppConfig, MonitoringConfig
+
+        config = AppConfig()
+        assert isinstance(config.monitoring, MonitoringConfig)
+        assert config.monitoring.drift_threshold == 0.15
+        assert config.monitoring.check_interval_hours == 6
+
+    def test_app_config_with_custom_scheduler(self):
+        """Test AppConfig accepts custom scheduler config."""
+        from src.config.models import AppConfig, SchedulerConfig
+
+        scheduler = SchedulerConfig(enabled=True, interval_hours=12, run_at="03:00")
+        config = AppConfig(scheduler=scheduler)
+
+        assert config.scheduler.enabled is True
+        assert config.scheduler.interval_hours == 12
+        assert config.scheduler.run_at == "03:00"
+
+    def test_app_config_with_custom_monitoring(self):
+        """Test AppConfig accepts custom monitoring config."""
+        from src.config.models import AppConfig, MonitoringConfig
+
+        monitoring = MonitoringConfig(drift_threshold=0.25, check_interval_hours=12)
+        config = AppConfig(monitoring=monitoring)
+
+        assert config.monitoring.drift_threshold == 0.25
+        assert config.monitoring.check_interval_hours == 12
+
+    def test_app_config_from_dict_with_scheduler_and_monitoring(self):
+        """Test AppConfig can be created from dict with new sections."""
+        from src.config.models import AppConfig
+
+        data = {
+            "scheduler": {
+                "enabled": True,
+                "interval_hours": 8,
+                "run_at": "01:00",
+                "tasks": ["extract", "analyze"],
+            },
+            "monitoring": {
+                "drift_threshold": 0.20,
+                "alert_channels": ["desktop", "log"],
+            },
+        }
+        config = AppConfig(**data)
+
+        assert config.scheduler.enabled is True
+        assert config.scheduler.interval_hours == 8
+        assert config.monitoring.drift_threshold == 0.20
+        assert config.monitoring.alert_channels == ["desktop", "log"]
+
+    def test_app_config_serialization_with_new_sections(self):
+        """Test AppConfig serialization includes scheduler and monitoring."""
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        data = config.model_dump()
+
+        assert "scheduler" in data
+        assert "monitoring" in data
+        assert data["scheduler"]["enabled"] is False
+        assert data["monitoring"]["drift_threshold"] == 0.15
+
+    def test_merge_configs_with_scheduler(self):
+        """Test merge_configs handles scheduler section."""
+        from src.config.models import AppConfig, SchedulerConfig, merge_configs
+
+        base = AppConfig(scheduler=SchedulerConfig(enabled=False, interval_hours=24))
+        override = AppConfig(scheduler=SchedulerConfig(enabled=True, interval_hours=12))
+
+        result = merge_configs(base, override)
+
+        assert result.scheduler.enabled is True
+        assert result.scheduler.interval_hours == 12
+
+    def test_merge_configs_with_monitoring(self):
+        """Test merge_configs handles monitoring section."""
+        from src.config.models import AppConfig, MonitoringConfig, merge_configs
+
+        base = AppConfig(monitoring=MonitoringConfig(drift_threshold=0.15))
+        override = AppConfig(monitoring=MonitoringConfig(drift_threshold=0.25))
+
+        result = merge_configs(base, override)
+
+        assert result.monitoring.drift_threshold == 0.25
+
+    def test_merge_configs_scheduler_unset_preserves_base(self):
+        """Test merge preserves base scheduler when override doesn't set it."""
+        from src.config.models import AppConfig, SchedulerConfig, merge_configs
+
+        base = AppConfig(scheduler=SchedulerConfig(enabled=True, interval_hours=12))
+        override = AppConfig()  # No scheduler set
+
+        result = merge_configs(base, override)
+
+        assert result.scheduler.enabled is True
+        assert result.scheduler.interval_hours == 12

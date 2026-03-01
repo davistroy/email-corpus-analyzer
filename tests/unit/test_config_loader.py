@@ -483,3 +483,227 @@ class TestIntegration:
         result = load_yaml_file(comments_only)
 
         assert result == {}
+
+
+class TestGenerateTemplateSchedulerMonitoring:
+    """Test cases for generate_template with scheduler and monitoring sections."""
+
+    def test_generate_template_contains_scheduler_section(self):
+        """Test template contains scheduler configuration section."""
+        from src.config.loader import generate_template
+
+        template = generate_template()
+
+        assert "scheduler:" in template or "# scheduler:" in template
+        assert "enabled" in template
+        assert "interval_hours" in template
+        assert "run_at" in template
+        assert "tasks" in template
+
+    def test_generate_template_contains_monitoring_section(self):
+        """Test template contains monitoring configuration section."""
+        from src.config.loader import generate_template
+
+        template = generate_template()
+
+        assert "monitoring:" in template or "# monitoring:" in template
+        assert "drift_threshold" in template
+        assert "volume_anomaly_stddev" in template
+        assert "alert_channels" in template
+        assert "check_interval_hours" in template
+
+    def test_generate_template_scheduler_defaults(self):
+        """Test template contains scheduler default values."""
+        from src.config.loader import generate_template
+
+        template = generate_template()
+
+        assert "02:00" in template
+        assert "24" in template
+
+    def test_generate_template_monitoring_defaults(self):
+        """Test template contains monitoring default values."""
+        from src.config.loader import generate_template
+
+        template = generate_template()
+
+        assert "0.15" in template
+        assert "2.0" in template
+
+    def test_generate_template_with_new_sections_is_valid_yaml(self):
+        """Test generated template with new sections is still valid YAML."""
+        import yaml
+
+        from src.config.loader import generate_template
+
+        template = generate_template()
+        parsed = yaml.safe_load(template)
+
+        assert isinstance(parsed, dict)
+
+
+class TestShowResolvedConfigSchedulerMonitoring:
+    """Test show_resolved_config includes scheduler and monitoring."""
+
+    def test_show_resolved_config_includes_scheduler(self):
+        """Test output includes scheduler section."""
+        from src.config.loader import show_resolved_config
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        output = show_resolved_config(config)
+
+        assert "scheduler" in output
+        assert "enabled" in output
+
+    def test_show_resolved_config_includes_monitoring(self):
+        """Test output includes monitoring section."""
+        from src.config.loader import show_resolved_config
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        output = show_resolved_config(config)
+
+        assert "monitoring" in output
+        assert "drift_threshold" in output
+
+
+class TestLoadConfigSchedulerMonitoring:
+    """Test load_config with scheduler and monitoring YAML sections."""
+
+    def test_load_config_with_scheduler_section(self):
+        """Test load_config loads scheduler section from YAML."""
+        from src.config.loader import load_config
+
+        yaml_data = {
+            "scheduler": {
+                "enabled": True,
+                "interval_hours": 12,
+                "run_at": "03:00",
+                "tasks": ["extract", "analyze"],
+            }
+        }
+
+        with patch("src.config.loader.load_yaml_file", return_value=yaml_data):
+            config = load_config()
+
+        assert config.scheduler.enabled is True
+        assert config.scheduler.interval_hours == 12
+        assert config.scheduler.run_at == "03:00"
+        assert config.scheduler.tasks == ["extract", "analyze"]
+
+    def test_load_config_with_monitoring_section(self):
+        """Test load_config loads monitoring section from YAML."""
+        from src.config.loader import load_config
+
+        yaml_data = {
+            "monitoring": {
+                "drift_threshold": 0.25,
+                "volume_anomaly_stddev": 3.0,
+                "alert_channels": ["desktop", "email"],
+                "check_interval_hours": 12,
+            }
+        }
+
+        with patch("src.config.loader.load_yaml_file", return_value=yaml_data):
+            config = load_config()
+
+        assert config.monitoring.drift_threshold == 0.25
+        assert config.monitoring.volume_anomaly_stddev == 3.0
+        assert config.monitoring.alert_channels == ["desktop", "email"]
+        assert config.monitoring.check_interval_hours == 12
+
+    def test_load_config_invalid_scheduler_raises_error(self):
+        """Test load_config raises error for invalid scheduler config."""
+        from src.config.loader import ConfigLoadError, load_config
+
+        yaml_data = {
+            "scheduler": {
+                "interval_hours": -1,
+            }
+        }
+
+        with (
+            patch("src.config.loader.load_yaml_file", return_value=yaml_data),
+            pytest.raises(ConfigLoadError),
+        ):
+            load_config()
+
+    def test_load_config_invalid_monitoring_raises_error(self):
+        """Test load_config raises error for invalid monitoring config."""
+        from src.config.loader import ConfigLoadError, load_config
+
+        yaml_data = {
+            "monitoring": {
+                "drift_threshold": 5.0,
+            }
+        }
+
+        with (
+            patch("src.config.loader.load_yaml_file", return_value=yaml_data),
+            pytest.raises(ConfigLoadError),
+        ):
+            load_config()
+
+
+class TestValidateConfigSchedulerMonitoring:
+    """Test validate_config with scheduler and monitoring sections."""
+
+    def test_validate_config_scheduler_ok_when_default(self):
+        """Test validate_config reports ok for default scheduler."""
+        from src.cli.commands.config import validate_config
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        results = validate_config(config)
+
+        scheduler_results = [r for r in results if r["field"].startswith("scheduler")]
+        assert len(scheduler_results) >= 1
+        assert all(r["status"] == "ok" for r in scheduler_results)
+
+    def test_validate_config_monitoring_ok_when_default(self):
+        """Test validate_config reports ok for default monitoring."""
+        from src.cli.commands.config import validate_config
+        from src.config.models import AppConfig
+
+        config = AppConfig()
+        results = validate_config(config)
+
+        monitoring_results = [r for r in results if r["field"].startswith("monitoring")]
+        assert len(monitoring_results) >= 1
+        assert all(r["status"] == "ok" for r in monitoring_results)
+
+    def test_validate_config_scheduler_enabled_ok(self):
+        """Test validate_config reports ok for enabled scheduler with valid config."""
+        from src.cli.commands.config import validate_config
+        from src.config.models import AppConfig, SchedulerConfig
+
+        config = AppConfig(
+            scheduler=SchedulerConfig(
+                enabled=True,
+                interval_hours=12,
+                run_at="03:00",
+                tasks=["extract", "analyze"],
+            )
+        )
+        results = validate_config(config)
+
+        scheduler_results = [r for r in results if r["field"].startswith("scheduler")]
+        assert all(r["status"] in ("ok", "warning") for r in scheduler_results)
+
+    def test_validate_config_monitoring_custom_ok(self):
+        """Test validate_config reports ok for custom monitoring config."""
+        from src.cli.commands.config import validate_config
+        from src.config.models import AppConfig, MonitoringConfig
+
+        config = AppConfig(
+            monitoring=MonitoringConfig(
+                drift_threshold=0.25,
+                volume_anomaly_stddev=3.0,
+                alert_channels=["desktop", "log"],
+            )
+        )
+        results = validate_config(config)
+
+        monitoring_results = [r for r in results if r["field"].startswith("monitoring")]
+        assert all(r["status"] in ("ok", "warning") for r in monitoring_results)

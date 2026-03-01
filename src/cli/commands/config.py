@@ -252,6 +252,54 @@ def validate_config(config) -> list[dict]:
             }
         )
 
+    # Validate scheduler settings
+    if config.scheduler.enabled:
+        results.append(
+            {
+                "field": "scheduler.enabled",
+                "status": "ok",
+                "message": (
+                    f"Scheduler enabled: every {config.scheduler.interval_hours}h "
+                    f"at {config.scheduler.run_at}, "
+                    f"tasks: {', '.join(config.scheduler.tasks)}"
+                ),
+            }
+        )
+    else:
+        results.append(
+            {
+                "field": "scheduler.enabled",
+                "status": "ok",
+                "message": "Scheduler disabled (default)",
+            }
+        )
+
+    # Validate monitoring settings
+    results.append(
+        {
+            "field": "monitoring.drift_threshold",
+            "status": "ok",
+            "message": f"Drift threshold: {config.monitoring.drift_threshold}",
+        }
+    )
+    results.append(
+        {
+            "field": "monitoring.volume_anomaly_stddev",
+            "status": "ok",
+            "message": (
+                f"Volume anomaly threshold: {config.monitoring.volume_anomaly_stddev} "
+                f"standard deviations"
+            ),
+        }
+    )
+    results.append(
+        {
+            "field": "monitoring.alert_channels",
+            "status": "ok",
+            "message": f"Alert channels: {', '.join(config.monitoring.alert_channels)}",
+        }
+    )
+
     return results
 
 

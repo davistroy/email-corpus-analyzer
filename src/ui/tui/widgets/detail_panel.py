@@ -9,7 +9,12 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from src.models.category import Category
-from src.ui.tui.theme import get_confidence_level
+from src.ui.tui.utils import (
+    MAX_FEATURE_DISPLAY,
+    MAX_SUBJECT_DISPLAY,
+    format_confidence_bar,
+    get_confidence_level,
+)
 from src.ui.tui.widgets.category_table import format_source
 
 # Component explanations for confidence breakdown
@@ -34,36 +39,6 @@ def get_component_explanation(component: str) -> str:
         Explanation string
     """
     return COMPONENT_EXPLANATIONS.get(component, "Score component")
-
-
-def format_confidence_bar(score: float, width: int = 10) -> str:
-    """
-    Format a confidence score as a visual bar.
-
-    Args:
-        score: Score value 0.0-1.0
-        width: Width of the bar in characters
-
-    Returns:
-        Visual bar string with markup
-    """
-    score = max(0.0, min(1.0, score))  # Clamp to [0, 1]
-    filled = int(score * width)
-    empty = width - filled
-
-    # Use block characters for the bar
-    filled_char = "█"
-    empty_char = "░"
-
-    # Color based on score level
-    if score >= 0.7:
-        color = "green"
-    elif score >= 0.4:
-        color = "yellow"
-    else:
-        color = "red"
-
-    return f"[{color}]{filled_char * filled}[/{color}]{empty_char * empty}"
 
 
 class DetailPanel(Static):
@@ -169,11 +144,10 @@ class DetailPanel(Static):
         if cat.confidence_breakdown:
             lines.append("[dim]Confidence Breakdown:[/dim]")
             for component, score in cat.confidence_breakdown.items():
-                bar = format_confidence_bar(score, width=8)
-                score_pct = int(score * 100)
+                bar = format_confidence_bar(score, width=8, colored=True)
                 # Capitalize component name for display
                 display_name = component.replace("_", " ").title()
-                lines.append(f"  {display_name:14} {bar} {score_pct}%")
+                lines.append(f"  {display_name:14} {bar}")
             lines.append("")
 
         # Email count
@@ -195,12 +169,16 @@ class DetailPanel(Static):
                 if email_id in self.email_lookup:
                     email = self.email_lookup[email_id]
                     lines.append(f"  From: {email.sender_email}")
-                    lines.append(f"  Subject: {email.subject[:50]}...")
+                    lines.append(f"  Subject: {email.subject[:MAX_SUBJECT_DISPLAY]}...")
                     lines.append("")
         elif cat.distinguishing_features:
             lines.append("[dim]Distinguishing Features:[/dim]")
             for feature in cat.distinguishing_features[:5]:
-                truncated = feature[:70] + "..." if len(feature) > 70 else feature
+                truncated = (
+                    feature[:MAX_FEATURE_DISPLAY] + "..."
+                    if len(feature) > MAX_FEATURE_DISPLAY
+                    else feature
+                )
                 lines.append(f"  - {truncated}")
             lines.append("")
 

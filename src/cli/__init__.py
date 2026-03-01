@@ -2,14 +2,19 @@
 Email Corpus Extraction and Analysis System - CLI Entry Point.
 
 Commands:
-  extract   - Extract emails from M365/Hotmail
-  analyze   - Analyze email corpus for patterns
-  suggest   - Generate category suggestions
-  review    - Interactively review and approve categories
-  pipeline  - Run complete end-to-end workflow
-  config    - Manage configuration (init, show)
-  info      - Show corpus statistics
-  export    - Export categories to CSV or HTML format
+  extract    - Extract emails from M365/Hotmail
+  analyze    - Analyze email corpus for patterns
+  suggest    - Generate category suggestions
+  review     - Interactively review and approve categories
+  pipeline   - Run complete end-to-end workflow
+  config     - Manage configuration (init, show)
+  info       - Show corpus statistics
+  export     - Export categories to CSV or HTML format
+  rules      - Manage category rules (generate, test, show, edit)
+  categorize - Categorize emails using approved rules
+  apply      - Apply results to live mailbox (folders, move, rules, rollback)
+  scheduler  - Manage scheduled automated processing (setup, run, status, disable)
+  notifications - View, clear, or test notification alerts
 
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
@@ -22,6 +27,8 @@ from pathlib import Path
 
 from src import __version__
 from src.cli.commands.analyze import build_analyze_parser, cmd_analyze
+from src.cli.commands.apply import build_apply_parser, cmd_apply
+from src.cli.commands.categorize import build_categorize_parser, cmd_categorize
 from src.cli.commands.config import (
     build_config_parser,
     cmd_config,
@@ -33,8 +40,11 @@ from src.cli.commands.config import (
 from src.cli.commands.export import build_export_parser, cmd_export
 from src.cli.commands.extract import build_extract_parser, cmd_extract
 from src.cli.commands.info import build_info_parser, cmd_info
+from src.cli.commands.notifications import build_notifications_parser, cmd_notifications
 from src.cli.commands.pipeline import build_pipeline_parser, cmd_pipeline
 from src.cli.commands.review import auto_approve_categories, build_review_parser, cmd_review
+from src.cli.commands.rules import build_rules_parser, cmd_rules
+from src.cli.commands.scheduler import build_scheduler_parser, cmd_scheduler
 from src.cli.commands.suggest import build_suggest_parser, cmd_suggest
 from src.cli.formatters import output_json
 from src.cli.parsers import (
@@ -69,6 +79,11 @@ __all__ = [
     "cmd_config_validate",
     "cmd_info",
     "cmd_export",
+    "cmd_rules",
+    "cmd_categorize",
+    "cmd_apply",
+    "cmd_scheduler",
+    "cmd_notifications",
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
@@ -150,6 +165,11 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["info"] = build_info_parser(subparsers)
     SUBPARSERS["export"] = build_export_parser(subparsers)
     SUBPARSERS["config"] = build_config_parser(subparsers)
+    SUBPARSERS["rules"] = build_rules_parser(subparsers)
+    SUBPARSERS["categorize"] = build_categorize_parser(subparsers)
+    SUBPARSERS["apply"] = build_apply_parser(subparsers)
+    SUBPARSERS["scheduler"] = build_scheduler_parser(subparsers)
+    SUBPARSERS["notifications"] = build_notifications_parser(subparsers)
 
     return parser
 
@@ -197,6 +217,11 @@ def main() -> int:
         "config": cmd_config,
         "info": cmd_info,
         "export": cmd_export,
+        "rules": cmd_rules,
+        "categorize": cmd_categorize,
+        "apply": cmd_apply,
+        "scheduler": cmd_scheduler,
+        "notifications": cmd_notifications,
     }
 
     handler = command_handlers.get(args.command)
