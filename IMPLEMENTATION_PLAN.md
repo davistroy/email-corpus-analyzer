@@ -102,8 +102,8 @@ Add `ClassifierConfig` to the config model hierarchy. This includes: `provider` 
 
 ---
 
-#### 1.3 Refactor EmailCategorizer for Hybrid Classification
-**Status: PENDING**
+#### 1.3 Refactor EmailCategorizer for Hybrid Classification ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** A1
 **Files Affected:**
 - `src/categorizer/categorizer.py` (modify)
@@ -113,18 +113,18 @@ Add `ClassifierConfig` to the config model hierarchy. This includes: `provider` 
 Modify `EmailCategorizer` to accept an optional `BaseClassifier` instance. When rules return no match (the `if not matched_rules` branch at line 91), invoke the classifier as fallback. When rules match but with low confidence (below a configurable threshold), optionally invoke the classifier for comparison. Track whether the final classification came from rules or the classifier in `CategoryAssignment.source`.
 
 **Tasks:**
-1. [ ] Add `classifier: BaseClassifier | None = None` parameter to `EmailCategorizer.__init__()`
-2. [ ] Add `classifier_threshold: float = 0.6` parameter for minimum classifier confidence
-3. [ ] In `categorize_email()`, after the `if not matched_rules` check: if classifier is available, call `classifier.classify()` and convert result to `EmailCategorization`
-4. [ ] Add source tracking: `source="rule:<rule_id>"` for rule matches, `source="llm:<provider>"` for classifier matches
-5. [ ] Update `categorize_corpus()` to pass classifier context through
-6. [ ] Update existing tests; add tests for: no rules + classifier fallback, rules match + classifier skipped, no rules + no classifier = uncategorized
+1. [x] Add `classifier: BaseClassifier | None = None` parameter to `EmailCategorizer.__init__()`
+2. [x] Add `classifier_threshold: float = 0.6` parameter for minimum classifier confidence
+3. [x] In `categorize_email()`, after the `if not matched_rules` check: if classifier is available, call `classifier.classify()` and convert result to `EmailCategorization`
+4. [x] Add source tracking: `source="rule:<rule_id>"` for rule matches, `source="classifier:<name>"` for classifier matches
+5. [x] Update `categorize_corpus()` to pass classifier context through
+6. [x] Update existing tests; add tests for: no rules + classifier fallback, rules match + classifier skipped, no rules + no classifier = uncategorized
 
 **Acceptance Criteria:**
-- [ ] Existing behavior unchanged when no classifier is provided (all 3,463 tests pass)
-- [ ] Classifier is only invoked when rules return no match
-- [ ] Source field correctly identifies rule vs classifier origin
-- [ ] New tests cover all three code paths
+- [x] Existing behavior unchanged when no classifier is provided (all 3,584 tests pass)
+- [x] Classifier is only invoked when rules return no match
+- [x] Source field correctly identifies rule vs classifier origin
+- [x] New tests cover all three code paths
 
 ---
 
