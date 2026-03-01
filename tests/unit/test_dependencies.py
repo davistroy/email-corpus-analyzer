@@ -1,7 +1,10 @@
-"""Tests for Phase 2 dependency additions to pyproject.toml.
+"""Tests for dependency declarations in pyproject.toml.
 
 Work Item 2.4: Verify that instructor, openai, and anthropic (optional)
 dependencies are properly declared and installable.
+
+Work Item 4.4: Verify that sqlite-vec dependency is properly declared,
+version-pinned, and importable for vector similarity search.
 """
 
 import importlib
@@ -85,6 +88,43 @@ class TestRequirementsTxt:
         requirements_path = project_root / "requirements.txt"
         content = requirements_path.read_text()
         assert "openai>=1.0.0" in content, "openai>=1.0.0 missing from requirements.txt"
+
+
+class TestSqliteVecDependency:
+    """Verify sqlite-vec dependency is declared and installable (Work Item 4.4)."""
+
+    def test_sqlite_vec_in_dependencies(self, pyproject_data):
+        """sqlite-vec>=0.1.0 must be in [project.dependencies]."""
+        deps = pyproject_data["project"]["dependencies"]
+        sqlite_vec_deps = [d for d in deps if d.startswith("sqlite-vec")]
+        assert len(sqlite_vec_deps) == 1, "sqlite-vec should appear exactly once in dependencies"
+        assert ">=0.1.0" in sqlite_vec_deps[0], "sqlite-vec version should be >=0.1.0"
+
+    def test_sqlite_vec_importable(self):
+        """sqlite_vec package must be importable after install."""
+        mod = importlib.import_module("sqlite_vec")
+        assert mod is not None
+
+    def test_sqlite_vec_loadable_in_sqlite(self):
+        """sqlite-vec extension must load into an in-memory SQLite connection."""
+        import sqlite3
+
+        import sqlite_vec
+
+        db = sqlite3.connect(":memory:")
+        db.enable_load_extension(True)
+        sqlite_vec.load(db)
+        # Verify vec_version() function is available
+        version = db.execute("SELECT vec_version()").fetchone()[0]
+        assert version, "vec_version() should return a non-empty version string"
+        db.close()
+
+    def test_sqlite_vec_in_requirements_txt(self):
+        """sqlite-vec must appear in requirements.txt."""
+        project_root = pathlib.Path(__file__).parent.parent.parent
+        requirements_path = project_root / "requirements.txt"
+        content = requirements_path.read_text()
+        assert "sqlite-vec>=0.1.0" in content, "sqlite-vec>=0.1.0 missing from requirements.txt"
 
 
 class TestNoDependencyConflicts:

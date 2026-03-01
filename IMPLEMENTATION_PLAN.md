@@ -478,7 +478,7 @@ Build a one-time migration tool that imports existing JSON data into SQLite. Imp
 ### Work Items
 
 #### 4.1 Migrate ActionLogger and DecisionLogger to SQLite
-**Status: PENDING**
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N2
 **Files Affected:**
 - `src/actions/action_logger.py` (modify)
@@ -490,23 +490,23 @@ Build a one-time migration tool that imports existing JSON data into SQLite. Imp
 Refactor `ActionLogger` and `DecisionLogger` to write to SQLite tables instead of JSONL files. Both classes keep their existing public API — the change is internal storage only. The `ActionLogger` uses the `action_log` table; `DecisionLogger` uses the `decision_log` table. Both accept an optional `Database` instance; if not provided, they fall back to JSONL (backward compatibility during transition).
 
 **Tasks:**
-1. [ ] Add `database: Database | None = None` parameter to `ActionLogger.__init__()`
-2. [ ] When database is provided, write to `action_log` table instead of JSONL
-3. [ ] Update `get_actions()` to query SQLite when database is available
-4. [ ] Apply same pattern to `DecisionLogger`: database parameter, SQLite writes, query from table
-5. [ ] Keep JSONL fallback when database is None (backward compat)
-6. [ ] Update tests to verify both SQLite and JSONL code paths
+1. [x] Add `database: Database | None = None` parameter to `ActionLogger.__init__()`
+2. [x] When database is provided, write to `action_log` table instead of JSONL
+3. [x] Update `get_actions()` to query SQLite when database is available
+4. [x] Apply same pattern to `DecisionLogger`: database parameter, SQLite writes, query from table
+5. [x] Keep JSONL fallback when database is None (backward compat)
+6. [x] Update tests to verify both SQLite and JSONL code paths
 
 **Acceptance Criteria:**
-- [ ] Existing JSONL behavior unchanged when no database provided
-- [ ] SQLite writes are atomic (single transaction per log entry)
-- [ ] All existing logger tests pass without modification
-- [ ] New tests verify SQLite storage and retrieval
+- [x] Existing JSONL behavior unchanged when no database provided
+- [x] SQLite writes are atomic (single transaction per log entry)
+- [x] All existing logger tests pass without modification
+- [x] New tests verify SQLite storage and retrieval
 
 ---
 
-#### 4.2 Replace Embedding Cache with sqlite-vec
-**Status: PENDING**
+#### 4.2 Replace Embedding Cache with sqlite-vec ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N2
 **Files Affected:**
 - `src/storage/embedding_store.py` (create)
@@ -518,21 +518,21 @@ Refactor `ActionLogger` and `DecisionLogger` to write to SQLite tables instead o
 Create `EmbeddingStore` that uses sqlite-vec for vector storage and cosine similarity search. The store provides: `add(email_id, embedding)`, `get(email_id)`, `search_similar(embedding, k=5)`, and `delete(email_id)`. Modify `EmbeddingCache` to delegate to `EmbeddingStore` when a database is provided, falling back to .npz for backward compatibility.
 
 **Tasks:**
-1. [ ] Create `src/storage/embedding_store.py` with `EmbeddingStore(database: Database)` class
-2. [ ] Create sqlite-vec virtual table: `CREATE VIRTUAL TABLE embeddings USING vec0(email_id TEXT PRIMARY KEY, embedding FLOAT[1024])`
-3. [ ] Implement `add(email_id: str, embedding: np.ndarray)` and `add_batch()`
-4. [ ] Implement `get(email_id: str) -> np.ndarray | None`
-5. [ ] Implement `search_similar(query_embedding: np.ndarray, k: int = 5) -> list[tuple[str, float]]` returning (email_id, cosine_similarity) pairs
-6. [ ] Implement `delete(email_id: str)` and `sync_with_ids(valid_ids: set[str])`
-7. [ ] Modify `EmbeddingCache.__init__()` to accept optional `database` parameter
-8. [ ] When database is provided, delegate all operations to `EmbeddingStore`
-9. [ ] Write tests for vector storage, similarity search accuracy, and cache delegation
+1. [x] Create `src/storage/embedding_store.py` with `EmbeddingStore(database: Database)` class
+2. [x] Create sqlite-vec virtual table: `CREATE VIRTUAL TABLE embeddings USING vec0(email_id TEXT PRIMARY KEY, embedding FLOAT[1024])`
+3. [x] Implement `add(email_id: str, embedding: np.ndarray)` and `add_batch()`
+4. [x] Implement `get(email_id: str) -> np.ndarray | None`
+5. [x] Implement `search_similar(query_embedding: np.ndarray, k: int = 5) -> list[tuple[str, float]]` returning (email_id, cosine_similarity) pairs
+6. [x] Implement `delete(email_id: str)` and `sync_with_ids(valid_ids: set[str])`
+7. [x] Modify `EmbeddingCache.__init__()` to accept optional `database` parameter
+8. [x] When database is provided, delegate all operations to `EmbeddingStore`
+9. [x] Write tests for vector storage, similarity search accuracy, and cache delegation
 
 **Acceptance Criteria:**
-- [ ] Embeddings stored in sqlite-vec virtual table
-- [ ] `search_similar()` returns correct nearest neighbors by cosine similarity
-- [ ] `EmbeddingCache` works unchanged when no database provided (all existing tests pass)
-- [ ] Batch operations are efficient (single transaction)
+- [x] Embeddings stored in sqlite-vec virtual table
+- [x] `search_similar()` returns correct nearest neighbors by cosine similarity
+- [x] `EmbeddingCache` works unchanged when no database provided (all existing tests pass)
+- [x] Batch operations are efficient (single transaction)
 
 **Notes:**
 Add `sqlite-vec>=0.1.0` to `pyproject.toml` dependencies. sqlite-vec has zero C dependencies and installs via pip on all platforms.
@@ -566,7 +566,7 @@ Update the service layer to use SQLite storage when a database is available. `Ex
 ---
 
 #### 4.4 Add sqlite-vec Dependency
-**Status: PENDING**
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N2
 **Files Affected:**
 - `pyproject.toml` (modify)

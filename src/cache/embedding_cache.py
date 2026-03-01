@@ -6,6 +6,10 @@ numpy compressed format (.npz) for fast incremental analysis.
 
 Work Item 3.1: Added cache versioning with metadata sidecar (.meta.json)
 to detect model/config changes and auto-invalidate stale caches.
+
+Work Item 4.2: Added optional sqlite-vec delegation via EmbeddingStore.
+When a Database instance is provided, all operations delegate to
+EmbeddingStore for persistent vector storage with cosine similarity search.
 """
 
 import json
@@ -20,6 +24,7 @@ from src.utils.logger import get_logger
 
 if TYPE_CHECKING:
     from src.models.corpus import Corpus
+    from src.storage.database import Database
 
 logger = get_logger(__name__)
 
@@ -66,6 +71,7 @@ class EmbeddingCache:
         model_name: str = DEFAULT_MODEL_NAME,
         embedding_dim: int = DEFAULT_EMBEDDING_DIM,
         max_text_length: int = DEFAULT_MAX_TEXT_LENGTH,
+        database: "Database | None" = None,
     ):
         """
         Initialize embedding cache.
@@ -75,6 +81,8 @@ class EmbeddingCache:
             model_name: Name of the embedding model (used for cache versioning).
             embedding_dim: Dimensionality of embeddings (used for cache versioning).
             max_text_length: Max text length used for embedding generation (used for cache versioning).
+            database: Optional Database instance. When provided, embeddings are stored
+                in sqlite-vec via EmbeddingStore instead of .npz files.
         """
         if cache_path is None:
             from src.utils.paths import PathConfig
@@ -88,21 +96,34 @@ class EmbeddingCache:
         self._embedding_dim = embedding_dim
         self._max_text_length = max_text_length
 
-        # Internal storage
-        self._embeddings: np.ndarray | None = None
-        self._email_ids: list[str] = []
-        self._id_to_index: dict[str, int] = {}
-
         # Statistics tracking
         self._hits = 0
         self._misses = 0
 
-        # Load existing cache if available (with metadata validation)
-        self._load()
+        # sqlite-vec delegation (Work Item 4.2)
+        self._store = None
+        if database is not None:
+            from src.storage.embedding_store import EmbeddingStore
+
+            self._store = EmbeddingStore(database, embedding_dim=embedding_dim)
+            logger.info("EmbeddingCache using sqlite-vec backend")
+            # NPZ internal state not needed when delegating
+            self._embeddings: np.ndarray | None = None
+            self._email_ids: list[str] = []
+            self._id_to_index: dict[str, int] = {}
+        else:
+            # Internal NPZ storage
+            self._embeddings = None
+            self._email_ids = []
+            self._id_to_index = {}
+            # Load existing cache if available (with metadata validation)
+            self._load()
 
     @property
     def size(self) -> int:
         """Number of cached embeddings."""
+        if self._store is not None:
+            return self._store.count()
         return len(self._email_ids)
 
     def add(self, email_ids: list[str], embeddings: np.ndarray) -> None:
@@ -121,6 +142,11 @@ class EmbeddingCache:
                 f"Number of email IDs ({len(email_ids)}) must match "
                 f"number of embeddings ({embeddings.shape[0]})"
             )
+
+        if self._store is not None:
+            self._store.add_batch(email_ids, embeddings)
+            logger.debug(f"Added {len(email_ids)} embeddings to store (total: {self.size})")
+            return
 
         if self._embeddings is None:
             # First addition - initialize storage
@@ -146,6 +172,14 @@ class EmbeddingCache:
         Returns:
             Embedding vector or None if not found
         """
+        if self._store is not None:
+            result = self._store.get(email_id)
+            if result is not None:
+                self._hits += 1
+            else:
+                self._misses += 1
+            return result
+
         if email_id in self._id_to_index and self._embeddings is not None:
             self._hits += 1
             idx = self._id_to_index[email_id]
@@ -163,6 +197,12 @@ class EmbeddingCache:
         Returns:
             Tuple of (embeddings array, list of missing IDs)
         """
+        if self._store is not None:
+            result_embs, missing = self._store.get_batch(email_ids)
+            self._hits += len(email_ids) - len(missing)
+            self._misses += len(missing)
+            return result_embs, missing
+
         found_embeddings = []
         missing_ids = []
 
@@ -184,6 +224,8 @@ class EmbeddingCache:
 
     def contains(self, email_id: str) -> bool:
         """Check if email ID is in cache."""
+        if self._store is not None:
+            return self._store.contains(email_id)
         return email_id in self._id_to_index
 
     def invalidate(self, email_id: str) -> None:
@@ -193,6 +235,11 @@ class EmbeddingCache:
         Args:
             email_id: Email ID to remove
         """
+        if self._store is not None:
+            self._store.delete(email_id)
+            logger.debug(f"Invalidated embedding for {email_id}")
+            return
+
         if email_id not in self._id_to_index:
             return
 
@@ -215,6 +262,12 @@ class EmbeddingCache:
         Args:
             email_ids: List of email IDs to remove
         """
+        if self._store is not None:
+            for email_id in email_ids:
+                self._store.delete(email_id)
+            logger.debug(f"Invalidated {len(email_ids)} embeddings")
+            return
+
         # Get indices to remove (must be sorted in reverse to remove from end first)
         indices_to_remove = []
         for email_id in email_ids:
@@ -237,6 +290,13 @@ class EmbeddingCache:
 
     def clear(self) -> None:
         """Clear all cached embeddings."""
+        if self._store is not None:
+            self._store.clear()
+            self._hits = 0
+            self._misses = 0
+            logger.debug("Cleared embedding cache (sqlite-vec)")
+            return
+
         self._embeddings = None
         self._email_ids = []
         self._id_to_index = {}
@@ -259,7 +319,7 @@ class EmbeddingCache:
         uncached = []
 
         for email_id in email_ids:
-            if email_id in self._id_to_index:
+            if self.contains(email_id):
                 cached.append(email_id)
             else:
                 uncached.append(email_id)
@@ -277,6 +337,13 @@ class EmbeddingCache:
             Number of embeddings removed
         """
         corpus_ids = {email.id for email in corpus.emails}
+
+        if self._store is not None:
+            removed = self._store.sync_with_ids(corpus_ids)
+            if removed > 0:
+                logger.info(f"Removed {removed} stale embeddings from cache")
+            return removed
+
         ids_to_remove = [email_id for email_id in self._email_ids if email_id not in corpus_ids]
 
         if ids_to_remove:
@@ -368,7 +435,16 @@ class EmbeddingCache:
             logger.debug(f"Deleted metadata file: {self.metadata_path}")
 
     def save(self) -> None:
-        """Save cache and metadata sidecar to disk."""
+        """Save cache and metadata sidecar to disk.
+
+        When using sqlite-vec backend, this is a no-op since data is
+        persisted on every write. For NPZ backend, saves to disk.
+        """
+        if self._store is not None:
+            # sqlite-vec backend auto-persists; nothing to do
+            logger.debug("sqlite-vec backend: save is a no-op (data already persisted)")
+            return
+
         if self._embeddings is None or len(self._email_ids) == 0:
             logger.debug("Nothing to save - cache is empty")
             return

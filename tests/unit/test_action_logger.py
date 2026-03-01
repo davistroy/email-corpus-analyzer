@@ -2,9 +2,11 @@
 Unit tests for the action logger module.
 
 Tests the ActionLogger class for logging mailbox modifications to an
-append-only JSONL audit trail, with rollback support.
+append-only JSONL audit trail, with rollback support. Also tests the
+SQLite backend path (Phase 4, Work Item 4.1).
 
 Phase 5, Item 5.4: Action Logger
+Phase 4, Item 4.1: SQLite migration
 """
 
 import json
@@ -23,6 +25,7 @@ from src.actions.action_logger import (
     RollbackResult,
     get_default_action_log_path,
 )
+from src.storage.database import Database
 
 # =============================================================================
 # ActionType enum tests
@@ -1334,3 +1337,543 @@ class TestGenerateReverseRecord:
 
             reverse = logger._generate_reverse_record(original)
             assert reverse is None
+
+
+# =============================================================================
+# ActionLogger SQLite backend tests (Phase 4, Work Item 4.1)
+# =============================================================================
+
+
+class TestActionLoggerSQLiteInit:
+    """Test ActionLogger initialization with SQLite database."""
+
+    def test_init_with_database_parameter(self, tmp_path):
+        """Test that ActionLogger accepts a database parameter."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+            assert logger._database is db
+        finally:
+            db.close()
+
+    def test_init_without_database_defaults_to_none(self):
+        """Test that database defaults to None when not provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "action_log.jsonl"
+            logger = ActionLogger(log_path=path)
+            assert logger._database is None
+
+
+class TestActionLoggerSQLiteLogAction:
+    """Test logging actions to SQLite backend."""
+
+    def test_log_action_writes_to_sqlite(self, tmp_path):
+        """Test that log_action writes to SQLite when database is provided."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            record = logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="folder_abc",
+                details={"folder_name": "Newsletters"},
+                success=True,
+                reversible=True,
+            )
+
+            # Verify it's in SQLite
+            cursor = db.execute("SELECT * FROM action_log WHERE target_id = ?", ("folder_abc",))
+            row = cursor.fetchone()
+            assert row is not None
+            assert record.target_id == "folder_abc"
+        finally:
+            db.close()
+
+    def test_log_action_does_not_write_jsonl_when_database_provided(self, tmp_path):
+        """Test that JSONL file is NOT written when database is provided."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="folder_1",
+                success=True,
+                reversible=True,
+            )
+
+            # JSONL file should not exist or be empty
+            assert not log_path.exists()
+        finally:
+            db.close()
+
+    def test_log_action_sqlite_stores_all_fields(self, tmp_path):
+        """Test that all ActionRecord fields are stored in SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_xyz",
+                details={"source_folder": "inbox", "target_folder": "News"},
+                success=True,
+                reversible=True,
+            )
+
+            cursor = db.execute(
+                "SELECT timestamp, action_type, target_id, details_json, success, reversible "
+                "FROM action_log WHERE target_id = ?",
+                ("msg_xyz",),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            timestamp, action_type, target_id, details_json, success, reversible = row
+            assert action_type == "email_move"
+            assert target_id == "msg_xyz"
+            assert json.loads(details_json) == {"source_folder": "inbox", "target_folder": "News"}
+            assert success == 1
+            assert reversible == 1
+        finally:
+            db.close()
+
+    def test_log_multiple_actions_to_sqlite(self, tmp_path):
+        """Test logging multiple actions to SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            for i in range(5):
+                logger.log_action(
+                    action_type=ActionType.EMAIL_MOVE,
+                    target_id=f"msg_{i}",
+                    details={"index": i},
+                    success=True,
+                    reversible=True,
+                )
+
+            cursor = db.execute("SELECT COUNT(*) FROM action_log")
+            count = cursor.fetchone()[0]
+            assert count == 5
+        finally:
+            db.close()
+
+    def test_log_failed_action_to_sqlite(self, tmp_path):
+        """Test logging a failed action to SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_fail",
+                details={"error": "Permission denied"},
+                success=False,
+                reversible=False,
+            )
+
+            cursor = db.execute(
+                "SELECT success, reversible FROM action_log WHERE target_id = ?",
+                ("msg_fail",),
+            )
+            row = cursor.fetchone()
+            assert row[0] == 0  # success = False
+            assert row[1] == 0  # reversible = False
+        finally:
+            db.close()
+
+
+class TestActionLoggerSQLiteGetActions:
+    """Test retrieving actions from SQLite backend."""
+
+    def test_get_actions_from_sqlite(self, tmp_path):
+        """Test that get_actions reads from SQLite when database is provided."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="folder_1",
+                details={"folder_name": "News"},
+                success=True,
+                reversible=True,
+            )
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_1",
+                details={"source_folder": "inbox", "target_folder": "News"},
+                success=True,
+                reversible=True,
+            )
+
+            actions = logger.get_actions()
+            assert len(actions) == 2
+            assert actions[0].action_type == ActionType.FOLDER_CREATE
+            assert actions[1].action_type == ActionType.EMAIL_MOVE
+        finally:
+            db.close()
+
+    def test_get_actions_with_type_filter_from_sqlite(self, tmp_path):
+        """Test filtering actions by type from SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="f_1",
+                success=True,
+                reversible=True,
+            )
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="m_1",
+                success=True,
+                reversible=True,
+            )
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="m_2",
+                success=True,
+                reversible=True,
+            )
+
+            move_actions = logger.get_actions(action_type_filter=ActionType.EMAIL_MOVE)
+            assert len(move_actions) == 2
+
+            folder_actions = logger.get_actions(action_type_filter=ActionType.FOLDER_CREATE)
+            assert len(folder_actions) == 1
+        finally:
+            db.close()
+
+    def test_get_actions_empty_sqlite(self, tmp_path):
+        """Test getting actions from empty SQLite database."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            actions = logger.get_actions()
+            assert actions == []
+        finally:
+            db.close()
+
+    def test_get_action_count_from_sqlite(self, tmp_path):
+        """Test action count from SQLite backend."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            for i in range(3):
+                logger.log_action(
+                    action_type=ActionType.EMAIL_MOVE,
+                    target_id=f"msg_{i}",
+                    success=True,
+                    reversible=True,
+                )
+
+            assert logger.get_action_count() == 3
+            assert logger.get_action_count(action_type_filter=ActionType.EMAIL_MOVE) == 3
+            assert logger.get_action_count(action_type_filter=ActionType.FOLDER_CREATE) == 0
+        finally:
+            db.close()
+
+
+class TestActionLoggerSQLiteGetActionLog:
+    """Test get_action_log with SQLite backend."""
+
+    def test_get_action_log_from_sqlite(self, tmp_path):
+        """Test that get_action_log works with SQLite backend."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="folder_1",
+                success=True,
+                reversible=True,
+            )
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_1",
+                success=False,
+                reversible=False,
+            )
+
+            log = logger.get_action_log()
+            assert isinstance(log, ActionLog)
+            assert log.total_count == 2
+            assert log.success_count == 1
+            assert log.failure_count == 1
+        finally:
+            db.close()
+
+
+class TestActionLoggerSQLiteRollback:
+    """Test rollback operations with SQLite backend."""
+
+    def test_get_rollback_actions_from_sqlite(self, tmp_path):
+        """Test get_rollback_actions reads from SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_1",
+                details={"source_folder": "inbox", "target_folder": "News"},
+                success=True,
+                reversible=True,
+            )
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_2",
+                success=False,
+                reversible=False,
+            )
+
+            rollback = logger.get_rollback_actions()
+            assert len(rollback) == 1
+            assert rollback[0].target_id == "msg_1"
+        finally:
+            db.close()
+
+    def test_replay_rollback_writes_to_sqlite(self, tmp_path):
+        """Test that replay_rollback writes reverse records to SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_1",
+                details={
+                    "source_folder": "inbox",
+                    "target_folder": "News",
+                    "source_folder_id": "id_inbox",
+                    "target_folder_id": "id_news",
+                },
+                success=True,
+                reversible=True,
+            )
+
+            actions_to_rollback = logger.get_rollback_actions()
+            result = logger.replay_rollback(actions_to_rollback)
+
+            assert result.total_actions == 1
+            assert result.successful == 1
+
+            # Verify rollback record is in SQLite
+            all_actions = logger.get_actions()
+            rollback_records = [a for a in all_actions if a.action_type == ActionType.ROLLBACK]
+            assert len(rollback_records) == 1
+        finally:
+            db.close()
+
+    def test_rollback_excludes_already_rolled_back_sqlite(self, tmp_path):
+        """Test that already-rolled-back actions are excluded from SQLite queries."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_1",
+                details={"source_folder": "inbox", "target_folder": "News"},
+                success=True,
+                reversible=True,
+            )
+            # Record a rollback for msg_1
+            logger.log_action(
+                action_type=ActionType.ROLLBACK,
+                target_id="msg_1",
+                details={"original_action": "email_move"},
+                success=True,
+                reversible=False,
+            )
+            logger.log_action(
+                action_type=ActionType.EMAIL_MOVE,
+                target_id="msg_2",
+                details={"source_folder": "inbox", "target_folder": "Archive"},
+                success=True,
+                reversible=True,
+            )
+
+            rollback = logger.get_rollback_actions()
+            assert len(rollback) == 1
+            assert rollback[0].target_id == "msg_2"
+        finally:
+            db.close()
+
+    def test_get_rollback_actions_since_datetime_sqlite(self, tmp_path):
+        """Test filtering rollback actions by datetime from SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            # Insert with controlled timestamps directly into SQLite
+            old_ts = "2026-01-01T00:00:00+00:00"
+            recent_ts = "2026-02-28T00:00:00+00:00"
+
+            db.execute(
+                "INSERT INTO action_log "
+                "(timestamp, action_type, target_id, details_json, success, reversible) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (old_ts, "email_move", "msg_old", "{}", 1, 1),
+            )
+            db.execute(
+                "INSERT INTO action_log "
+                "(timestamp, action_type, target_id, details_json, success, reversible) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (recent_ts, "email_move", "msg_recent", "{}", 1, 1),
+            )
+
+            since = datetime(2026, 2, 1, tzinfo=timezone.utc)
+            rollback = logger.get_rollback_actions(since=since)
+            assert len(rollback) == 1
+            assert rollback[0].target_id == "msg_recent"
+        finally:
+            db.close()
+
+
+class TestActionLoggerSQLiteClearActions:
+    """Test clearing actions with SQLite backend."""
+
+    def test_clear_actions_clears_sqlite(self, tmp_path):
+        """Test that clear_actions removes records from SQLite."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="folder_1",
+                success=True,
+                reversible=True,
+            )
+
+            assert logger.get_action_count() == 1
+
+            logger.clear_actions()
+
+            assert logger.get_action_count() == 0
+            # Verify table is empty
+            cursor = db.execute("SELECT COUNT(*) FROM action_log")
+            assert cursor.fetchone()[0] == 0
+        finally:
+            db.close()
+
+    def test_clear_empty_sqlite_no_error(self, tmp_path):
+        """Test that clearing empty SQLite table doesn't raise."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+            logger.clear_actions()  # Should not raise
+        finally:
+            db.close()
+
+
+class TestActionLoggerSQLiteThreadSafety:
+    """Test thread safety of SQLite backend."""
+
+    def test_concurrent_sqlite_writes(self, tmp_path):
+        """Test concurrent writes to SQLite don't lose records."""
+        db_path = tmp_path / "test.db"
+        db = Database(db_path)
+        try:
+            log_path = tmp_path / "action_log.jsonl"
+            logger = ActionLogger(log_path=log_path, database=db)
+
+            num_threads = 5
+            records_per_thread = 10
+            errors = []
+
+            def write_records(thread_id: int):
+                try:
+                    for i in range(records_per_thread):
+                        logger.log_action(
+                            action_type=ActionType.EMAIL_MOVE,
+                            target_id=f"msg_t{thread_id}_{i}",
+                            details={"thread": thread_id},
+                            success=True,
+                            reversible=True,
+                        )
+                except Exception as e:
+                    errors.append(str(e))
+
+            threads = [
+                threading.Thread(target=write_records, args=(t,)) for t in range(num_threads)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert len(errors) == 0, f"Errors during concurrent write: {errors}"
+            assert logger.get_action_count() == num_threads * records_per_thread
+        finally:
+            db.close()
+
+
+class TestActionLoggerJSONLFallbackUnchanged:
+    """Test that JSONL behavior is completely unchanged when no database is provided."""
+
+    def test_jsonl_fallback_log_and_retrieve(self):
+        """Test original JSONL path still works without database."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "action_log.jsonl"
+            logger = ActionLogger(log_path=path)
+
+            logger.log_action(
+                action_type=ActionType.FOLDER_CREATE,
+                target_id="folder_1",
+                details={"folder_name": "News"},
+                success=True,
+                reversible=True,
+            )
+
+            # Verify JSONL file was written
+            assert path.exists()
+            with open(path, encoding="utf-8") as f:
+                data = json.loads(f.readline())
+            assert data["target_id"] == "folder_1"
+
+            # Verify get_actions works via JSONL
+            actions = logger.get_actions()
+            assert len(actions) == 1
+            assert actions[0].target_id == "folder_1"
