@@ -50,8 +50,8 @@ The implementation strategy is to add capabilities alongside existing code, not 
 
 ### Work Items
 
-#### 1.1 Create BaseClassifier ABC and ClassificationResult Model
-**Status: PENDING**
+#### 1.1 Create BaseClassifier ABC and ClassificationResult Model ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** A1
 **Files Affected:**
 - `src/classifiers/__init__.py` (create)
@@ -61,23 +61,23 @@ The implementation strategy is to add capabilities alongside existing code, not 
 Define the classifier contract that all classifiers must implement. `BaseClassifier` is an ABC with a `classify(email, categories) -> ClassificationResult` method. `ClassificationResult` is a Pydantic model containing `category_name`, `confidence`, `source` (classifier identifier), and `reasoning` (optional explanation). Also define `ClassifierCapability` enum (ZERO_SHOT, FEW_SHOT, FINE_TUNED) for capability discovery.
 
 **Tasks:**
-1. [ ] Create `src/classifiers/__init__.py` with public exports
-2. [ ] Create `src/classifiers/base.py` with `BaseClassifier` ABC, `ClassificationResult` Pydantic model, and `ClassifierCapability` enum
-3. [ ] `classify()` signature: `def classify(self, email: Email, categories: list[str], context: ClassificationContext | None = None) -> ClassificationResult`
-4. [ ] `ClassificationContext` dataclass: holds few-shot examples, category descriptions, and any additional context for the classifier
-5. [ ] Add `batch_classify()` default implementation that iterates over `classify()` with progress tracking
-6. [ ] Write tests for the ABC contract (test that subclasses must implement classify, test ClassificationResult validation)
+1. [x] Create `src/classifiers/__init__.py` with public exports
+2. [x] Create `src/classifiers/base.py` with `BaseClassifier` ABC, `ClassificationResult` Pydantic model, and `ClassifierCapability` enum
+3. [x] `classify()` signature: `def classify(self, email: Email, categories: list[str], context: ClassificationContext | None = None) -> ClassificationResult`
+4. [x] `ClassificationContext` dataclass: holds few-shot examples, category descriptions, and any additional context for the classifier
+5. [x] Add `batch_classify()` default implementation that iterates over `classify()` with progress tracking
+6. [x] Write tests for the ABC contract (test that subclasses must implement classify, test ClassificationResult validation)
 
 **Acceptance Criteria:**
-- [ ] `BaseClassifier` cannot be instantiated directly
-- [ ] `ClassificationResult` validates confidence is 0.0-1.0
-- [ ] `ClassificationContext` supports optional few-shot examples
-- [ ] All new code has tests
+- [x] `BaseClassifier` cannot be instantiated directly
+- [x] `ClassificationResult` validates confidence is 0.0-1.0
+- [x] `ClassificationContext` supports optional few-shot examples
+- [x] All new code has tests
 
 ---
 
-#### 1.2 Add ClassifierConfig and Category Taxonomy to Config Models
-**Status: PENDING**
+#### 1.2 Add ClassifierConfig and Category Taxonomy to Config Models ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** A1
 **Files Affected:**
 - `src/config/models.py` (modify)
@@ -87,18 +87,18 @@ Define the classifier contract that all classifiers must implement. `BaseClassif
 Add `ClassifierConfig` to the config model hierarchy. This includes: `provider` (ollama | claude | openai), `model_name` (e.g., "qwen2.5:7b"), `ollama_base_url` (default localhost:11434), `api_key_env_var` (environment variable name for cloud API keys), `confidence_threshold` (minimum confidence to accept LLM result, default 0.6), `max_tokens` (default 200), `temperature` (default 0.0 for deterministic classification), and `categories` (list of category definitions with name + description). Add `classifier` field to `AppConfig`.
 
 **Tasks:**
-1. [ ] Define `CategoryDefinition` model: `name: str`, `description: str`, `keywords: list[str]` (optional hints)
-2. [ ] Define `ClassifierConfig` model with all fields and validation (validate provider is one of allowed values, validate URL format for ollama_base_url)
-3. [ ] Add `classifier: ClassifierConfig = Field(default_factory=ClassifierConfig)` to `AppConfig`
-4. [ ] Add classifier section to `merge_configs()` nested config handling
-5. [ ] Update `template.yaml` with classifier section and commented examples
-6. [ ] Write tests for ClassifierConfig validation (bad provider, bad URL, missing required fields)
+1. [x] Define `CategoryDefinition` model: `name: str`, `description: str`, `keywords: list[str]` (optional hints)
+2. [x] Define `ClassifierConfig` model with all fields and validation (validate provider is one of allowed values, validate URL format for ollama_base_url)
+3. [x] Add `classifier: ClassifierConfig = Field(default_factory=ClassifierConfig)` to `AppConfig`
+4. [x] Add classifier section to `merge_configs()` nested config handling
+5. [x] Update `template.yaml` with classifier section and commented examples
+6. [x] Write tests for ClassifierConfig validation (bad provider, bad URL, missing required fields)
 
 **Acceptance Criteria:**
-- [ ] `ClassifierConfig` has sensible defaults (provider=ollama, model=qwen2.5:7b)
-- [ ] Category taxonomy is configurable via YAML
-- [ ] Config merge correctly handles classifier overrides
-- [ ] Template YAML includes documented classifier section
+- [x] `ClassifierConfig` has sensible defaults (provider=ollama, model=qwen2.5:7b)
+- [x] Category taxonomy is configurable via YAML
+- [x] Config merge correctly handles classifier overrides
+- [x] Template YAML includes documented classifier section
 
 ---
 
@@ -128,8 +128,8 @@ Modify `EmailCategorizer` to accept an optional `BaseClassifier` instance. When 
 
 ---
 
-#### 1.4 Add Classification Exceptions
-**Status: PENDING**
+#### 1.4 Add Classification Exceptions ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** A1
 **Files Affected:**
 - `src/exceptions.py` (modify)
@@ -138,15 +138,15 @@ Modify `EmailCategorizer` to accept an optional `BaseClassifier` instance. When 
 Add `ClassificationError` (base), `ClassifierConnectionError` (Ollama/API unreachable), and `ClassifierResponseError` (invalid/unparseable response) to the exception hierarchy. Follow the existing pattern with `recovery_hint` and `context` fields.
 
 **Tasks:**
-1. [ ] Add `ClassificationError(EmailAnalyzerError)` base class with default recovery hint
-2. [ ] Add `ClassifierConnectionError(ClassificationError)` with provider/URL context
-3. [ ] Add `ClassifierResponseError(ClassificationError)` with raw response context
-4. [ ] Write tests for exception instantiation and string representation
+1. [x] Add `ClassificationError(EmailAnalyzerError)` base class with default recovery hint
+2. [x] Add `ClassifierConnectionError(ClassificationError)` with provider/URL context
+3. [x] Add `ClassifierResponseError(ClassificationError)` with raw response context
+4. [x] Write tests for exception instantiation and string representation
 
 **Acceptance Criteria:**
-- [ ] All three exceptions follow the existing pattern (message, recovery_hint, context)
-- [ ] Recovery hints are actionable (e.g., "Check that Ollama is running at localhost:11434")
-- [ ] Tests verify inheritance chain
+- [x] All three exceptions follow the existing pattern (message, recovery_hint, context)
+- [x] Recovery hints are actionable (e.g., "Check that Ollama is running at localhost:11434")
+- [x] Tests verify inheritance chain
 
 **Notes:**
 This is a small addition (~40 LOC) but is listed separately because exceptions should be defined before they're used in Phase 2.

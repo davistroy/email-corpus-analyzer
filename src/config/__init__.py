@@ -19,6 +19,8 @@ from src.config.loader import (
 from src.config.models import (
     AnalyzeConfig,
     AppConfig,
+    CategoryDefinition,
+    ClassifierConfig,
     ExtractConfig,
     MonitoringConfig,
     PipelineConfig,
@@ -32,6 +34,8 @@ __all__ = [
     # Models
     "AppConfig",
     "AnalyzeConfig",
+    "CategoryDefinition",
+    "ClassifierConfig",
     "ExtractConfig",
     "MonitoringConfig",
     "PipelineConfig",
