@@ -90,6 +90,7 @@ def _make_default_args(**overrides) -> argparse.Namespace:
         "command": "classify",
         "provider": None,
         "model": None,
+        "endpoint_id": None,
         "categories": None,
         "confidence_threshold": None,
         "corpus": None,
@@ -171,6 +172,22 @@ class TestClassifyParser:
         parser = create_parser()
         args = parser.parse_args(["classify", "--provider", "claude"])
         assert args.provider == "claude"
+
+    def test_classify_provider_runpod(self):
+        """Test that --provider runpod is accepted."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["classify", "--provider", "runpod"])
+        assert args.provider == "runpod"
+
+    def test_classify_endpoint_id_flag(self):
+        """Test that --endpoint-id flag is accepted."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["classify", "--endpoint-id", "abc123"])
+        assert args.endpoint_id == "abc123"
 
     def test_classify_provider_invalid_rejected(self):
         """Test that invalid provider value is rejected."""
@@ -402,6 +419,41 @@ class TestClassifyCommand:
         config_arg = mock_classifier_cls.call_args[0][0]
         assert config_arg.provider == "openai"
         assert config_arg.model_name == "gpt-4o-mini"
+
+    @patch("src.cli.commands.classify.save_json")
+    @patch("src.cli.commands.classify.load_json")
+    @patch("src.cli.commands.classify.PathConfig")
+    @patch("src.cli.commands.classify.LLMClassifier")
+    @patch("src.cli.commands.classify.load_config")
+    def test_classify_provider_runpod_with_endpoint_id(
+        self,
+        mock_load_config,
+        mock_classifier_cls,
+        mock_path_config,
+        mock_load_json,
+        mock_save_json,
+    ):
+        """Test that --provider runpod --endpoint-id passes through to config."""
+        from src.cli.commands.classify import cmd_classify
+
+        mock_path_config.get_corpus_path.return_value = Path("/tmp/corpus.json")
+        mock_path_config.get_categorization_report_path.return_value = Path("/tmp/report.json")
+        mock_load_json.return_value = _make_corpus_dict(1)
+
+        mock_classifier = MagicMock()
+        mock_classifier.classify.return_value = _make_mock_classification_result()
+        mock_classifier.name = "LLM Classifier (runpod/qwen2.5:72b)"
+        mock_classifier_cls.return_value = mock_classifier
+
+        mock_load_config.return_value = _make_mock_config()
+
+        args = _make_default_args(provider="runpod", endpoint_id="1fgb26fi1t0e4u")
+        result = cmd_classify(args)
+
+        assert result == 0
+        config_arg = mock_classifier_cls.call_args[0][0]
+        assert config_arg.provider == "runpod"
+        assert config_arg.runpod_endpoint_id == "1fgb26fi1t0e4u"
 
     @patch("src.cli.commands.classify.save_json")
     @patch("src.cli.commands.classify.load_json")

@@ -94,10 +94,11 @@ class LLMClassifier(BaseClassifier):
     """
     Email classifier that uses an LLM via Instructor for structured output.
 
-    Supports three providers:
+    Supports four providers:
     - **ollama**: Local LLM via OpenAI-compatible API (default, zero cost)
     - **openai**: OpenAI API (GPT-4o-mini, etc.)
     - **claude**: Anthropic API (Claude Sonnet, etc.)
+    - **runpod**: RunPod serverless via OpenAI-compatible API
 
     The classifier constructs a prompt with:
     1. System instruction defining the classification task
@@ -364,11 +365,13 @@ class LLMClassifier(BaseClassifier):
             return self._build_openai_client()
         if provider == "claude":
             return self._build_claude_client()
+        if provider == "runpod":
+            return self._build_runpod_client()
 
         raise ClassifierConnectionError(
             provider=provider,
             url="N/A",
-            recovery_hint=f"Unknown provider '{provider}'. Use: ollama, openai, or claude.",
+            recovery_hint=f"Unknown provider '{provider}'. Use: ollama, openai, claude, or runpod.",
         )
 
     def _build_ollama_client(self) -> Any:
@@ -408,6 +411,26 @@ class LLMClassifier(BaseClassifier):
 
         anthro_client = anthropic.Anthropic(api_key=api_key)
         return instructor.from_anthropic(anthro_client)
+
+    def _build_runpod_client(self) -> Any:
+        """Build an Instructor client for RunPod serverless (OpenAI-compatible endpoint)."""
+        endpoint_id = self._config.runpod_endpoint_id
+        if not endpoint_id:
+            raise ClassifierConnectionError(
+                provider="runpod",
+                url="N/A",
+                recovery_hint=(
+                    "No runpod_endpoint_id configured. Set classifier.runpod_endpoint_id "
+                    "in your config or pass --endpoint-id on the CLI."
+                ),
+            )
+
+        base_url = f"https://api.runpod.ai/v2/{endpoint_id}/openai/v1"
+        api_key = self._resolve_api_key()
+        logger.info("Creating RunPod Instructor client at %s", base_url)
+
+        oai_client = openai.OpenAI(base_url=base_url, api_key=api_key)
+        return instructor.from_openai(oai_client)
 
     def _resolve_api_key(self) -> str:
         """
@@ -453,6 +476,9 @@ class LLMClassifier(BaseClassifier):
             return "https://api.openai.com/v1"
         if self._config.provider == "claude":
             return "https://api.anthropic.com"
+        if self._config.provider == "runpod":
+            eid = self._config.runpod_endpoint_id or "<no-endpoint-id>"
+            return f"https://api.runpod.ai/v2/{eid}/openai/v1"
         return "unknown"
 
     # -------------------------------------------------------------------------

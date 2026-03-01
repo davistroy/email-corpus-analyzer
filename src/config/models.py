@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 # Valid classifier provider names
-VALID_CLASSIFIER_PROVIDERS = ("ollama", "claude", "openai")
+VALID_CLASSIFIER_PROVIDERS = ("ollama", "claude", "openai", "runpod")
 
 # Regex for validating HTTP/HTTPS URLs
 URL_FORMAT_RE = re.compile(r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE)
@@ -488,14 +488,14 @@ class ClassifierConfig(BaseModel):
     """
     Configuration for the LLM email classifier.
 
-    Supports Ollama (local), Claude (Anthropic), and OpenAI providers.
-    Default configuration uses Ollama with qwen2.5:7b for zero-cost
-    local classification.
+    Supports Ollama (local), Claude (Anthropic), OpenAI, and RunPod
+    (serverless, OpenAI-compatible) providers. Default configuration
+    uses Ollama with qwen2.5:7b for zero-cost local classification.
     """
 
     provider: str = Field(
         default="ollama",
-        description="LLM provider: ollama, claude, or openai",
+        description="LLM provider: ollama, claude, openai, or runpod",
     )
     model_name: str = Field(
         default="qwen2.5:7b",
@@ -504,6 +504,10 @@ class ClassifierConfig(BaseModel):
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Base URL for Ollama API server",
+    )
+    runpod_endpoint_id: str | None = Field(
+        default=None,
+        description="RunPod serverless endpoint ID (required when provider is 'runpod')",
     )
     api_key_env_var: str | None = Field(
         default=None,
