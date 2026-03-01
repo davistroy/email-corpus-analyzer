@@ -694,29 +694,30 @@ Create `UncertaintySampler` that identifies the lowest-confidence classification
 
 ---
 
-#### 5.4 Wire Feedback into LLM Classifier and Pipeline
-**Status: PENDING**
+#### 5.4 Wire Feedback into LLM Classifier and Pipeline ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N3
 **Files Affected:**
 - `src/classifiers/llm_classifier.py` (modify)
 - `src/services/pipeline_service.py` (modify)
 - `src/categorizer/categorizer.py` (modify)
+- `tests/unit/test_feedback_integration.py` (create)
 
 **Description:**
 Connect the feedback loop: when `LLMClassifier.classify()` is called and a `FewShotRetriever` is available, automatically retrieve relevant examples and inject them into the `ClassificationContext`. Update the pipeline to surface uncertain classifications for review. Update `EmailCategorizer` to record classifications in the `ClassificationStore`.
 
 **Tasks:**
-1. [ ] Add `few_shot_retriever: FewShotRetriever | None = None` to `LLMClassifier.__init__()`
-2. [ ] In `classify()`: if retriever is available, embed the email, retrieve examples, populate `ClassificationContext.few_shot_examples`
-3. [ ] Update `_build_prompt()` to include few-shot examples when present
-4. [ ] In `EmailCategorizer.categorize_email()`: save classification to `ClassificationStore` when database is available
-5. [ ] In pipeline: after classification, run uncertainty sampler and log results
+1. [x] Add `few_shot_retriever: FewShotRetriever | None = None` to `LLMClassifier.__init__()`
+2. [x] In `classify()`: if retriever is available, embed the email, retrieve examples, populate `ClassificationContext.few_shot_examples`
+3. [x] Update `_build_prompt()` to include few-shot examples when present
+4. [x] In `EmailCategorizer.categorize_email()`: save classification to `ClassificationStore` when database is available
+5. [x] In pipeline: after classification, run uncertainty sampler and log results
 
 **Acceptance Criteria:**
-- [ ] Few-shot examples are included in LLM prompt when available
-- [ ] Classifier works without retriever (zero-shot mode, backward compat)
-- [ ] Classifications are recorded for model tracking
-- [ ] Uncertain classifications are surfaced in pipeline output
+- [x] Few-shot examples are included in LLM prompt when available
+- [x] Classifier works without retriever (zero-shot mode, backward compat)
+- [x] Classifications are recorded for model tracking
+- [x] Uncertain classifications are surfaced in pipeline output
 
 ---
 

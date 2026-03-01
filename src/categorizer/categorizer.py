@@ -14,12 +14,18 @@ Phase 1, Item 1.3: Hybrid classification support. When an optional BaseClassifie
 is provided, it serves as a fallback for emails that no rules match. Source tracking
 distinguishes rule-based ("rule:<rule_id>") from classifier-based ("classifier:<name>")
 assignments.
+
+Phase 5, Item 5.4: Classification recording. When an optional Database is provided,
+every non-uncategorized classification is recorded in the classifications table for
+model tracking and feedback loop support.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from src.classifiers.base import BaseClassifier
 from src.models.categorization import (
@@ -31,6 +37,9 @@ from src.models.corpus import Corpus
 from src.models.email import Email
 from src.models.rule import CategoryRule, RuleSet
 from src.rules.engine import RuleEngine
+
+if TYPE_CHECKING:
+    from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +88,7 @@ class EmailCategorizer:
         self,
         classifier: BaseClassifier | None = None,
         classifier_threshold: float = 0.6,
+        database: Database | None = None,
     ) -> None:
         """Initialize the categorizer.
 
@@ -88,10 +98,14 @@ class EmailCategorizer:
             classifier_threshold: Minimum confidence to accept a classifier
                 result.  Results below this threshold are treated as
                 uncategorized.  Default is 0.6.
+            database: Optional Database instance for recording classifications.
+                When provided, every non-uncategorized result is saved to the
+                classifications table for model tracking and feedback support.
         """
         self._engine = RuleEngine()
         self._classifier = classifier
         self._classifier_threshold = classifier_threshold
+        self._database = database
 
     # ------------------------------------------------------------------
     # Single-email categorization
@@ -123,7 +137,9 @@ class EmailCategorizer:
         matched_rules: list[CategoryRule] = self._engine.evaluate_all(rule_set, email)
 
         if not matched_rules:
-            return self._classify_with_fallback(email, rule_set)
+            result = self._classify_with_fallback(email, rule_set)
+            self._record_classification(result)
+            return result
 
         # Build assignments from matched rules, sorted by priority (highest first).
         # evaluate_all already returns sorted by priority descending.
@@ -149,12 +165,14 @@ class EmailCategorizer:
                 seen_category_names.add(assignment.category_name)
                 secondaries.append(assignment)
 
-        return EmailCategorization(
+        result = EmailCategorization(
             email_id=email.id,
             primary_category=primary,
             secondary_categories=secondaries,
             matched_rules=matched_rule_ids,
         )
+        self._record_classification(result)
+        return result
 
     # ------------------------------------------------------------------
     # Classifier fallback
@@ -218,6 +236,62 @@ class EmailCategorizer:
             email_id=email.id,
             primary_category=primary,
         )
+
+    # ------------------------------------------------------------------
+    # Classification Recording (Phase 5, Item 5.4)
+    # ------------------------------------------------------------------
+
+    def _record_classification(self, categorization: EmailCategorization) -> None:
+        """Record a classification result in the database for model tracking.
+
+        Only records non-uncategorized results. Errors are logged and
+        swallowed to avoid breaking the categorization pipeline (resilient
+        error handling per constitutional principle #6).
+
+        Args:
+            categorization: The categorization result to record.
+        """
+        if self._database is None:
+            return
+
+        if categorization.is_uncategorized:
+            return
+
+        primary = categorization.primary_category
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Extract model_version from source if it's a classifier result
+        model_version: str | None = None
+        if primary.source and "classifier:" in primary.source:
+            # Source format: "classifier:<name>" — the name may contain model info
+            model_version = primary.source.replace("classifier:", "")
+
+        try:
+            self._database.execute(
+                "INSERT INTO classifications "
+                "(email_id, category_name, confidence, source, model_version, classified_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    categorization.email_id,
+                    primary.category_name,
+                    primary.confidence,
+                    primary.source or "unknown",
+                    model_version,
+                    now,
+                ),
+            )
+            logger.debug(
+                "Recorded classification: email=%s, category=%s, source=%s",
+                categorization.email_id,
+                primary.category_name,
+                primary.source,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to record classification for email %s; continuing",
+                categorization.email_id,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Batch corpus categorization

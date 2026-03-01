@@ -122,7 +122,11 @@ class LLMClassifier(BaseClassifier):
         result = classifier.classify(email, ["Newsletters", "Promotions"])
     """
 
-    def __init__(self, config: ClassifierConfig) -> None:
+    def __init__(
+        self,
+        config: ClassifierConfig,
+        few_shot_retriever: Any | None = None,
+    ) -> None:
         """
         Initialize the LLM classifier.
 
@@ -131,10 +135,17 @@ class LLMClassifier(BaseClassifier):
 
         Args:
             config: Classifier configuration with provider, model, and categories.
+            few_shot_retriever: Optional FewShotRetriever for dynamic few-shot
+                example injection. When provided, classify() will call
+                retriever.retrieve(email) to get relevant examples from the
+                feedback store and inject them into the classification context.
+                When None, the classifier operates in zero-shot mode (or uses
+                examples from the explicitly passed ClassificationContext).
         """
         self._config = config
         self._sanitizer = EmailSanitizer()
         self._client: Any = None
+        self._few_shot_retriever = few_shot_retriever
 
     # -------------------------------------------------------------------------
     # BaseClassifier contract
@@ -178,6 +189,9 @@ class LLMClassifier(BaseClassifier):
         """
         if not categories:
             raise ValueError("categories list must not be empty")
+
+        # Inject few-shot examples from retriever if available
+        context = self._enrich_context_with_retriever(email, context)
 
         # Lazy client initialization
         client = self._get_client()
@@ -262,6 +276,60 @@ class LLMClassifier(BaseClassifier):
 
         logger.info("%s: batch classification complete (%d emails)", self.name, total)
         return results
+
+    # -------------------------------------------------------------------------
+    # Few-Shot Retriever Integration
+    # -------------------------------------------------------------------------
+
+    def _enrich_context_with_retriever(
+        self,
+        email: Email,
+        context: ClassificationContext | None,
+    ) -> ClassificationContext | None:
+        """
+        Enrich the classification context with few-shot examples from the retriever.
+
+        If no retriever is configured, returns the context unchanged.
+        If the retriever raises an error, logs the error and returns the
+        original context (graceful degradation to zero-shot).
+
+        Args:
+            email: The email being classified (passed to retriever for similarity search).
+            context: Existing classification context (may be None).
+
+        Returns:
+            The (possibly enriched) classification context, or None if no
+            retriever and no context were provided.
+        """
+        if self._few_shot_retriever is None:
+            return context
+
+        try:
+            examples = self._few_shot_retriever.retrieve(email)
+        except Exception:
+            logger.warning(
+                "Few-shot retriever failed for email %s; falling back to zero-shot",
+                email.id,
+                exc_info=True,
+            )
+            return context
+
+        if not examples:
+            return context
+
+        # Create or augment context with retrieved examples
+        if context is None:
+            context = ClassificationContext(few_shot_examples=examples)
+        else:
+            # Merge: retriever examples come first, then any existing examples
+            merged = list(examples) + list(context.few_shot_examples)
+            context = ClassificationContext(
+                few_shot_examples=merged,
+                category_descriptions=context.category_descriptions,
+                additional_context=context.additional_context,
+            )
+
+        return context
 
     # -------------------------------------------------------------------------
     # Client Factory

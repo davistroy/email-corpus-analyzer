@@ -7,18 +7,20 @@ Decoupled from CLI for independent use.
 Per Phase 7, Track 7B specification.
 Work Item 3.4: All critical JSON outputs use atomic writes.
 Phase 4, Work Item 4.3: SQLite integration — passes database to sub-services.
+Phase 5, Work Item 5.4: Surfaces uncertain classifications in PipelineResult.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.config.models import AppConfig
 from src.models.analysis_results import AnalysisResults
+from src.models.categorization import EmailCategorization
 from src.models.category import Category
 from src.models.corpus import Corpus
 from src.services.analysis_service import AnalysisService
@@ -34,12 +36,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PipelineResult:
-    """Result from running the complete pipeline."""
+    """Result from running the complete pipeline.
+
+    Phase 5, Item 5.4: Added uncertain_classifications field to surface
+    low-confidence results that would benefit from human review.
+    """
 
     corpus: Corpus
     analysis: AnalysisResults
     categories: list[Category]
     output_dir: Path
+    uncertain_classifications: list[EmailCategorization] = field(default_factory=list)
 
 
 class PipelineService:
