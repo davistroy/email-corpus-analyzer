@@ -9,8 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pip install -r requirements.txt
 pip install -e ".[dev]"  # Install with dev dependencies
 
-# Run tests (1977 tests, 86% coverage)
-pytest                                  # All 1977 tests with coverage
+# Run tests (3463 tests, 88% coverage)
+pytest                                  # All 3463 tests with coverage
 pytest tests/unit/                      # Unit tests only
 pytest tests/contract/                  # Contract tests only
 pytest tests/unit/test_html_parser.py   # Single test file
@@ -39,14 +39,30 @@ python -m src.cli export --format html
 python -m src.cli export --format outlook-rules
 python -m src.cli export --format gmail-filters
 python -m src.cli config validate
+python -m src.cli rules generate
+python -m src.cli rules test
+python -m src.cli rules show
+python -m src.cli categorize
+python -m src.cli categorize --report
+python -m src.cli categorize --resolve --strategy priority
+python -m src.cli apply folders --dry-run --source hotmail
+python -m src.cli apply move --dry-run
+python -m src.cli apply rules --dry-run --source gmail
+python -m src.cli apply rollback --since 2026-01-01
+python -m src.cli scheduler setup
+python -m src.cli scheduler status
+python -m src.cli notifications show
+python -m src.cli notifications test
 ```
 
 ## Architecture
 
-This system extracts emails from M365/Hotmail, analyzes patterns, and generates category suggestions through a five-stage pipeline:
+This system extracts emails from M365/Hotmail and Gmail, analyzes patterns, generates category suggestions, applies rules for email-by-email categorization, and automates email organization through a multi-stage pipeline:
 
 ```
-Extract → Analyze → Suggest → Review → Export
+Extract → Analyze → Suggest → Review → Rules → Categorize → Apply
+                                                    ↓
+                                          Scheduler → Monitor → Notify
 ```
 
 ### Core Pipeline Modules
@@ -78,13 +94,38 @@ Extract → Analyze → Suggest → Review → Export
   - `name_generator.py` - TF-IDF based name generation
   - `category_generator.py` - Main generator with learning integration
 
+- **`src/rules/`** - Category rule system:
+  - `engine.py` - RuleEngine evaluates conditions against emails (AND/OR logic, 8 operators, short-circuit)
+  - `builder.py` - RuleBuilder auto-generates rules from approved categories and analysis results
+  - `tester.py` - RuleTester dry-runs rules against corpus (coverage, conflicts, confusion matrix)
+
+- **`src/categorizer/`** - Email-by-email categorization:
+  - `categorizer.py` - EmailCategorizer assigns primary/secondary categories via rules
+  - `conflict_resolver.py` - ConflictResolver with priority/specificity/historical strategies
+  - `coverage_reporter.py` - CoverageReporter detects uncategorized patterns, generates recommendations
+
+- **`src/actions/`** - Email action execution:
+  - `folder_manager.py` - FolderManager creates mailbox folders (M365 Graph API / Gmail Labels)
+  - `email_mover.py` - EmailMover batch-moves emails with rate limiting and rollback
+  - `rule_deployer.py` - RuleDeployer converts rules to server-side inbox rules/filters
+  - `action_logger.py` - ActionLogger append-only JSONL audit trail with rollback replay
+
+- **`src/automation/`** - Automated processing and monitoring:
+  - `incremental.py` - IncrementalProcessor extracts new emails, merges, reassigns clusters
+  - `change_detector.py` - ChangeDetector for drift scoring, volume anomalies, emerging topics
+  - `scheduler.py` - Scheduler with Windows Task Scheduler / crontab integration
+  - `notifications.py` - NotificationManager with console/log/desktop alert channels
+
 - **`src/ui/`** - User interface components:
   - `category_review.py` - CLI review with learning support
   - `tui/app.py` - Main ReviewApp (Textual-based TUI)
+  - `tui/state.py` - ReviewState centralized state management (thread-safe, reactive)
+  - `tui/utils.py` - Shared utilities (format_confidence_bar, truncation constants)
   - `tui/commands.py` - Command definitions and key bindings
-  - `tui/theme.py` - Theme colors, confidence colors, APP_CSS
+  - `tui/commands_undo.py` - Command pattern undo/redo (Ctrl+Z/Y, 50-op stack)
+  - `tui/theme.py` - Theme colors, confidence colors, high-contrast mode, APP_CSS
   - `tui/widgets/` - CategoryTable, DetailPanel, ActionBar, SearchInput, StatsPanel, ProgressBar
-  - `tui/dialogs/` - BulkActionDialog, MergeDialog, RenameDialog
+  - `tui/dialogs/` - BulkActionDialog, MergeDialog, RenameDialog, RuleEditorDialog
 
 - **`src/services/`** - Service layer (CLI-agnostic orchestration):
   - `extraction_service.py` - Multi-source extraction (hotmail/gmail/both) with corpus merge
@@ -92,7 +133,7 @@ Extract → Analyze → Suggest → Review → Export
   - `suggestion_service.py` - Category generation orchestration
   - `pipeline_service.py` - Full workflow orchestration
 
-- **`src/exceptions.py`** - Custom exception hierarchy with recovery hints (includes ExportError)
+- **`src/exceptions.py`** - Custom exception hierarchy with recovery hints (includes ExportError, ActionError, FolderActionError)
 
 - **`src/learning/`** - Feedback learning system:
   - `decision_logger.py` - Logs review decisions to JSONL
@@ -107,7 +148,7 @@ Extract → Analyze → Suggest → Review → Export
   - `embedding_cache.py` - Caches embeddings with model metadata versioning (auto-invalidation)
 
 - **`src/config/`** - Configuration system:
-  - `models.py` - Pydantic config models
+  - `models.py` - Pydantic config models (includes SchedulerConfig, MonitoringConfig)
   - `loader.py` - YAML config loading with precedence
 
 - **`src/preview/`** - Dry-run estimators for all commands
@@ -130,6 +171,8 @@ All models in `src/models/` use Pydantic v2. Key models:
 - `Category` - Suggested category with confidence score, hierarchy support
 - `CategoryTemplate` - Predefined category patterns (18 templates)
 - `ContentCluster` - Cluster with quality metrics (silhouette, cohesion, interpretation labels)
+- `RuleCondition`, `CategoryRule`, `RuleAction`, `RuleSet` - Rule system models
+- `EmailCategorization`, `CategorizationReport`, `CategoryAssignment` - Categorization models
 
 ### Entry Points
 
@@ -137,7 +180,7 @@ All models in `src/models/` use Pydantic v2. Key models:
   - `__init__.py` - Main entry, parser creation, command dispatch
   - `parsers.py` - Shared argument groups, data-driven config mapping
   - `formatters.py` - Output helpers, cluster visualization
-  - `commands/` - One module per command (extract, analyze, suggest, review, pipeline, config, info, export)
+  - `commands/` - One module per command (extract, analyze, suggest, review, pipeline, config, info, export, rules, categorize, apply, scheduler, notifications)
 
 - **`src/data/`** - Data files:
   - `templates.json` - 18 category templates (editable without code changes)
@@ -156,6 +199,23 @@ All models in `src/models/` use Pydantic v2. Key models:
 | `config show` | Display resolved configuration |
 | `config validate` | Validate configuration with checks |
 | `export` | Export to CSV, HTML, Outlook rules, or Gmail filters |
+| `rules generate` | Auto-generate rules from approved categories |
+| `rules test` | Dry-run rules against corpus with coverage report |
+| `rules show` | Display current rules |
+| `categorize` | Email-by-email categorization using rules |
+| `categorize --report` | Generate coverage analysis report |
+| `categorize --resolve` | Resolve multi-match conflicts (--strategy priority\|specificity\|historical) |
+| `apply folders` | Create mailbox folders for categories |
+| `apply move` | Move emails to categorized folders |
+| `apply rules` | Deploy rules as server-side inbox rules/filters |
+| `apply rollback` | Rollback recent actions (--since DATETIME) |
+| `scheduler setup` | Register scheduled processing task |
+| `scheduler run` | Manually trigger incremental processing |
+| `scheduler status` | Show schedule status and last run |
+| `scheduler disable` | Disable scheduled processing |
+| `notifications show` | View notification history (--severity filter) |
+| `notifications clear` | Clear notification history |
+| `notifications test` | Send a test notification |
 
 ### Global CLI Flags
 
@@ -181,7 +241,12 @@ Default output: `~/data/outputs/` (configurable via `--output-dir` or config fil
 | `approved_categories.json` | Final approved categories |
 | `embeddings_cache.npz` | Cached embeddings (with .meta.json sidecar) |
 | `cluster_visualization.png` | PCA scatter + silhouette chart (optional) |
+| `rules.json` | Generated category rules |
+| `categorization_report.json` | Email categorization results |
 | `~/.email-analyzer/decisions.jsonl` | Review decision history |
+| `~/.email-analyzer/action_log.jsonl` | Action audit trail (moves, deploys, rollbacks) |
+| `~/.email-analyzer/notifications.jsonl` | Notification history |
+| `~/.email-analyzer/scheduler_state.json` | Scheduler state (next/last run) |
 | `~/.email-analyzer/config.yaml` | Global configuration |
 
 ## Configuration
@@ -211,6 +276,16 @@ suggest:
     merge_email_overlap: 0.7
 learning:
   pattern_half_life_days: 90.0     # temporal decay for pattern detection
+scheduler:
+  enabled: false
+  interval_hours: 24
+  run_at: "02:00"                  # HH:MM format
+  tasks: [extract, analyze, categorize]
+monitoring:
+  drift_threshold: 0.15
+  volume_anomaly_stddev: 2.0
+  alert_channels: [console, log]   # console, log, desktop
+  check_interval_hours: 6
 ```
 
 Generate template: `python -m src.cli config init`

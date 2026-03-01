@@ -1,6 +1,6 @@
 # Email Corpus Extraction and Analysis System
 
-A Python-based system for extracting emails from Hotmail/Outlook.com and Gmail, analyzing patterns, and generating AI-assisted category suggestions with exportable email rules.
+A Python-based system for extracting emails from Hotmail/Outlook.com and Gmail, analyzing patterns, generating AI-assisted category suggestions, and automating email organization with rule-based categorization, folder management, and scheduled processing.
 
 ## Quick Start
 
@@ -39,8 +39,16 @@ python -m src.cli analyze --auto-clusters                       # Analyze patter
 python -m src.cli analyze --auto-clusters --cluster-viz          # With cluster visualization
 python -m src.cli suggest                                       # Generate categories
 python -m src.cli review                                        # Review interactively (TUI)
+python -m src.cli rules generate                                # Generate rules from categories
+python -m src.cli rules test                                    # Test rules against corpus
+python -m src.cli categorize                                    # Categorize emails using rules
+python -m src.cli apply folders --dry-run --source hotmail      # Create mailbox folders
+python -m src.cli apply move --dry-run                          # Move emails to folders
+python -m src.cli apply rules --dry-run --source gmail          # Deploy server-side rules
 python -m src.cli export --format outlook-rules                 # Export Outlook rules
 python -m src.cli export --format gmail-filters                 # Export Gmail filters
+python -m src.cli scheduler setup                               # Set up automated processing
+python -m src.cli notifications show                            # View notifications
 
 # Get help
 python -m src.cli --help
@@ -56,6 +64,8 @@ python -m src.cli <command> --help  # For specific command help
 | `category_suggestions.json` | AI-generated category suggestions |
 | `category_suggestions_report.md` | Human-readable report |
 | `approved_categories.json` | Final approved categories |
+| `rules.json` | Generated category rules |
+| `categorization_report.json` | Email categorization results |
 | `embeddings_cache.npz` | Cached embeddings for incremental analysis |
 | `cluster_visualization.png` | Cluster scatter plot (with `--cluster-viz`) |
 
@@ -120,6 +130,20 @@ suggest:
 # Learning Settings
 learning:
   pattern_half_life_days: 90.0  # Temporal decay for pattern confidence (in days)
+
+# Scheduler Settings
+scheduler:
+  enabled: false
+  interval_hours: 24
+  run_at: "02:00"                  # HH:MM format
+  tasks: [extract, analyze, categorize]
+
+# Monitoring Settings
+monitoring:
+  drift_threshold: 0.15
+  volume_anomaly_stddev: 2.0
+  alert_channels: [console, log]   # console, log, desktop
+  check_interval_hours: 6
 ```
 
 Validate your configuration with:
@@ -168,7 +192,7 @@ python -m src.cli config show  # Display resolved configuration
 The project maintains high code quality with comprehensive test coverage:
 
 ```bash
-# Run all tests (1977 tests, 86% coverage)
+# Run all tests (3463 tests, 88% coverage)
 pytest
 
 # Run specific test suite
@@ -194,6 +218,7 @@ ruff check src/ --fix           # Auto-fix style issues
 - **Clustering**: scikit-learn >= 1.7.1
 - **HTML Parsing**: BeautifulSoup4 >= 4.12.0 + lxml
 - **Data Validation**: Pydantic >= 2.0.0
+- **TUI Framework**: Textual >= 0.40.0
 - **Progress Tracking**: tqdm >= 4.66.0
 - **Testing**: pytest >= 7.4.0
 
@@ -202,13 +227,17 @@ ruff check src/ --fix           # Auto-fix style issues
 ```
 email-corpus-analyzer/
 ├── src/
-│   ├── models/              # 7 Pydantic data models
+│   ├── models/              # 9 Pydantic data models
 │   ├── extractors/          # Email extraction (Hotmail via Graph API, Gmail via Gmail API)
 │   ├── analyzers/           # 5 core + 2 optional analysis modules
 │   ├── generators/          # Category suggestion generation
+│   ├── rules/               # Rule engine, builder, tester
+│   ├── categorizer/         # Email-by-email categorization, conflict resolution
+│   ├── actions/             # Folder management, email moving, rule deployment
+│   ├── automation/          # Scheduler, change detection, notifications
 │   ├── services/            # Service layer (extraction, analysis, suggestion orchestration)
 │   ├── cli/                 # CLI package (commands, parsers, formatters)
-│   ├── ui/                  # Interactive review (CLI + TUI)
+│   ├── ui/                  # Interactive review (CLI + TUI with undo/redo)
 │   ├── cache/               # Embedding cache for incremental analysis
 │   ├── config/              # YAML configuration system
 │   ├── data/                # External data files (templates.json)
@@ -219,7 +248,7 @@ email-corpus-analyzer/
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests (1977 tests, 86% coverage)
+│   └── unit/                # Unit tests (3463 tests, 88% coverage)
 ├── docs/                    # Documentation
 ├── .specify/                # Constitution and templates
 ├── specs/                   # Design specifications
