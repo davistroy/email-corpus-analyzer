@@ -90,6 +90,7 @@ Extract → Analyze → Suggest → Review → Rules → Categorize → Apply
 | `rules generate` | Auto-generate rules from approved categories |
 | `rules test` | Dry-run rules against corpus with coverage report |
 | `rules show` | Display current rules |
+| `rules edit` | Edit rules interactively (TUI with live match preview) |
 | `categorize` | Email-by-email categorization using rules |
 | `categorize --report` | Generate coverage analysis report |
 | `categorize --resolve` | Resolve multi-match conflicts (--strategy priority\|specificity\|historical) |
@@ -118,7 +119,8 @@ Extract → Analyze → Suggest → Review → Rules → Categorize → Apply
 | `--quiet` | Suppress INFO output |
 | `--json` | JSON output for automation |
 | `--config` | Custom config file path |
-| `--dry-run` | Preview without executing |
+
+**Per-command flags:** `--dry-run` is available on most commands (extract, analyze, suggest, review, pipeline, categorize, classify, apply, migrate, train) but is not a global flag.
 
 ### Output Files
 
@@ -140,7 +142,7 @@ Default output: `~/data/outputs/` (configurable via `--output-dir` or config fil
 | `~/.email-analyzer/action_log.jsonl` | Action audit trail (legacy, migrated to SQLite) |
 | `~/.email-analyzer/notifications.jsonl` | Notification history |
 | `~/.email-analyzer/scheduler_state.json` | Scheduler state (next/last run) |
-| `~/.email-analyzer/config.yaml` | Global configuration |
+| `~/.config/email-analyzer/config.yaml` | Global configuration (Linux/Mac; `%APPDATA%/email-analyzer/` on Windows) |
 | `~/.email-analyzer/models/setfit/` | Saved SetFit model and metadata |
 
 ## Classification System
@@ -217,7 +219,7 @@ Primary storage is SQLite at `~/.email-analyzer/email_analyzer.db` with WAL mode
 Configuration via YAML files with precedence: defaults < global < project < CLI args
 
 ```yaml
-# ~/.email-analyzer/config.yaml or ./.email-analyzer.yaml
+# ~/.config/email-analyzer/config.yaml or ./.email-analyzer.yaml
 user_email: "user@example.com"
 output_dir: "~/data/outputs"
 analyze:
@@ -256,7 +258,7 @@ scheduler:
   enabled: false
   interval_hours: 24
   run_at: "02:00"                  # HH:MM format
-  tasks: [extract, analyze, categorize]
+  tasks: [extract, analyze, categorize, move]
 monitoring:
   drift_threshold: 0.15
   volume_anomaly_stddev: 2.0

@@ -158,7 +158,7 @@ Migration is non-destructive (source files preserved) and idempotent (safe to ru
 The system learns from user corrections:
 
 1. User corrects a misclassification
-2. Correction stored with temporal decay weighting (~70-day half-life)
+2. Correction stored with temporal decay weighting (~90-day half-life)
 3. Uncertain and disagreement emails are surfaced for review (active learning)
 4. Per-category accuracy is tracked; retraining triggers when correction rate exceeds threshold
 5. SetFit model is retrained on accumulated corrections
@@ -310,6 +310,7 @@ pytest
 # Run specific test suite
 pytest tests/unit/                    # Unit tests only
 pytest tests/contract/                # Contract tests only
+pytest tests/integration/             # Integration tests only
 pytest -k "test_name"                 # Run specific test by name
 
 # Generate HTML coverage report
@@ -366,7 +367,7 @@ email-corpus-analyzer/
 ├── tests/
 │   ├── contract/            # Contract tests
 │   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests (4252 tests)
+│   └── unit/                # Unit tests (~4049 tests)
 ├── docs/                    # Documentation
 ├── .specify/                # Constitution and templates
 ├── specs/                   # Design specifications
