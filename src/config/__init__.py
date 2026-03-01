@@ -20,8 +20,10 @@ from src.config.models import (
     AnalyzeConfig,
     AppConfig,
     ExtractConfig,
+    MonitoringConfig,
     PipelineConfig,
     ReviewConfig,
+    SchedulerConfig,
     SuggestConfig,
     merge_configs,
 )
@@ -31,8 +33,10 @@ __all__ = [
     "AppConfig",
     "AnalyzeConfig",
     "ExtractConfig",
+    "MonitoringConfig",
     "PipelineConfig",
     "ReviewConfig",
+    "SchedulerConfig",
     "SuggestConfig",
     "merge_configs",
     # Loader

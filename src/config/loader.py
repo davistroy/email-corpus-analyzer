@@ -239,6 +239,50 @@ pipeline:
 
   # Skip cleanup of intermediate files
   no_cleanup: false
+
+# Scheduler Settings (Phase 6 - Automated Processing)
+# ---------------------------------------------------
+scheduler:
+  # Enable scheduled automated processing
+  enabled: false
+
+  # Hours between scheduled runs (1-168)
+  interval_hours: 24
+
+  # Time of day to run (HH:MM, 24-hour format)
+  run_at: "02:00"
+
+  # Ordered list of tasks to run: extract, analyze, categorize, move
+  tasks:
+    - extract
+    - analyze
+    - categorize
+    - move
+
+  # Automatically apply rules to new emails without review
+  auto_categorize: false
+
+  # Minimum new uncategorized emails before sending notification
+  notification_threshold: 10
+
+# Monitoring Settings (Phase 6 - Change Detection)
+# -------------------------------------------------
+monitoring:
+  # Category match rate drop threshold to trigger drift alert (0.01-1.0)
+  drift_threshold: 0.15
+
+  # Standard deviations above mean volume to flag as anomaly (>0, max 10)
+  volume_anomaly_stddev: 2.0
+
+  # Alert delivery channels: desktop, log, email
+  alert_channels:
+    - log
+
+  # Hours between monitoring checks (1-168)
+  check_interval_hours: 6
+
+  # Minimum emails in a new cluster before suggesting a new category
+  new_cluster_threshold: 10
 """
     return template  # noqa: RET504
 
