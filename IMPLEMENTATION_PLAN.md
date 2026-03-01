@@ -806,32 +806,31 @@ Implement `EnsembleClassifier(BaseClassifier)` that chains multiple classifiers 
 
 ---
 
-#### 6.3 Create Training Pipeline CLI Command
-**Status: PENDING**
+#### 6.3 Create Training Pipeline CLI Command ✅ Completed 2026-02-28
+**Status: COMPLETE 2026-02-28**
 **Recommendation Ref:** N4
 **Files Affected:**
 - `src/cli/commands/train.py` (create)
-- `src/cli/parsers.py` (modify)
-- `src/cli/__main__.py` (modify)
+- `src/cli/__init__.py` (modify)
 - `tests/unit/test_train_cli.py` (create)
 
 **Description:**
 Add `python -m src.cli train` command that fine-tunes the local model on accumulated corrections. Reports: number of corrections per category, training accuracy, model version. Supports `--min-examples` (minimum per class, default 8), `--model-type` (setfit or modernbert), and `--output` (model save path).
 
 **Tasks:**
-1. [ ] Create `src/cli/commands/train.py` with argument parser and command handler
-2. [ ] Load corrections from `CorrectionStore`, group by category
-3. [ ] Filter categories with fewer than `--min-examples` corrections
-4. [ ] Train SetFit model on filtered corrections
-5. [ ] Save model to configured path with version metadata
-6. [ ] Report training results: examples per category, accuracy, model path
-7. [ ] Write tests for CLI argument parsing and training flow (mocked model)
+1. [x] Create `src/cli/commands/train.py` with argument parser and command handler
+2. [x] Load corrections from `CorrectionStore`, group by category
+3. [x] Filter categories with fewer than `--min-examples` corrections
+4. [x] Train SetFit model on filtered corrections
+5. [x] Save model to configured path with version metadata
+6. [x] Report training results: examples per category, accuracy, model path
+7. [x] Write tests for CLI argument parsing and training flow (mocked model)
 
 **Acceptance Criteria:**
-- [ ] `python -m src.cli train --help` shows all options
-- [ ] Training skips categories with insufficient examples (with warning)
-- [ ] Model is saved with version metadata
-- [ ] Training results are clearly reported
+- [x] `python -m src.cli train --help` shows all options
+- [x] Training skips categories with insufficient examples (with warning)
+- [x] Model is saved with version metadata
+- [x] Training results are clearly reported
 
 ---
 

@@ -17,6 +17,7 @@ Commands:
   scheduler  - Manage scheduled automated processing (setup, run, status, disable)
   notifications - View, clear, or test notification alerts
   migrate    - Migrate JSON data to SQLite database
+  train      - Fine-tune local model on accumulated corrections
 
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
@@ -50,6 +51,7 @@ from src.cli.commands.review import auto_approve_categories, build_review_parser
 from src.cli.commands.rules import build_rules_parser, cmd_rules
 from src.cli.commands.scheduler import build_scheduler_parser, cmd_scheduler
 from src.cli.commands.suggest import build_suggest_parser, cmd_suggest
+from src.cli.commands.train import build_train_parser, cmd_train
 from src.cli.formatters import output_json
 from src.cli.parsers import (
     _CONFIG_MAPPINGS,
@@ -90,6 +92,7 @@ __all__ = [
     "cmd_scheduler",
     "cmd_notifications",
     "cmd_migrate",
+    "cmd_train",
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
@@ -178,6 +181,7 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["scheduler"] = build_scheduler_parser(subparsers)
     SUBPARSERS["notifications"] = build_notifications_parser(subparsers)
     SUBPARSERS["migrate"] = build_migrate_parser(subparsers)
+    SUBPARSERS["train"] = build_train_parser(subparsers)
 
     return parser
 
@@ -202,7 +206,7 @@ def main() -> int:
         logging.getLogger().setLevel(logging.ERROR)
 
     # Load configuration from files (unless running config or migrate command)
-    if args.command not in ("config", "migrate"):
+    if args.command not in ("config", "migrate", "train"):
         try:
             config = load_config(config_path=args.config)
             # Apply config defaults to args where CLI didn't specify
@@ -232,6 +236,7 @@ def main() -> int:
         "scheduler": cmd_scheduler,
         "notifications": cmd_notifications,
         "migrate": cmd_migrate,
+        "train": cmd_train,
     }
 
     handler = command_handlers.get(args.command)
