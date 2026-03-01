@@ -9,12 +9,25 @@ Primary category is the highest-priority matching rule's action target.
 Secondary categories are all other matching rule action targets (deduplicated).
 Confidence is derived from rule priority, normalized to 0-1 range.
 Uncategorized emails (no matching rules) use the EmailCategorization.uncategorized() factory.
+
+Phase 1, Item 1.3: Hybrid classification support. When an optional BaseClassifier
+is provided, it serves as a fallback for emails that no rules match. Source tracking
+distinguishes rule-based ("rule:<rule_id>") from classifier-based ("classifier:<name>")
+assignments.
+
+Phase 5, Item 5.4: Classification recording. When an optional Database is provided,
+every non-uncategorized classification is recorded in the classifications table for
+model tracking and feedback loop support.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
+from src.classifiers.base import BaseClassifier
 from src.models.categorization import (
     CategorizationReport,
     CategoryAssignment,
@@ -24,6 +37,11 @@ from src.models.corpus import Corpus
 from src.models.email import Email
 from src.models.rule import CategoryRule, RuleSet
 from src.rules.engine import RuleEngine
+
+if TYPE_CHECKING:
+    from src.storage.database import Database
+
+logger = logging.getLogger(__name__)
 
 # Baseline confidence for a zero-priority rule that still matched.
 # Ensures even priority=0 produces a positive confidence signal.
@@ -60,10 +78,34 @@ class EmailCategorizer:
     Uses the Phase 3 RuleEngine for condition evaluation.  Produces
     EmailCategorization results with primary/secondary categories and
     confidence scores derived from rule priority.
+
+    Optionally accepts a BaseClassifier for hybrid classification:
+    when rules return no match and a classifier is available, the
+    classifier is invoked as a fallback.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        classifier: BaseClassifier | None = None,
+        classifier_threshold: float = 0.6,
+        database: Database | None = None,
+    ) -> None:
+        """Initialize the categorizer.
+
+        Args:
+            classifier: Optional classifier for fallback when rules return
+                no match.  When None, unmatched emails are marked uncategorized.
+            classifier_threshold: Minimum confidence to accept a classifier
+                result.  Results below this threshold are treated as
+                uncategorized.  Default is 0.6.
+            database: Optional Database instance for recording classifications.
+                When provided, every non-uncategorized result is saved to the
+                classifications table for model tracking and feedback support.
+        """
         self._engine = RuleEngine()
+        self._classifier = classifier
+        self._classifier_threshold = classifier_threshold
+        self._database = database
 
     # ------------------------------------------------------------------
     # Single-email categorization
@@ -76,6 +118,12 @@ class EmailCategorizer:
     ) -> EmailCategorization:
         """Categorize a single email against a rule set.
 
+        Rules are evaluated first.  If rules match, the result is returned
+        immediately (classifier is NOT invoked).  If no rules match and a
+        classifier is available, the classifier is invoked as fallback.
+        If the classifier result is below the confidence threshold, or if
+        the classifier raises an error, the email is marked uncategorized.
+
         Args:
             email: The email to categorize.
             rule_set: The set of rules to evaluate.
@@ -83,13 +131,15 @@ class EmailCategorizer:
         Returns:
             An EmailCategorization with primary category (highest-priority
             match), secondary categories (remaining matches, deduplicated),
-            and matched rule IDs.  If no rules match, returns an
-            uncategorized result.
+            and matched rule IDs.  If no rules match and no classifier is
+            available (or classifier fails), returns an uncategorized result.
         """
         matched_rules: list[CategoryRule] = self._engine.evaluate_all(rule_set, email)
 
         if not matched_rules:
-            return EmailCategorization.uncategorized(email_id=email.id)
+            result = self._classify_with_fallback(email, rule_set)
+            self._record_classification(result)
+            return result
 
         # Build assignments from matched rules, sorted by priority (highest first).
         # evaluate_all already returns sorted by priority descending.
@@ -98,7 +148,7 @@ class EmailCategorizer:
             assignment = CategoryAssignment(
                 category_name=rule.action.target,
                 confidence=_priority_to_confidence(rule.priority),
-                source=rule.rule_id,
+                source=f"rule:{rule.rule_id}",
             )
             assignments.append((assignment, rule.rule_id))
 
@@ -115,12 +165,133 @@ class EmailCategorizer:
                 seen_category_names.add(assignment.category_name)
                 secondaries.append(assignment)
 
-        return EmailCategorization(
+        result = EmailCategorization(
             email_id=email.id,
             primary_category=primary,
             secondary_categories=secondaries,
             matched_rules=matched_rule_ids,
         )
+        self._record_classification(result)
+        return result
+
+    # ------------------------------------------------------------------
+    # Classifier fallback
+    # ------------------------------------------------------------------
+
+    def _classify_with_fallback(
+        self,
+        email: Email,
+        rule_set: RuleSet,
+    ) -> EmailCategorization:
+        """Attempt classifier fallback for an email that matched no rules.
+
+        If no classifier is configured, returns uncategorized immediately.
+        If the classifier raises any exception, the error is logged and the
+        email is returned as uncategorized (resilient error handling per
+        constitutional principle #6).
+
+        Args:
+            email: The email that matched no rules.
+            rule_set: The rule set (used to extract category names for the
+                classifier).
+
+        Returns:
+            EmailCategorization from the classifier result, or uncategorized.
+        """
+        if self._classifier is None:
+            return EmailCategorization.uncategorized(email_id=email.id)
+
+        # Extract unique category names from rule targets for the classifier
+        categories = list({rule.action.target for rule in rule_set.rules})
+
+        try:
+            result = self._classifier.classify(email, categories)
+        except Exception:
+            logger.warning(
+                "Classifier '%s' failed for email %s; falling back to uncategorized",
+                self._classifier.name,
+                email.id,
+                exc_info=True,
+            )
+            return EmailCategorization.uncategorized(email_id=email.id)
+
+        # Check confidence threshold
+        if result.confidence < self._classifier_threshold:
+            logger.debug(
+                "Classifier confidence %.2f below threshold %.2f for email %s; "
+                "marking uncategorized",
+                result.confidence,
+                self._classifier_threshold,
+                email.id,
+            )
+            return EmailCategorization.uncategorized(email_id=email.id)
+
+        # Convert ClassificationResult to EmailCategorization
+        primary = CategoryAssignment(
+            category_name=result.category_name,
+            confidence=result.confidence,
+            source=f"classifier:{self._classifier.name}",
+        )
+        return EmailCategorization(
+            email_id=email.id,
+            primary_category=primary,
+        )
+
+    # ------------------------------------------------------------------
+    # Classification Recording (Phase 5, Item 5.4)
+    # ------------------------------------------------------------------
+
+    def _record_classification(self, categorization: EmailCategorization) -> None:
+        """Record a classification result in the database for model tracking.
+
+        Only records non-uncategorized results. Errors are logged and
+        swallowed to avoid breaking the categorization pipeline (resilient
+        error handling per constitutional principle #6).
+
+        Args:
+            categorization: The categorization result to record.
+        """
+        if self._database is None:
+            return
+
+        if categorization.is_uncategorized:
+            return
+
+        primary = categorization.primary_category
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Extract model_version from source if it's a classifier result
+        model_version: str | None = None
+        if primary.source and "classifier:" in primary.source:
+            # Source format: "classifier:<name>" — the name may contain model info
+            model_version = primary.source.replace("classifier:", "")
+
+        try:
+            self._database.execute(
+                "INSERT INTO classifications "
+                "(email_id, category_name, confidence, source, model_version, classified_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    categorization.email_id,
+                    primary.category_name,
+                    primary.confidence,
+                    primary.source or "unknown",
+                    model_version,
+                    now,
+                ),
+            )
+            logger.debug(
+                "Recorded classification: email=%s, category=%s, source=%s",
+                categorization.email_id,
+                primary.category_name,
+                primary.source,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to record classification for email %s; continuing",
+                categorization.email_id,
+                exc_info=True,
+            )
 
     # ------------------------------------------------------------------
     # Batch corpus categorization

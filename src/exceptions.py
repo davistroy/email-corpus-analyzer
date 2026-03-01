@@ -359,6 +359,106 @@ class ActionError(EmailAnalyzerError):
         super().__init__(message=message, recovery_hint=hint, context=context or {})
 
 
+# =============================================================================
+# Classification-related exceptions (Phase 1)
+# =============================================================================
+
+
+class ClassificationError(EmailAnalyzerError):
+    """
+    Raised when email classification fails.
+
+    Base class for all classification-related exceptions. Covers failures
+    in rule-based, LLM, or ensemble classifiers.
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize classification error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context
+        """
+        hint = recovery_hint or (
+            "Check your classifier configuration and try again. Use --verbose for more details."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+class ClassifierConnectionError(ClassificationError):
+    """
+    Raised when the classifier service is unreachable.
+
+    Occurs when Ollama is not running, a cloud API endpoint is down,
+    or network connectivity prevents reaching the classifier service.
+    """
+
+    def __init__(
+        self,
+        provider: str,
+        url: str,
+        recovery_hint: str | None = None,
+        context: dict[str, Any] | None = None,
+    ):
+        """
+        Initialize classifier connection error.
+
+        Args:
+            provider: Classifier provider name (e.g., "ollama", "claude", "openai")
+            url: URL that was unreachable
+            recovery_hint: Custom recovery hint
+            context: Additional context (merged with provider/url)
+        """
+        message = f"Cannot connect to {provider} classifier at {url}"
+        hint = recovery_hint or (
+            f"Check that {provider} is running and accessible at {url}. "
+            f"Verify your network connection and classifier configuration."
+        )
+        merged_context = {"provider": provider, "url": url}
+        if context:
+            merged_context.update(context)
+        super().__init__(message=message, recovery_hint=hint, context=merged_context)
+
+
+class ClassifierResponseError(ClassificationError):
+    """
+    Raised when the classifier returns an invalid or unparseable response.
+
+    Occurs when the LLM produces output that cannot be parsed into
+    a valid ClassificationResult, such as malformed JSON, missing
+    required fields, or unexpected response format.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        raw_response: str,
+        recovery_hint: str | None = None,
+        context: dict[str, Any] | None = None,
+    ):
+        """
+        Initialize classifier response error.
+
+        Args:
+            message: Error description
+            raw_response: The raw response text that could not be parsed
+            recovery_hint: Custom recovery hint
+            context: Additional context (merged with raw_response)
+        """
+        hint = recovery_hint or (
+            "The classifier returned an unparseable response. "
+            "Try a different model or adjust the prompt configuration."
+        )
+        merged_context = {"raw_response": raw_response}
+        if context:
+            merged_context.update(context)
+        super().__init__(message=message, recovery_hint=hint, context=merged_context)
+
+
 class FolderActionError(ActionError):
     """
     Raised when folder creation or management fails.
@@ -381,5 +481,61 @@ class FolderActionError(ActionError):
         hint = recovery_hint or (
             "Check that your account has permission to create folders/labels. "
             "Verify the folder name is valid and doesn't exceed provider limits."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+# =============================================================================
+# Storage-related exceptions (Phase 3)
+# =============================================================================
+
+
+class StorageError(EmailAnalyzerError):
+    """
+    Raised when a storage/database operation fails.
+
+    Base class for all storage-related exceptions. Covers SQLite connection
+    failures, query errors, and data integrity issues.
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize storage error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context (e.g., db_path, query)
+        """
+        hint = recovery_hint or (
+            "Check the database file permissions and disk space. Use --verbose for more details."
+        )
+        super().__init__(message=message, recovery_hint=hint, context=context or {})
+
+
+class DatabaseSchemaError(StorageError):
+    """
+    Raised when the database schema is invalid or a migration fails.
+
+    Occurs when the schema version is unexpected, a migration script
+    fails, or the database file is from an incompatible version.
+    """
+
+    def __init__(
+        self, message: str, recovery_hint: str | None = None, context: dict[str, Any] | None = None
+    ):
+        """
+        Initialize database schema error.
+
+        Args:
+            message: Error description
+            recovery_hint: Custom recovery hint
+            context: Additional context (e.g., current_version, target_version)
+        """
+        hint = recovery_hint or (
+            "The database schema may be from an incompatible version. "
+            "Try backing up and deleting the database file, then re-running migration."
         )
         super().__init__(message=message, recovery_hint=hint, context=context or {})

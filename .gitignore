@@ -77,3 +77,4 @@ package-lock.json
 
 # Mock artifacts
 MagicMock/
+.implement-plan-state.json

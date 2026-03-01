@@ -5,6 +5,10 @@ Tests email categorization using rules: single email categorization,
 batch corpus categorization, priority-based primary/secondary assignment,
 confidence normalization, uncategorized handling, and progress callbacks.
 
+Also tests hybrid classification (Phase 1, Item 1.3): optional classifier
+fallback when rules return no match, source tracking, classifier threshold,
+and error handling.
+
 TDD: These tests are written first, implementation follows.
 """
 
@@ -12,6 +16,13 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 from src.categorizer.categorizer import EmailCategorizer
+from src.classifiers.base import (
+    BaseClassifier,
+    ClassificationContext,
+    ClassificationResult,
+    ClassifierCapability,
+)
+from src.exceptions import ClassificationError
 from src.models.categorization import (
     CategorizationReport,
     EmailCategorization,
@@ -464,7 +475,7 @@ class TestConfidenceScoring:
         categorizer = EmailCategorizer()
         result = categorizer.categorize_email(email, rule_set)
 
-        assert result.primary_category.source == "rule_src_check"
+        assert result.primary_category.source == "rule:rule_src_check"
 
 
 # =============================================================================
@@ -867,3 +878,505 @@ class TestEdgeCases:
         # Non-CATEGORIZE rules should still assign the target as category
         assert result.primary_category.category_name == "Important"
         assert result.is_uncategorized is False
+
+
+# =============================================================================
+# Helpers for Hybrid Classification Tests
+# =============================================================================
+
+
+class _StubClassifier(BaseClassifier):
+    """A concrete classifier stub for testing hybrid categorization."""
+
+    def __init__(
+        self,
+        result: ClassificationResult | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self._result = result
+        self._error = error
+        self.classify_calls: list[tuple[Email, list[str]]] = []
+
+    def classify(
+        self,
+        email: Email,
+        categories: list[str],
+        context: ClassificationContext | None = None,
+    ) -> ClassificationResult:
+        self.classify_calls.append((email, categories))
+        if self._error is not None:
+            raise self._error
+        assert self._result is not None
+        return self._result
+
+    @property
+    def name(self) -> str:
+        return "stub-classifier"
+
+    @property
+    def capabilities(self) -> set[ClassifierCapability]:
+        return {ClassifierCapability.ZERO_SHOT}
+
+
+def _make_classifier_result(
+    category_name: str = "LLM Category",
+    confidence: float = 0.85,
+    source: str = "llm:stub",
+    reasoning: str | None = "Stub reasoning",
+) -> ClassificationResult:
+    return ClassificationResult(
+        category_name=category_name,
+        confidence=confidence,
+        source=source,
+        reasoning=reasoning,
+    )
+
+
+# =============================================================================
+# Hybrid Classification — Construction
+# =============================================================================
+
+
+class TestHybridCategorizerConstruction:
+    """Test EmailCategorizer construction with optional classifier."""
+
+    def test_create_categorizer_without_classifier(self):
+        """Test backward-compatible construction without a classifier."""
+        categorizer = EmailCategorizer()
+        assert categorizer._classifier is None
+
+    def test_create_categorizer_with_classifier(self):
+        """Test construction with a classifier instance."""
+        stub = _StubClassifier(result=_make_classifier_result())
+        categorizer = EmailCategorizer(classifier=stub)
+        assert categorizer._classifier is stub
+
+    def test_create_categorizer_with_custom_threshold(self):
+        """Test construction with a custom classifier threshold."""
+        stub = _StubClassifier(result=_make_classifier_result())
+        categorizer = EmailCategorizer(classifier=stub, classifier_threshold=0.8)
+        assert categorizer._classifier_threshold == 0.8
+
+    def test_default_classifier_threshold_is_0_6(self):
+        """Test the default classifier confidence threshold is 0.6."""
+        categorizer = EmailCategorizer()
+        assert categorizer._classifier_threshold == 0.6
+
+
+# =============================================================================
+# Hybrid Classification — Classifier Fallback
+# =============================================================================
+
+
+class TestClassifierFallback:
+    """Test classifier invocation when rules return no match."""
+
+    def test_no_rules_match_with_classifier_uses_classifier(self):
+        """When rules return no match, classifier should be invoked as fallback."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule = _make_rule(
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        classifier_result = _make_classifier_result(
+            category_name="LLM Newsletters",
+            confidence=0.9,
+            source="llm:stub",
+        )
+        stub = _StubClassifier(result=classifier_result)
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        # Classifier should have been called
+        assert len(stub.classify_calls) == 1
+        # Result should use classifier's category
+        assert result.primary_category.category_name == "LLM Newsletters"
+        assert result.primary_category.confidence == 0.9
+        assert result.is_uncategorized is False
+
+    def test_no_rules_match_no_classifier_returns_uncategorized(self):
+        """Without classifier, no rule match still returns uncategorized (backward compat)."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule = _make_rule(
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        categorizer = EmailCategorizer()
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.is_uncategorized is True
+        assert result.primary_category.category_name == "Uncategorized"
+
+    def test_rules_match_classifier_not_invoked(self):
+        """When rules match, classifier should NOT be invoked."""
+        email = _make_email()
+        rule = _make_rule(
+            rule_id="rule_match",
+            priority=10,
+            action_target="Rule Category",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        stub = _StubClassifier(result=_make_classifier_result())
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        # Classifier should NOT have been called
+        assert len(stub.classify_calls) == 0
+        # Result should come from rules
+        assert result.primary_category.category_name == "Rule Category"
+
+    def test_classifier_result_below_threshold_returns_uncategorized(self):
+        """Classifier result below threshold should be treated as uncategorized."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule = _make_rule(
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        low_confidence_result = _make_classifier_result(
+            category_name="Low Confidence Cat",
+            confidence=0.3,  # Below default threshold of 0.6
+        )
+        stub = _StubClassifier(result=low_confidence_result)
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        # Should be uncategorized because confidence < threshold
+        assert result.is_uncategorized is True
+        assert result.primary_category.category_name == "Uncategorized"
+
+    def test_classifier_result_at_threshold_is_accepted(self):
+        """Classifier result exactly at threshold should be accepted."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule_set = _make_rule_set()
+
+        at_threshold_result = _make_classifier_result(
+            category_name="Threshold Cat",
+            confidence=0.6,  # Exactly at default threshold
+        )
+        stub = _StubClassifier(result=at_threshold_result)
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.primary_category.category_name == "Threshold Cat"
+        assert result.is_uncategorized is False
+
+    def test_classifier_result_with_custom_threshold(self):
+        """Custom threshold should be respected for classifier results."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule_set = _make_rule_set()
+
+        result_data = _make_classifier_result(
+            category_name="Custom Threshold Cat",
+            confidence=0.75,
+        )
+        stub = _StubClassifier(result=result_data)
+        # Threshold of 0.8 means 0.75 is below threshold
+        categorizer = EmailCategorizer(classifier=stub, classifier_threshold=0.8)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.is_uncategorized is True
+
+    def test_classifier_receives_category_names_from_rule_set(self):
+        """Classifier should receive category names extracted from rule set targets."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule1 = _make_rule(
+            rule_id="rule_a",
+            action_target="Newsletters",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule2 = _make_rule(
+            rule_id="rule_b",
+            action_target="Shopping",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="shop.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule1, rule2)
+
+        stub = _StubClassifier(result=_make_classifier_result())
+        categorizer = EmailCategorizer(classifier=stub)
+        categorizer.categorize_email(email, rule_set)
+
+        # The classifier should have been called with the category names from the rules
+        _, categories = stub.classify_calls[0]
+        assert "Newsletters" in categories
+        assert "Shopping" in categories
+
+
+# =============================================================================
+# Hybrid Classification — Source Tracking
+# =============================================================================
+
+
+class TestSourceTracking:
+    """Test source field correctly identifies rule vs classifier origin."""
+
+    def test_rule_match_source_prefixed_with_rule(self):
+        """Rule match source should be prefixed with 'rule:'."""
+        email = _make_email()
+        rule = _make_rule(
+            rule_id="rule_newsletters",
+            priority=10,
+            action_target="Newsletters",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        stub = _StubClassifier(result=_make_classifier_result())
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.primary_category.source is not None
+        assert result.primary_category.source.startswith("rule:")
+
+    def test_classifier_match_source_prefixed_with_classifier(self):
+        """Classifier match source should be prefixed with 'classifier:'."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule_set = _make_rule_set()
+
+        stub = _StubClassifier(
+            result=_make_classifier_result(
+                category_name="LLM Cat",
+                confidence=0.9,
+                source="llm:stub",
+            )
+        )
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.primary_category.source is not None
+        assert result.primary_category.source.startswith("classifier:")
+
+    def test_rule_source_contains_rule_id(self):
+        """Rule source should contain the actual rule ID."""
+        email = _make_email()
+        rule = _make_rule(
+            rule_id="my_custom_rule_42",
+            priority=10,
+            action_target="Test",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        categorizer = EmailCategorizer()
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.primary_category.source == "rule:my_custom_rule_42"
+
+    def test_classifier_source_contains_classifier_name(self):
+        """Classifier source should contain the classifier's name."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule_set = _make_rule_set()
+
+        stub = _StubClassifier(result=_make_classifier_result(confidence=0.9))
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.primary_category.source == "classifier:stub-classifier"
+
+
+# =============================================================================
+# Hybrid Classification — Error Handling
+# =============================================================================
+
+
+class TestClassifierErrorHandling:
+    """Test graceful handling of classifier errors."""
+
+    def test_classifier_error_falls_back_to_uncategorized(self):
+        """When classifier raises ClassificationError, email should be uncategorized."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule_set = _make_rule_set()
+
+        stub = _StubClassifier(error=ClassificationError("Classifier unavailable"))
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.is_uncategorized is True
+
+    def test_classifier_unexpected_error_falls_back_to_uncategorized(self):
+        """When classifier raises unexpected Exception, email should be uncategorized."""
+        email = _make_email(sender_domain="nomatch.com", sender_email="x@nomatch.com")
+        rule_set = _make_rule_set()
+
+        stub = _StubClassifier(error=RuntimeError("Unexpected boom"))
+        categorizer = EmailCategorizer(classifier=stub)
+        result = categorizer.categorize_email(email, rule_set)
+
+        assert result.is_uncategorized is True
+
+
+# =============================================================================
+# Hybrid Classification — Batch Categorization
+# =============================================================================
+
+
+class TestHybridBatchCategorization:
+    """Test categorize_corpus with classifier fallback."""
+
+    def test_corpus_mixed_rules_and_classifier(self):
+        """Corpus with some rule matches and some classifier fallbacks."""
+        emails = [
+            _make_email(
+                id="email_rule_match",
+                sender_domain="example.com",
+                sender_email="a@example.com",
+            ),
+            _make_email(
+                id="email_classifier",
+                sender_domain="other.com",
+                sender_email="b@other.com",
+            ),
+        ]
+        corpus = _make_corpus(emails)
+        rule = _make_rule(
+            rule_id="rule_domain",
+            action_target="Example Emails",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        classifier_result = _make_classifier_result(
+            category_name="LLM Fallback",
+            confidence=0.85,
+        )
+        stub = _StubClassifier(result=classifier_result)
+        categorizer = EmailCategorizer(classifier=stub)
+        report = categorizer.categorize_corpus(corpus, rule_set)
+
+        assert report.total_emails == 2
+        assert report.categorized_count == 2
+        assert report.uncategorized_count == 0
+        assert report.coverage_percentage == 100.0
+
+        # Verify first email used rules
+        rule_result = next(c for c in report.categorizations if c.email_id == "email_rule_match")
+        assert rule_result.primary_category.category_name == "Example Emails"
+        assert rule_result.primary_category.source is not None
+        assert rule_result.primary_category.source.startswith("rule:")
+
+        # Verify second email used classifier
+        clf_result = next(c for c in report.categorizations if c.email_id == "email_classifier")
+        assert clf_result.primary_category.category_name == "LLM Fallback"
+        assert clf_result.primary_category.source is not None
+        assert clf_result.primary_category.source.startswith("classifier:")
+
+    def test_classifier_only_called_for_unmatched_emails(self):
+        """Classifier should only be invoked for emails that no rules match."""
+        emails = [
+            _make_email(
+                id="matched",
+                sender_domain="example.com",
+                sender_email="a@example.com",
+            ),
+            _make_email(
+                id="unmatched_1",
+                sender_domain="other1.com",
+                sender_email="b@other1.com",
+            ),
+            _make_email(
+                id="unmatched_2",
+                sender_domain="other2.com",
+                sender_email="c@other2.com",
+            ),
+        ]
+        corpus = _make_corpus(emails)
+        rule = _make_rule(
+            action_target="Matched",
+            conditions=[
+                _make_condition(
+                    field=ConditionField.SENDER_DOMAIN,
+                    operator=ConditionOperator.EQUALS,
+                    value="example.com",
+                )
+            ],
+        )
+        rule_set = _make_rule_set(rule)
+
+        stub = _StubClassifier(result=_make_classifier_result(confidence=0.85))
+        categorizer = EmailCategorizer(classifier=stub)
+        categorizer.categorize_corpus(corpus, rule_set)
+
+        # Classifier should have been called exactly twice (for the two unmatched)
+        assert len(stub.classify_calls) == 2
+
+    def test_classifier_categories_used_tracked_in_report(self):
+        """Classifier-assigned categories should appear in categories_used."""
+        emails = [
+            _make_email(
+                id="email_clf",
+                sender_domain="other.com",
+                sender_email="a@other.com",
+            ),
+        ]
+        corpus = _make_corpus(emails)
+        rule_set = _make_rule_set()  # No rules at all
+
+        stub = _StubClassifier(
+            result=_make_classifier_result(
+                category_name="LLM Category",
+                confidence=0.9,
+            )
+        )
+        categorizer = EmailCategorizer(classifier=stub)
+        report = categorizer.categorize_corpus(corpus, rule_set)
+
+        assert "LLM Category" in report.categories_used
+        assert report.categories_used["LLM Category"] == 1
