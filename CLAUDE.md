@@ -13,6 +13,7 @@ pip install -e ".[dev]"  # Install with dev dependencies
 pytest                                  # All 3463 tests with coverage
 pytest tests/unit/                      # Unit tests only
 pytest tests/contract/                  # Contract tests only
+pytest tests/integration/               # Integration tests only
 pytest tests/unit/test_html_parser.py   # Single test file
 pytest -k "test_name"                   # Run specific test by name
 pytest --cov=src --cov-report=html      # Generate HTML coverage report
@@ -21,38 +22,10 @@ pytest --cov=src --cov-report=html      # Generate HTML coverage report
 ruff check src/
 ruff check src/ --fix           # Auto-fix issues
 
-# Run CLI commands
+# Run CLI (see CLI Commands table below for full command list)
 python -m src.cli --help
-python -m src.cli --version
 python -m src.cli pipeline --user-email user@hotmail.com
 python -m src.cli pipeline --user-email user@gmail.com --source gmail
-python -m src.cli pipeline --user-email user@hotmail.com --source both --gmail-email user@gmail.com
-python -m src.cli extract --user-email user@hotmail.com
-python -m src.cli extract --user-email user@gmail.com --source gmail
-python -m src.cli analyze --auto-clusters
-python -m src.cli analyze --auto-clusters --cluster-viz
-python -m src.cli suggest
-python -m src.cli review
-python -m src.cli info
-python -m src.cli config show
-python -m src.cli export --format html
-python -m src.cli export --format outlook-rules
-python -m src.cli export --format gmail-filters
-python -m src.cli config validate
-python -m src.cli rules generate
-python -m src.cli rules test
-python -m src.cli rules show
-python -m src.cli categorize
-python -m src.cli categorize --report
-python -m src.cli categorize --resolve --strategy priority
-python -m src.cli apply folders --dry-run --source hotmail
-python -m src.cli apply move --dry-run
-python -m src.cli apply rules --dry-run --source gmail
-python -m src.cli apply rollback --since 2026-01-01
-python -m src.cli scheduler setup
-python -m src.cli scheduler status
-python -m src.cli notifications show
-python -m src.cli notifications test
 ```
 
 ## Architecture
@@ -65,125 +38,32 @@ Extract → Analyze → Suggest → Review → Rules → Categorize → Apply
                                           Scheduler → Monitor → Notify
 ```
 
-### Core Pipeline Modules
+### Core Modules
 
-- **`src/extractors/`** - Email extraction from M365/Hotmail and Gmail:
-  - `base_extractor.py` - BaseExtractor ABC with shared batch loop, checkpoint, error handling
-  - `graph_api_client.py` - Microsoft Graph API client with MSAL device code auth (supports server-side date filtering)
-  - `gmail_client.py` - Gmail API client with OAuth 2.0 authentication (recursive MIME extraction)
-  - `gmail_extractor.py` - Gmail extractor inheriting BaseExtractor
-  - `m365_extractor.py` - M365/Hotmail extractor inheriting BaseExtractor
-  - `html_parser.py` - HTML to plain text conversion for email bodies
-  - `checkpoint_manager.py` - Compact v2 checkpoint format (metadata-only, <1KB)
-  - Supports `--source hotmail|gmail|both` flag for multi-source extraction
+| Module | Purpose | Key Abstractions |
+|--------|---------|-----------------|
+| `src/extractors/` | Email extraction from M365/Hotmail and Gmail | `BaseExtractor` ABC, `GraphApiClient` (MSAL device code), `GmailClient` (OAuth 2.0), `CheckpointManager` (v2 compact format) |
+| `src/analyzers/` | 5 core + 2 optional analyzers | `BaseAnalyzer` ABC, `SemanticAnalyzer` (sentence-transformers), `ClusterOptimizer` (elbow/silhouette), `ThreadAnalyzer` |
+| `src/generators/` | Category suggestion from analysis | `TemplateMatcher` (18 templates, word-boundary regex), `ConfidenceScorer` (log volume), `NameGenerator` (TF-IDF) |
+| `src/rules/` | Category rule system | `RuleEngine` (AND/OR, 8 operators, short-circuit), `RuleBuilder`, `RuleTester` (coverage, confusion matrix) |
+| `src/categorizer/` | Email-by-email categorization | `EmailCategorizer`, `ConflictResolver` (priority/specificity/historical), `CoverageReporter` |
+| `src/actions/` | Email action execution | `FolderManager`, `EmailMover` (batch + rollback), `RuleDeployer` (server-side rules), `ActionLogger` (JSONL audit) |
+| `src/automation/` | Scheduled processing and monitoring | `IncrementalProcessor`, `ChangeDetector` (drift/anomaly), `Scheduler` (Win Task Scheduler/crontab) |
+| `src/ui/` | TUI (Textual) and CLI review interface | `ReviewApp`, `ReviewState` (thread-safe reactive), undo/redo (Ctrl+Z/Y), widgets and dialogs |
+| `src/services/` | CLI-agnostic orchestration layer | `PipelineService`, `ExtractionService`, `AnalysisService`, `SuggestionService` |
+| `src/models/` | Pydantic v2 data models | `Email`, `Corpus`, `AnalysisResults`, `Category`, `ContentCluster`, `RuleSet`, `CategorizationReport` |
+| `src/learning/` | Feedback learning | `DecisionLogger` (JSONL), `PatternDetector` (90-day half-life decay) |
+| `src/exporters/` | Export formats | CSV (Excel-compatible), standalone HTML, Outlook rules, Gmail filters |
+| `src/cache/` | Performance | `EmbeddingCache` with model metadata versioning (auto-invalidation) |
+| `src/config/` | Configuration | Pydantic config models, YAML loader with precedence |
+| `src/preview/` | Dry-run estimators | Preview output for all commands |
+| `src/utils/` | Shared utilities | `PathConfig`, `FileManager`, logging, progress (tqdm), validators, text processing |
+| `src/exceptions.py` | Custom exception hierarchy | Recovery hints, typed errors (ExportError, ActionError, FolderActionError) |
+| `src/data/` | Data files | `templates.json` — 18 category templates (editable without code changes) |
 
-- **`src/analyzers/`** - 5 core + 2 optional analyzers inheriting from `BaseAnalyzer` ABC:
-  - `base.py` - Abstract base class for all analyzers
-  - `sender_analyzer.py` - Sender frequency, domain patterns
-  - `subject_analyzer.py` - Subject line patterns, prefixes
-  - `semantic_analyzer.py` - Content clustering via sentence-transformers
-  - `temporal_analyzer.py` - Time-based patterns
-  - `volume_analyzer.py` - Statistical metrics
-  - `hierarchical_analyzer.py` - Hierarchical clustering with scipy
-  - `cluster_optimizer.py` - Elbow/Silhouette methods with sigmoid scoring and corpus-scaled max_k
-  - `thread_analyzer.py` - Email thread/conversation grouping with subject-based fallback
+### Entry Point
 
-- **`src/generators/`** - Category suggestion from analysis results:
-  - `template_matcher.py` - Matches 18 predefined templates (word-boundary regex, no false positives)
-  - `confidence_scorer.py` - Logarithmic volume scoring, configurable weights
-  - `name_generator.py` - TF-IDF based name generation
-  - `category_generator.py` - Main generator with learning integration
-
-- **`src/rules/`** - Category rule system:
-  - `engine.py` - RuleEngine evaluates conditions against emails (AND/OR logic, 8 operators, short-circuit)
-  - `builder.py` - RuleBuilder auto-generates rules from approved categories and analysis results
-  - `tester.py` - RuleTester dry-runs rules against corpus (coverage, conflicts, confusion matrix)
-
-- **`src/categorizer/`** - Email-by-email categorization:
-  - `categorizer.py` - EmailCategorizer assigns primary/secondary categories via rules
-  - `conflict_resolver.py` - ConflictResolver with priority/specificity/historical strategies
-  - `coverage_reporter.py` - CoverageReporter detects uncategorized patterns, generates recommendations
-
-- **`src/actions/`** - Email action execution:
-  - `folder_manager.py` - FolderManager creates mailbox folders (M365 Graph API / Gmail Labels)
-  - `email_mover.py` - EmailMover batch-moves emails with rate limiting and rollback
-  - `rule_deployer.py` - RuleDeployer converts rules to server-side inbox rules/filters
-  - `action_logger.py` - ActionLogger append-only JSONL audit trail with rollback replay
-
-- **`src/automation/`** - Automated processing and monitoring:
-  - `incremental.py` - IncrementalProcessor extracts new emails, merges, reassigns clusters
-  - `change_detector.py` - ChangeDetector for drift scoring, volume anomalies, emerging topics
-  - `scheduler.py` - Scheduler with Windows Task Scheduler / crontab integration
-  - `notifications.py` - NotificationManager with console/log/desktop alert channels
-
-- **`src/ui/`** - User interface components:
-  - `category_review.py` - CLI review with learning support
-  - `tui/app.py` - Main ReviewApp (Textual-based TUI)
-  - `tui/state.py` - ReviewState centralized state management (thread-safe, reactive)
-  - `tui/utils.py` - Shared utilities (format_confidence_bar, truncation constants)
-  - `tui/commands.py` - Command definitions and key bindings
-  - `tui/commands_undo.py` - Command pattern undo/redo (Ctrl+Z/Y, 50-op stack)
-  - `tui/theme.py` - Theme colors, confidence colors, high-contrast mode, APP_CSS
-  - `tui/widgets/` - CategoryTable, DetailPanel, ActionBar, SearchInput, StatsPanel, ProgressBar
-  - `tui/dialogs/` - BulkActionDialog, MergeDialog, RenameDialog, RuleEditorDialog
-
-- **`src/services/`** - Service layer (CLI-agnostic orchestration):
-  - `extraction_service.py` - Multi-source extraction (hotmail/gmail/both) with corpus merge
-  - `analysis_service.py` - Runs all analyzers with progress callbacks
-  - `suggestion_service.py` - Category generation orchestration
-  - `pipeline_service.py` - Full workflow orchestration
-
-- **`src/exceptions.py`** - Custom exception hierarchy with recovery hints (includes ExportError, ActionError, FolderActionError)
-
-- **`src/learning/`** - Feedback learning system:
-  - `decision_logger.py` - Logs review decisions to JSONL
-  - `pattern_detector.py` - Detects recurring patterns with temporal decay (90-day half-life)
-
-- **`src/exporters/`** - Export formats:
-  - `csv_exporter.py` - CSV export with Excel compatibility
-  - `html_exporter.py` - Standalone HTML reports
-  - `rule_exporter.py` - Outlook and Gmail rule/filter export
-
-- **`src/cache/`** - Performance optimization:
-  - `embedding_cache.py` - Caches embeddings with model metadata versioning (auto-invalidation)
-
-- **`src/config/`** - Configuration system:
-  - `models.py` - Pydantic config models (includes SchedulerConfig, MonitoringConfig)
-  - `loader.py` - YAML config loading with precedence
-
-- **`src/preview/`** - Dry-run estimators for all commands
-
-- **`src/utils/`** - Shared utilities:
-  - `logger.py` - Debug-level logging with console + file handlers
-  - `file_manager.py` - File I/O with secure permissions
-  - `paths.py` - Centralized PathConfig for output directory resolution
-  - `constants.py` - Named constants (extraction, scoring parameters)
-  - `progress.py` - Progress tracking with tqdm integration
-  - `text.py` - Centralized word lists (stop words, generic/action words)
-  - `validators.py` - Cross-entity validation (Corpus, Email, Category)
-
-### Data Models
-
-All models in `src/models/` use Pydantic v2. Key models:
-- `Email` - Single email with metadata and content
-- `Corpus` - Collection of emails with metadata (includes extraction tracking)
-- `AnalysisResults` - Combined output from all analyzers
-- `Category` - Suggested category with confidence score, hierarchy support
-- `CategoryTemplate` - Predefined category patterns (18 templates)
-- `ContentCluster` - Cluster with quality metrics (silhouette, cohesion, interpretation labels)
-- `RuleCondition`, `CategoryRule`, `RuleAction`, `RuleSet` - Rule system models
-- `EmailCategorization`, `CategorizationReport`, `CategoryAssignment` - Categorization models
-
-### Entry Points
-
-- `src/cli/` - CLI package (`python -m src.cli`)
-  - `__init__.py` - Main entry, parser creation, command dispatch
-  - `parsers.py` - Shared argument groups, data-driven config mapping
-  - `formatters.py` - Output helpers, cluster visualization
-  - `commands/` - One module per command (extract, analyze, suggest, review, pipeline, config, info, export, rules, categorize, apply, scheduler, notifications)
-
-- **`src/data/`** - Data files:
-  - `templates.json` - 18 category templates (editable without code changes)
+`src/cli/` — CLI package invoked via `python -m src.cli`. One module per command in `commands/`, shared parsers in `parsers.py`, output formatting in `formatters.py`.
 
 ### CLI Commands
 
@@ -315,3 +195,37 @@ This project follows strict principles defined in `.specify/memory/constitution.
 - Gmail API for Gmail extraction (OAuth 2.0)
 - YAML configuration with PyYAML
 - Jinja2 for HTML report templating
+
+## Code Style
+
+- **Ruff** enforces linting with rules: E, F, W, I (isort), N (naming), UP (pyupgrade), B (bugbear), A, C4, PIE, RET, SIM
+- Line length: 100 chars (E501 ignored — formatter handles wrapping)
+- Target: Python 3.10 (`target-version = "py310"`)
+- All data models use Pydantic v2 — never use raw dicts for structured data
+- ABCs for extensible components (`BaseExtractor`, `BaseAnalyzer`)
+- Custom exception hierarchy in `src/exceptions.py` — raise typed exceptions, not bare `Exception`
+
+## Environment Setup
+
+### M365/Hotmail (Microsoft Graph API)
+- Uses MSAL device code flow — no app registration needed for personal accounts
+- On first run, `extract` will print a URL and code; open the URL in a browser and enter the code
+- Token is cached locally by MSAL after first auth
+
+### Gmail
+- Requires a `credentials.json` from Google Cloud Console (OAuth 2.0 Client ID, Desktop app type)
+- Place `credentials.json` in the working directory or configure path in config
+- On first run, browser opens for OAuth consent; token is cached locally after auth
+
+### Optional Dependencies
+- `matplotlib` — required only for `--cluster-viz` flag (not in core requirements)
+- `scipy` — included in requirements, needed for hierarchical clustering
+
+## Gotchas
+
+- **First-run model download**: `sentence-transformers` downloads the embedding model (~400MB) on first use of `analyze`. Expect a delay.
+- **Auth is interactive**: Both M365 and Gmail auth flows require a browser on first run. Won't work in headless environments without pre-cached tokens.
+- **Graph API rate limits**: Microsoft Graph has throttling; the extractor handles 429 responses with backoff, but very large mailboxes may take multiple runs with `--since-last`.
+- **Checkpoint resumption**: If extraction is interrupted, re-run with the same flags — `CheckpointManager` resumes from the last batch automatically.
+- **Embedding cache invalidation**: Changing the sentence-transformers model version auto-invalidates the cache (`.meta.json` sidecar tracks model identity).
+- **matplotlib import**: `--cluster-viz` will fail silently if matplotlib isn't installed. Install with `pip install matplotlib` if you need cluster visualization.
