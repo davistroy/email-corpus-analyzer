@@ -241,33 +241,32 @@ Implement `LLMClassifier(BaseClassifier)` that uses Instructor for structured LL
 
 ---
 
-#### 2.3 Add classify CLI Command
-**Status: PENDING**
+#### 2.3 Add classify CLI Command ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** U1
 **Files Affected:**
 - `src/cli/commands/classify.py` (create)
-- `src/cli/parsers.py` (modify)
-- `src/cli/__main__.py` (modify)
+- `src/cli/__init__.py` (modify)
 - `tests/unit/test_classify_cli.py` (create)
 
 **Description:**
 Add a `classify` subcommand to the CLI that runs LLM classification directly on a corpus. Supports `--provider`, `--model`, `--categories` (path to YAML), `--confidence-threshold`, and `--output` flags. Uses the existing `CategorizationReport` model for output. Works with or without prior analysis — only requires an extracted corpus.
 
 **Tasks:**
-1. [ ] Create `src/cli/commands/classify.py` with argument parser and command handler
-2. [ ] Add `classify` subparser to `src/cli/parsers.py`
-3. [ ] Register command in `src/cli/__main__.py`
-4. [ ] Implement command: load corpus → create LLMClassifier from config → classify corpus → save report
-5. [ ] Support `--json` output flag (reuse existing formatters)
-6. [ ] Support `--dry-run` for preview without actual classification
-7. [ ] Write tests for CLI argument parsing and command execution (with mocked classifier)
+1. [x] Create `src/cli/commands/classify.py` with argument parser and command handler
+2. [x] Add `classify` subparser to `src/cli/__init__.py`
+3. [x] Register command in `src/cli/__init__.py`
+4. [x] Implement command: load corpus → create LLMClassifier from config → classify corpus → save report
+5. [x] Support `--json` output flag (reuse existing formatters)
+6. [x] Support `--dry-run` for preview without actual classification
+7. [x] Write tests for CLI argument parsing and command execution (with mocked classifier)
 
 **Acceptance Criteria:**
-- [ ] `python -m src.cli classify --help` shows all options
-- [ ] Command loads corpus and classifies all emails
-- [ ] Output format matches existing `categorize` command
-- [ ] `--dry-run` shows what would be classified without calling LLM
-- [ ] Error messages are actionable when Ollama isn't running
+- [x] `python -m src.cli classify --help` shows all options
+- [x] Command loads corpus and classifies all emails
+- [x] Output format matches existing `categorize` command
+- [x] `--dry-run` shows what would be classified without calling LLM
+- [x] Error messages are actionable when Ollama isn't running
 
 ---
 

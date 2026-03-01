@@ -85,6 +85,8 @@ Extract → Analyze → Suggest → Review → Rules → Categorize → Apply
 | `categorize` | Email-by-email categorization using rules |
 | `categorize --report` | Generate coverage analysis report |
 | `categorize --resolve` | Resolve multi-match conflicts (--strategy priority\|specificity\|historical) |
+| `classify` | LLM-based email classification (--provider, --model, --categories YAML) |
+| `classify --dry-run` | Preview classification without calling LLM |
 | `apply folders` | Create mailbox folders for categories |
 | `apply move` | Move emails to categorized folders |
 | `apply rules` | Deploy rules as server-side inbox rules/filters |

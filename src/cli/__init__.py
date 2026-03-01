@@ -12,6 +12,7 @@ Commands:
   export     - Export categories to CSV or HTML format
   rules      - Manage category rules (generate, test, show, edit)
   categorize - Categorize emails using approved rules
+  classify   - Classify emails using LLM (Ollama, OpenAI, or Claude)
   apply      - Apply results to live mailbox (folders, move, rules, rollback)
   scheduler  - Manage scheduled automated processing (setup, run, status, disable)
   notifications - View, clear, or test notification alerts
@@ -29,6 +30,7 @@ from src import __version__
 from src.cli.commands.analyze import build_analyze_parser, cmd_analyze
 from src.cli.commands.apply import build_apply_parser, cmd_apply
 from src.cli.commands.categorize import build_categorize_parser, cmd_categorize
+from src.cli.commands.classify import build_classify_parser, cmd_classify
 from src.cli.commands.config import (
     build_config_parser,
     cmd_config,
@@ -81,6 +83,7 @@ __all__ = [
     "cmd_export",
     "cmd_rules",
     "cmd_categorize",
+    "cmd_classify",
     "cmd_apply",
     "cmd_scheduler",
     "cmd_notifications",
@@ -167,6 +170,7 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["config"] = build_config_parser(subparsers)
     SUBPARSERS["rules"] = build_rules_parser(subparsers)
     SUBPARSERS["categorize"] = build_categorize_parser(subparsers)
+    SUBPARSERS["classify"] = build_classify_parser(subparsers)
     SUBPARSERS["apply"] = build_apply_parser(subparsers)
     SUBPARSERS["scheduler"] = build_scheduler_parser(subparsers)
     SUBPARSERS["notifications"] = build_notifications_parser(subparsers)
@@ -219,6 +223,7 @@ def main() -> int:
         "export": cmd_export,
         "rules": cmd_rules,
         "categorize": cmd_categorize,
+        "classify": cmd_classify,
         "apply": cmd_apply,
         "scheduler": cmd_scheduler,
         "notifications": cmd_notifications,
