@@ -413,34 +413,34 @@ Implement stores for classification results and user corrections. `Classificatio
 
 ---
 
-#### 3.4 Build JSON → SQLite Migration Tool
-**Status: PENDING**
+#### 3.4 Build JSON → SQLite Migration Tool ✅ Completed 2026-02-28
+**Status: COMPLETE [2026-02-28]**
 **Recommendation Ref:** N2
 **Files Affected:**
 - `src/storage/migration.py` (create)
 - `src/cli/commands/migrate.py` (create)
-- `src/cli/parsers.py` (modify)
-- `src/cli/__main__.py` (modify)
+- `src/cli/__init__.py` (modify)
+- `src/storage/__init__.py` (modify)
 - `tests/unit/test_migration.py` (create)
 
 **Description:**
 Build a one-time migration tool that imports existing JSON data into SQLite. Imports: email_corpus.json → emails table, decisions.jsonl → decision_log table, action_log.jsonl → action_log table. The migration is non-destructive — JSON files are read but not deleted. Add `python -m src.cli migrate` CLI command with progress reporting.
 
 **Tasks:**
-1. [ ] Create `src/storage/migration.py` with `JsonToSqliteMigrator` class
-2. [ ] Implement `migrate_corpus(corpus_path: Path)` — parse JSON, upsert into emails table
-3. [ ] Implement `migrate_decisions(decisions_path: Path)` — parse JSONL, insert into decision_log
-4. [ ] Implement `migrate_actions(actions_path: Path)` — parse JSONL, insert into action_log
-5. [ ] Implement `migrate_all(output_dir: Path)` — orchestrate all migrations with progress
-6. [ ] Create `src/cli/commands/migrate.py` CLI command
-7. [ ] Write tests with sample JSON/JSONL fixtures
+1. [x] Create `src/storage/migration.py` with `JsonToSqliteMigrator` class
+2. [x] Implement `migrate_corpus(corpus_path: Path)` — parse JSON, upsert into emails table
+3. [x] Implement `migrate_decisions(decisions_path: Path)` — parse JSONL, insert into decision_log
+4. [x] Implement `migrate_actions(actions_path: Path)` — parse JSONL, insert into action_log
+5. [x] Implement `migrate_all(output_dir: Path)` — orchestrate all migrations with progress
+6. [x] Create `src/cli/commands/migrate.py` CLI command
+7. [x] Write tests with sample JSON/JSONL fixtures
 
 **Acceptance Criteria:**
-- [ ] `python -m src.cli migrate` imports all existing data
-- [ ] Migration is idempotent (running twice doesn't duplicate data)
-- [ ] JSON files are NOT deleted after migration
-- [ ] Progress is reported during migration
-- [ ] Corrupt JSONL lines are skipped with warnings (matching existing behavior)
+- [x] `python -m src.cli migrate` imports all existing data
+- [x] Migration is idempotent (running twice doesn't duplicate data)
+- [x] JSON files are NOT deleted after migration
+- [x] Progress is reported during migration
+- [x] Corrupt JSONL lines are skipped with warnings (matching existing behavior)
 
 ---
 

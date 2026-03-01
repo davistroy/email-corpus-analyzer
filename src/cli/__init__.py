@@ -16,6 +16,7 @@ Commands:
   apply      - Apply results to live mailbox (folders, move, rules, rollback)
   scheduler  - Manage scheduled automated processing (setup, run, status, disable)
   notifications - View, clear, or test notification alerts
+  migrate    - Migrate JSON data to SQLite database
 
 All commands support --output-dir to specify custom output location.
 Default output directory: ~/data/outputs
@@ -42,6 +43,7 @@ from src.cli.commands.config import (
 from src.cli.commands.export import build_export_parser, cmd_export
 from src.cli.commands.extract import build_extract_parser, cmd_extract
 from src.cli.commands.info import build_info_parser, cmd_info
+from src.cli.commands.migrate import build_migrate_parser, cmd_migrate
 from src.cli.commands.notifications import build_notifications_parser, cmd_notifications
 from src.cli.commands.pipeline import build_pipeline_parser, cmd_pipeline
 from src.cli.commands.review import auto_approve_categories, build_review_parser, cmd_review
@@ -87,6 +89,7 @@ __all__ = [
     "cmd_apply",
     "cmd_scheduler",
     "cmd_notifications",
+    "cmd_migrate",
     "auto_approve_categories",
     "validate_config",
     "EMAIL_REGEX",
@@ -174,6 +177,7 @@ For more information, see: specs/001-use-the-document/quickstart.md
     SUBPARSERS["apply"] = build_apply_parser(subparsers)
     SUBPARSERS["scheduler"] = build_scheduler_parser(subparsers)
     SUBPARSERS["notifications"] = build_notifications_parser(subparsers)
+    SUBPARSERS["migrate"] = build_migrate_parser(subparsers)
 
     return parser
 
@@ -197,8 +201,8 @@ def main() -> int:
         # In JSON mode, suppress normal logging (only errors)
         logging.getLogger().setLevel(logging.ERROR)
 
-    # Load configuration from files (unless running config command)
-    if args.command != "config":
+    # Load configuration from files (unless running config or migrate command)
+    if args.command not in ("config", "migrate"):
         try:
             config = load_config(config_path=args.config)
             # Apply config defaults to args where CLI didn't specify
@@ -227,6 +231,7 @@ def main() -> int:
         "apply": cmd_apply,
         "scheduler": cmd_scheduler,
         "notifications": cmd_notifications,
+        "migrate": cmd_migrate,
     }
 
     handler = command_handlers.get(args.command)

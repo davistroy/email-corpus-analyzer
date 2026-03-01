@@ -9,5 +9,6 @@ Phase 3: SQLite Core.
 
 from src.storage.database import Database
 from src.storage.email_store import EmailStore
+from src.storage.migration import JsonToSqliteMigrator, MigrationResult
 
-__all__ = ["Database", "EmailStore"]
+__all__ = ["Database", "EmailStore", "JsonToSqliteMigrator", "MigrationResult"]
