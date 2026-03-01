@@ -173,3 +173,36 @@
 - Summary: Created CLI commands for apply --dry-run, apply folders, apply move, apply rules, and apply --rollback with mandatory confirmation prompts and --source flag support. 45 new tests.
 
 **Phase 5 complete.** All 5 email filtering & moving items delivered.
+
+## 2026-02-28 (Phase 6 — Automated Processing & Monitoring)
+
+### Item 6.1: Incremental Processor
+- Status: Complete
+- Files changed: src/automation/incremental.py (created)
+- Summary: Created incremental processing engine for extract-only-since-last-run, nearest-centroid assignment to existing clusters, new cluster detection, and incremental corpus/embedding updates. 40 new tests.
+
+### Item 6.2: Change Detector
+- Status: Complete
+- Files changed: src/automation/change_detector.py (created)
+- Summary: Created change detection for new sender patterns, emerging topics, volume spikes, and category drift with configurable alert thresholds and change history storage. 39 new tests.
+
+### Item 6.3: Scheduler
+- Status: Complete
+- Files changed: src/automation/scheduler.py (created), src/cli/commands/scheduler.py (created)
+- Summary: Created platform-aware scheduler with Windows Task Scheduler and Unix cron integration, CLI commands for setup/run/status/disable, and auth token refresh handling. 51 new tests.
+
+### Item 6.4: Notification System
+- Status: Complete
+- Files changed: src/automation/notifications.py (created), src/cli/commands/notifications.py (created)
+- Summary: Created notification system for actionable changes (new category candidates, category drift, high-volume senders, coverage drops) with JSONL persistence and CLI commands for show/clear. 57 new tests.
+
+### Item 6.5: Configuration Extensions
+- Status: Complete
+- Files changed: src/config/models.py, src/config/loader.py, src/config/config.py
+- Summary: Added scheduler and monitoring config sections to AppConfig with validation, template generation, and config show integration. 46 new tests.
+
+**Phase 6 complete.** All 5 automated processing & monitoring items delivered.
+
+## Implementation Complete — 2026-02-28
+
+All 27 work items across 6 phases implemented. 3463 tests passing, 88% coverage.

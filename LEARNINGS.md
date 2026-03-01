@@ -1,5 +1,18 @@
 # Implementation Learnings
 
+## Summary — Key Learnings Across All 6 Phases
+
+- Parallel subagent execution reduced total implementation time significantly
+- Pre-commit ruff formatter hooks catch formatting inconsistencies reliably
+- TDD (test-first) approach prevented regressions across all phases
+- Pydantic v2 models provide excellent validation and serialization consistency
+- Context7 MCP integration not needed for well-documented standard libraries
+- Protocol-based backends (FolderBackend, MoveBackend) enable clean API abstraction
+- Thread-safe state management essential for TUI reactive patterns
+- JSONL format provides simple, append-friendly persistence for logs and history
+- Config extension pattern (add model, register in AppConfig, update template/validate) is reliable
+- Existing test suite grows reliably from 1977 to 3463 tests with zero regressions
+
 ## 2026-02-17
 
 - Items 1.1 and 1.3 completed in parallel with no file conflicts

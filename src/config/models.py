@@ -21,7 +21,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 VALID_SCHEDULER_TASKS = ("extract", "analyze", "categorize", "move")
 
 # Valid alert channel names for monitoring
-VALID_ALERT_CHANNELS = ("desktop", "log", "email")
+VALID_ALERT_CHANNELS = ("desktop", "log", "email", "console")
 
 # Regex for HH:MM time format (00:00 - 23:59)
 TIME_FORMAT_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -420,7 +420,7 @@ class MonitoringConfig(BaseModel):
     alert_channels: list[str] = Field(
         default=["log"],
         min_length=1,
-        description="Alert delivery channels: desktop, log, email",
+        description="Alert delivery channels: desktop, log, email, console",
     )
     check_interval_hours: int = Field(
         default=6,
