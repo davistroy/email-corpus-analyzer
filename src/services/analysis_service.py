@@ -11,6 +11,7 @@ Phase 4, Work Item 4.3: SQLite integration — auto-creates sqlite-vec Embedding
 """
 
 import logging
+import os
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -68,6 +69,48 @@ class AnalysisService:
         self._database = database
         self._analyzers = self._build_analyzers()
 
+    def _resolve_embedding_api_key(self) -> str:
+        """
+        Resolve the embedding API key from env var or config.
+
+        Priority: embedding_api_key_env_var (env var name) > embedding_api_key (literal).
+        Returns "not-needed" if neither is configured (for local endpoints).
+        """
+        env_var = self.config.embedding_api_key_env_var
+        if env_var:
+            key = os.environ.get(env_var)
+            if key:
+                logger.info(f"Resolved embedding API key from ${env_var}")
+                return key
+            logger.warning(
+                f"embedding_api_key_env_var set to '{env_var}' but env var is not set. "
+                f"Falling back to embedding_api_key field."
+            )
+        return self.config.embedding_api_key or "not-needed"
+
+    def _build_embedding_provider(self):
+        """
+        Build an EmbeddingProvider based on config.
+
+        Returns None for local provider (SemanticAnalyzer handles lazy loading),
+        or a RemoteEmbeddingProvider when config specifies remote.
+        """
+        if self.config.embedding_provider == "remote":
+            from src.analyzers.embedding_provider import RemoteEmbeddingProvider
+
+            api_key = self._resolve_embedding_api_key()
+            logger.info(
+                f"Using remote embedding provider: {self.config.embedding_base_url} "
+                f"model={self.config.embedding_model_name}"
+            )
+            return RemoteEmbeddingProvider(
+                base_url=self.config.embedding_base_url,
+                model_name=self.config.embedding_model_name,
+                api_key=api_key,
+                batch_size=self.config.embedding_batch_size,
+            )
+        return None
+
     def _build_analyzers(self) -> list[BaseAnalyzer]:
         """
         Build list of analyzer instances.
@@ -77,14 +120,18 @@ class AnalysisService:
         mapping to _ANALYZER_RESULT_FIELDS.
         """
         thresholds = self.config.thresholds
+        embedding_provider = self._build_embedding_provider()
         return [
             SenderAnalyzer(thresholds=thresholds),
             SubjectAnalyzer(thresholds=thresholds),
             TemporalAnalyzer(thresholds=thresholds),
             VolumeAnalyzer(),
             SemanticAnalyzer(
+                model_name=self.config.embedding_model_name,
                 max_embedding_text_length=self.config.max_embedding_text_length,
                 thresholds=thresholds,
+                embedding_provider=embedding_provider,
+                clustering_pca_dims=self.config.clustering_pca_dims,
             ),
         ]
 
@@ -160,6 +207,7 @@ class AnalysisService:
             progress_callback=rfa_progress,
             embedding_cache=embedding_cache,
             thresholds=self.config.thresholds,
+            embedding_provider=self._build_embedding_provider(),
         )
 
         # Generate cluster visualization if requested

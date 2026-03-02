@@ -93,7 +93,7 @@ def sample_corpus():
 class TestFullPipeline:
     """Integration tests for full pipeline workflow."""
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_pipeline_produces_all_outputs(self, mock_st, temp_output_dir, sample_corpus):
         """Test that pipeline produces corpus, analysis, and suggestions files."""
         from src.services.analysis_service import AnalysisService
@@ -134,7 +134,7 @@ class TestFullPipeline:
         json.loads(analysis_path.read_text())
         json.loads(suggestions_path.read_text())
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_pipeline_analysis_contains_all_components(self, mock_st, sample_corpus):
         """Test that analysis contains all required components."""
         from src.services.analysis_service import AnalysisService
@@ -159,7 +159,7 @@ class TestFullPipeline:
         assert analysis.sender_analysis.unique_senders > 0
         assert len(analysis.content_clusters) > 0
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_pipeline_suggestions_have_valid_structure(self, mock_st, sample_corpus):
         """Test that suggestions have valid category structure."""
         from src.services.analysis_service import AnalysisService
@@ -184,7 +184,7 @@ class TestFullPipeline:
             assert category.confidence >= 0.0 and category.confidence <= 1.0
             assert category.source is not None
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_pipeline_with_progress_callback(self, mock_st, sample_corpus):
         """Test that progress callbacks are called throughout pipeline."""
         from src.services.analysis_service import AnalysisService
@@ -219,7 +219,7 @@ class TestFullPipeline:
 class TestPipelineEdgeCases:
     """Test pipeline behavior with edge cases."""
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_pipeline_with_single_email(self, mock_st):
         """Test pipeline handles single email corpus."""
         from src.services.analysis_service import AnalysisService
@@ -261,7 +261,7 @@ class TestPipelineEdgeCases:
         with pytest.raises(ValueError, match="empty"):
             analysis_service.run(corpus)
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_pipeline_with_uniform_sender_domain(self, mock_st):
         """Test pipeline handles corpus with all emails from same domain."""
         from src.services.analysis_service import AnalysisService
@@ -296,7 +296,7 @@ class TestPipelineEdgeCases:
 class TestDataPersistence:
     """Test data persistence and reload capabilities."""
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_corpus_roundtrip(self, mock_st, temp_output_dir, sample_corpus):
         """Test corpus can be saved and reloaded correctly."""
         # Save corpus
@@ -319,7 +319,7 @@ class TestDataPersistence:
             assert orig.sender_email == loaded.sender_email
             assert orig.subject == loaded.subject
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analysis_roundtrip(self, mock_st, temp_output_dir, sample_corpus):
         """Test analysis can be saved and reloaded correctly."""
         from src.models.analysis_results import AnalysisResults

@@ -6,6 +6,8 @@ Per analyzer_contract.md lines 153-221 and research.md lines 15-68.
 
 Task 4B.4: Enhanced with incremental analysis support using embedding cache.
 Task 2.2: Externalized magic numbers to AnalyzerThresholds config.
+Embedding provider abstraction: Supports local sentence-transformers and remote
+OpenAI-compatible /v1/embeddings endpoints via EmbeddingProvider ABC.
 """
 
 import logging
@@ -16,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_samples
 from sklearn.metrics.pairwise import cosine_distances
@@ -25,6 +26,7 @@ from ..models.content_cluster import ContentCluster, RepresentativeSample
 from ..models.corpus import Corpus
 from .base import BaseAnalyzer
 from .cluster_optimizer import ElbowOptimizer, SilhouetteOptimizer, compute_max_k
+from .embedding_provider import EmbeddingProvider
 
 if TYPE_CHECKING:
     from src.cache.embedding_cache import EmbeddingCache
@@ -62,14 +64,21 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         model_name: str = "mixedbread-ai/mxbai-embed-large-v1",
         max_embedding_text_length: int = 1500,
         thresholds: "AnalyzerThresholds | None" = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        clustering_pca_dims: int = 0,
     ):
         """
-        Initialize with sentence transformer model.
+        Initialize with sentence transformer model or custom embedding provider.
 
         Args:
-            model_name: Hugging Face model identifier
+            model_name: Hugging Face model identifier (used when no provider given)
             max_embedding_text_length: Max body chars for embedding text (default 1500)
             thresholds: Optional analyzer thresholds config. Uses defaults if None.
+            embedding_provider: Optional EmbeddingProvider instance. When provided,
+                this is used instead of loading a local sentence-transformers model.
+            clustering_pca_dims: If > 0, apply PCA to reduce embedding dimensions
+                before clustering. Dramatically speeds up auto-clustering on
+                high-dimensional embeddings (e.g., 1536 -> 128).
         """
         if thresholds is None:
             from ..config.models import AnalyzerThresholds
@@ -78,15 +87,94 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
         self.thresholds = thresholds
         self.model_name = model_name
         self.model = None
+        self._provider = embedding_provider
         self.max_embedding_text_length = max_embedding_text_length
+        self._clustering_pca_dims = clustering_pca_dims
         logger.debug("SemanticAnalyzer initialized (model will load on first use)")
 
     def _ensure_model_loaded(self):
-        """Lazy load the sentence transformer model."""
-        if self.model is None:
-            logger.info(f"Loading sentence transformer model: {self.model_name}")
-            self.model = SentenceTransformer(self.model_name)
-            logger.info(f"Model loaded successfully: {self.model_name}")
+        """Lazy load the embedding provider (and sentence transformer model for compat)."""
+        if self._provider is None and self.model is None:
+            from .embedding_provider import LocalEmbeddingProvider
+
+            self._provider = LocalEmbeddingProvider(self.model_name)
+            # Expose the underlying SentenceTransformer for backward compatibility
+            # (tests and _generate_viz access self.model directly)
+            self.model = self._provider.model
+        elif self._provider is not None and self.model is None:
+            # Provider was injected but self.model not set -- remote provider case
+            pass
+
+    def _encode(
+        self,
+        texts: list[str],
+        show_progress_bar: bool = True,
+    ) -> np.ndarray:
+        """
+        Encode texts using the configured provider or fallback to self.model.
+
+        Delegates to self._provider if available, otherwise falls back to
+        self.model.encode() for backward compatibility (tests that mock
+        _ensure_model_loaded and set self.model directly).
+
+        Args:
+            texts: List of text strings to embed.
+            show_progress_bar: Whether to display a progress bar.
+
+        Returns:
+            numpy array of shape (len(texts), embedding_dim).
+        """
+        if self._provider is not None:
+            return self._provider.encode(texts, show_progress_bar=show_progress_bar)
+        # Fallback for backward compatibility (test mocks that set self.model)
+        assert self.model is not None
+        result = self.model.encode(
+            texts, show_progress_bar=show_progress_bar, convert_to_numpy=True
+        )
+        return np.asarray(result)
+
+    def _maybe_reduce_dims(self, embeddings: np.ndarray) -> np.ndarray:
+        """
+        Apply PCA dimensionality reduction if configured.
+
+        Reduces high-dimensional embeddings (e.g., 1536 from OpenAI) to a
+        lower dimension (e.g., 128) for dramatically faster clustering and
+        silhouette scoring. The PCA reduction is applied to all embeddings
+        before clustering, so all downstream operations (KMeans, silhouette,
+        representative sample selection) use the reduced space.
+
+        Args:
+            embeddings: Full-dimensional embeddings array.
+
+        Returns:
+            Reduced embeddings if PCA is configured and applicable, otherwise
+            returns the original embeddings unchanged.
+        """
+        target_dims = self._clustering_pca_dims
+        if target_dims <= 0:
+            return embeddings
+
+        n_samples, n_features = embeddings.shape
+        # PCA n_components must be <= min(n_samples, n_features)
+        effective_dims = min(target_dims, n_samples, n_features)
+        if effective_dims >= n_features:
+            logger.debug(
+                f"PCA target dims ({target_dims}) >= embedding dims ({n_features}), "
+                f"skipping reduction"
+            )
+            return embeddings
+
+        from sklearn.decomposition import PCA
+
+        logger.info(f"Applying PCA dimensionality reduction: {n_features} -> {effective_dims} dims")
+        pca = PCA(n_components=effective_dims, random_state=self.thresholds.random_state)
+        reduced = pca.fit_transform(embeddings)
+        variance_retained = sum(pca.explained_variance_ratio_)
+        logger.info(
+            f"PCA complete: {n_features} -> {effective_dims} dims, "
+            f"{variance_retained:.1%} variance retained"
+        )
+        return reduced
 
     def analyze(  # type: ignore[override]
         self,
@@ -151,13 +239,15 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             progress_callback(0, total_emails)
 
         # Generate embeddings with progress bar (FR-016)
-        assert self.model is not None
-        embeddings = self.model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
+        embeddings = self._encode(texts, show_progress_bar=True)
 
         if progress_callback:
             progress_callback(total_emails, total_emails)
 
         logger.info(f"Generated embeddings with shape: {embeddings.shape}")
+
+        # Apply PCA dimensionality reduction if configured
+        embeddings = self._maybe_reduce_dims(embeddings)
 
         # Determine effective number of clusters
         if auto_clusters and total_emails >= 3:
@@ -368,10 +458,7 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
             if progress_callback:
                 progress_callback(0, len(uncached_texts))
 
-            assert self.model is not None
-            new_embeddings = self.model.encode(
-                uncached_texts, show_progress_bar=True, convert_to_numpy=True
-            )
+            new_embeddings = self._encode(uncached_texts, show_progress_bar=True)
 
             if progress_callback:
                 progress_callback(len(uncached_texts), len(uncached_texts))
@@ -394,13 +481,15 @@ class SemanticAnalyzer(BaseAnalyzer[list[ContentCluster]]):
                 text = id_to_email[email_id].combined_text_with_limit(
                     self.max_embedding_text_length
                 )
-                assert self.model is not None
-                embedding = self.model.encode([text], convert_to_numpy=True)[0]
-                embeddings_list.append(embedding)
+                single_result = self._encode([text], show_progress_bar=False)
+                embeddings_list.append(single_result[0])
 
         embeddings = np.array(embeddings_list)
 
         logger.info(f"Built embedding matrix: {embeddings.shape}")
+
+        # Apply PCA dimensionality reduction if configured
+        embeddings = self._maybe_reduce_dims(embeddings)
 
         # Calculate stats
         stats = {

@@ -164,7 +164,7 @@ class TestIncrementalExtraction:
 class TestIncrementalAnalysis:
     """Integration tests for incremental analysis with embedding cache."""
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_incremental_analysis_uses_cache(self, mock_st, initial_corpus, temp_output_dir):
         """Test that incremental analysis utilizes embedding cache."""
         from src.analyzers.semantic_analyzer import SemanticAnalyzer
@@ -200,7 +200,7 @@ class TestIncrementalAnalysis:
         assert result.stats["cached_count"] == 10
         assert result.stats["generated_count"] == 10
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_incremental_analysis_updates_cache(self, mock_st, initial_corpus, temp_output_dir):
         """Test that incremental analysis updates the cache with new embeddings."""
         from src.analyzers.semantic_analyzer import SemanticAnalyzer
@@ -228,7 +228,7 @@ class TestIncrementalAnalysis:
         # Verify cache was updated
         assert cache.size > initial_size
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_incremental_analysis_with_all_cached(self, mock_st, initial_corpus, temp_output_dir):
         """Test incremental analysis when all emails are already cached."""
         from src.analyzers.semantic_analyzer import SemanticAnalyzer

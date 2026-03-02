@@ -190,7 +190,7 @@ class TestAnalysisServiceExists:
 class TestAnalysisServiceRun:
     """Test AnalysisService.run method."""
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_run_returns_analysis_results(self, mock_st):
         """Test that run returns tuple of (AnalysisResults, stats)."""
         import numpy as np
@@ -212,7 +212,7 @@ class TestAnalysisServiceRun:
         assert isinstance(analysis_results, AnalysisResults)
         assert incremental_stats is None  # No embedding_cache provided
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_run_calls_progress_callback(self, mock_st):
         """Test that run calls progress callback."""
         import numpy as np
@@ -1342,7 +1342,7 @@ class TestPipelineServiceRun:
     @patch("src.services.pipeline_service.ExtractionService")
     @patch("src.services.pipeline_service.AnalysisService")
     @patch("src.services.pipeline_service.SuggestionService")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_run_returns_pipeline_result(self, mock_st, mock_suggest, mock_analyze, mock_extract):
         """Test that run returns PipelineResult."""
 
@@ -1416,7 +1416,7 @@ class TestServiceIndependence:
         corpus = create_test_corpus()
 
         # Should work without extraction service
-        with patch("src.analyzers.semantic_analyzer.SentenceTransformer") as mock_st:
+        with patch("src.analyzers.embedding_provider.SentenceTransformer") as mock_st:
             import numpy as np
 
             mock_model = MagicMock()
@@ -3256,7 +3256,7 @@ class TestAnalysisServiceSQLiteInit:
 class TestAnalysisServiceSQLiteEmbeddingCache:
     """Test AnalysisService creates EmbeddingCache with database when available."""
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_run_creates_embedding_cache_with_database(self, mock_st, tmp_path):
         """Test that run() creates EmbeddingCache with database when available."""
         import numpy as np
@@ -3291,7 +3291,7 @@ class TestAnalysisServiceSQLiteEmbeddingCache:
         finally:
             db.close()
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_run_no_embedding_cache_when_no_database(self, mock_st):
         """Test that run() does not auto-create embedding_cache without database."""
         import numpy as np
@@ -3316,7 +3316,7 @@ class TestAnalysisServiceSQLiteEmbeddingCache:
             embedding_cache = call_kwargs.get("embedding_cache")
             assert embedding_cache is None
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_run_explicit_cache_overrides_database_cache(self, mock_st, tmp_path):
         """Test that explicitly passed embedding_cache takes precedence over database."""
         import numpy as np

@@ -22,6 +22,7 @@ from src.analyzers.cluster_optimizer import (
     interpret_silhouette,
     silhouette_to_confidence,
 )
+from src.analyzers.embedding_provider import EmbeddingProvider
 from src.analyzers.semantic_analyzer import SemanticAnalyzer, generate_cluster_visualization
 from src.analyzers.sender_analyzer import SenderAnalyzer
 from src.analyzers.subject_analyzer import SubjectAnalyzer
@@ -50,6 +51,7 @@ def run_full_analysis(
     progress_callback: Callable[[str, int, int], None] | None = None,
     embedding_cache: "EmbeddingCache | None" = None,
     thresholds: AnalyzerThresholds | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
 ) -> tuple[AnalysisResults, dict | None]:
     """
     Run all analyzers and combine results.
@@ -68,6 +70,8 @@ def run_full_analysis(
         progress_callback: Optional callback(analyzer_name, current, total)
         embedding_cache: Optional EmbeddingCache for incremental analysis
         thresholds: Optional analyzer thresholds config. Uses defaults if None.
+        embedding_provider: Optional EmbeddingProvider for custom embedding generation.
+            When provided, the SemanticAnalyzer uses this instead of loading a local model.
 
     Returns:
         Tuple of (AnalysisResults, incremental_stats dict or None).
@@ -115,6 +119,7 @@ def run_full_analysis(
     semantic_analyzer = SemanticAnalyzer(
         max_embedding_text_length=max_embedding_text_length,
         thresholds=thresholds,
+        embedding_provider=embedding_provider,
     )
     incremental_stats = None
 
@@ -197,6 +202,7 @@ __all__ = [
     "run_full_analysis",
     "BaseAnalyzer",
     "AnalysisError",
+    "EmbeddingProvider",
     "SenderAnalyzer",
     "SubjectAnalyzer",
     "SemanticAnalyzer",

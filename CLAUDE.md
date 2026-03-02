@@ -95,6 +95,7 @@ Extract → Analyze → Suggest → Review → Rules → Categorize → Apply
 | `categorize --report` | Generate coverage analysis report |
 | `categorize --resolve` | Resolve multi-match conflicts (--strategy priority\|specificity\|historical) |
 | `classify` | LLM-based email classification (--provider, --model, --categories YAML) |
+| `classify --batch` | Batch classification via Anthropic Batch API (50% cost, Claude only) |
 | `classify --dry-run` | Preview classification without calling LLM |
 | `migrate` | Import JSON/JSONL data into SQLite database (one-time, idempotent) |
 | `train` | Fine-tune local SetFit model on accumulated corrections (--min-examples, --output) |
@@ -224,6 +225,12 @@ analyze:
   max_embedding_text_length: 1500  # chars of body for embeddings (200-5000)
   auto_cluster_min: 3              # min clusters in auto mode
   auto_cluster_max: 25             # max clusters in auto mode
+  embedding_provider: "remote"     # "local" (sentence-transformers) or "remote" (OpenAI-compatible)
+  embedding_base_url: "https://api.openai.com/v1"
+  embedding_model_name: "text-embedding-3-small"
+  embedding_api_key_env_var: "OPENAI_API_KEY"
+  embedding_batch_size: 500
+  clustering_pca_dims: 128         # PCA before clustering (0=disabled, 128 recommended for 1536-dim)
   thresholds:
     top_senders: 50
     top_domains: 30
@@ -315,6 +322,18 @@ Generate template: `python -m src.cli config init`
 - **OpenAI**: Set `OPENAI_API_KEY` env var, configure `classifier.provider: openai`
 - **Claude**: Install `pip install -e ".[cloud]"`, set `ANTHROPIC_API_KEY` env var, configure `classifier.provider: claude`
 - **RunPod**: Set `RUNPOD_API_KEY` env var, configure `classifier.provider: runpod` and `classifier.runpod_endpoint_id` (or pass `--endpoint-id` on CLI)
+
+### API Key Management (Bitwarden Secrets)
+API keys are stored in Bitwarden Secrets Manager, not in `.env` files. Retrieve them using the `bws` CLI:
+```bash
+# List all secrets (uses $TROY machine access token)
+bws secret list --access-token "$TROY"
+
+# Load ANTHROPIC_API_KEY into current shell session
+export ANTHROPIC_API_KEY=$(bws secret list --access-token "$TROY" | \
+  python -c "import sys,json; data=json.load(sys.stdin); print(next(s['value'] for s in data if s.get('key','')=='ANTHROPIC_API_KEY'))")
+```
+The config YAML references the **env var name** (e.g., `api_key_env_var: ANTHROPIC_API_KEY`), not the key itself. The key must be in the environment at runtime.
 
 ### Optional Dependencies
 - `matplotlib` -- required only for `--cluster-viz` flag (not in core requirements)
