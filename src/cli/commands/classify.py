@@ -118,6 +118,13 @@ Examples:
         default=False,
         help="Preview what would be classified without calling the LLM",
     )
+    classify_parser.add_argument(
+        "--batch",
+        action="store_true",
+        default=False,
+        help="Use Anthropic Batch API for 50%% cost reduction (Claude provider only). "
+        "Submits all emails as a single batch and polls for completion.",
+    )
 
     return classify_parser  # type: ignore[no-any-return]
 
@@ -275,6 +282,126 @@ def _print_dry_run_preview(
     print()
     print("=" * 60)
     print()
+
+
+# =============================================================================
+# Classification execution helpers
+# =============================================================================
+
+
+def _run_sequential_classification(
+    corpus: Corpus,
+    config: ClassifierConfig,
+    category_names: list[str],
+    confidence_threshold: float,
+) -> CategorizationReport:
+    """Run sequential (one-at-a-time) LLM classification."""
+    classifier = LLMClassifier(config)
+
+    categorizations: list[EmailCategorization] = []
+    categories_used: dict[str, int] = {}
+    categorized_count = 0
+    total = len(corpus.emails)
+
+    for idx, email in enumerate(corpus.emails, start=1):
+        logger.info(f"Classifying email {idx}/{total}: {email.id}")
+
+        result = classifier.classify(email, category_names)
+
+        if result.confidence < confidence_threshold:
+            cat_result = EmailCategorization.uncategorized(email_id=email.id)
+        else:
+            cat_result = EmailCategorization(
+                email_id=email.id,
+                primary_category=CategoryAssignment(
+                    category_name=result.category_name,
+                    confidence=result.confidence,
+                    source=result.source,
+                ),
+            )
+            categorized_count += 1
+            categories_used[result.category_name] = categories_used.get(result.category_name, 0) + 1
+
+        categorizations.append(cat_result)
+
+    uncategorized_count = total - categorized_count
+    coverage = round((categorized_count / total) * 100, 2) if total > 0 else 0.0
+
+    return CategorizationReport(
+        total_emails=total,
+        categorized_count=categorized_count,
+        uncategorized_count=uncategorized_count,
+        coverage_percentage=coverage,
+        categories_used=categories_used,
+        categorizations=categorizations,
+    )
+
+
+def _run_batch_classification(
+    corpus: Corpus,
+    config: ClassifierConfig,
+    category_names: list[str],
+    categories: list[CategoryDefinition],
+    confidence_threshold: float,
+) -> CategorizationReport:
+    """Run batch classification using Anthropic Batch API (Claude only, 50% cost reduction)."""
+    if config.provider != "claude":
+        raise ValueError(
+            f"--batch is only supported with --provider claude, got '{config.provider}'"
+        )
+
+    from src.classifiers.batch_classifier import BatchClassifier
+
+    classifier = BatchClassifier(config)
+
+    # Build category descriptions dict
+    cat_descriptions = {cat.name: cat.description for cat in categories}
+
+    logger.info(
+        f"Starting batch classification: {len(corpus.emails)} emails, "
+        f"{len(category_names)} categories, model={config.model_name}"
+    )
+
+    batch_results = classifier.classify_batch(
+        emails=corpus.emails,
+        categories=category_names,
+        category_descriptions=cat_descriptions,
+    )
+
+    # Convert BatchClassificationResult -> EmailCategorization
+    categorizations: list[EmailCategorization] = []
+    categories_used: dict[str, int] = {}
+    categorized_count = 0
+
+    for result in batch_results:
+        if not result.succeeded or result.confidence < confidence_threshold:
+            cat_result = EmailCategorization.uncategorized(email_id=result.email_id)
+        else:
+            cat_result = EmailCategorization(
+                email_id=result.email_id,
+                primary_category=CategoryAssignment(
+                    category_name=result.category_name,
+                    confidence=result.confidence,
+                    source=result.source,
+                ),
+            )
+            categorized_count += 1
+            categories_used[result.category_name] = categories_used.get(result.category_name, 0) + 1
+
+        categorizations.append(cat_result)
+
+    total = len(corpus.emails)
+    uncategorized_count = total - categorized_count
+    coverage = round((categorized_count / total) * 100, 2) if total > 0 else 0.0
+
+    return CategorizationReport(
+        total_emails=total,
+        categorized_count=categorized_count,
+        uncategorized_count=uncategorized_count,
+        coverage_percentage=coverage,
+        categories_used=categories_used,
+        categorizations=categorizations,
+    )
 
 
 # =============================================================================
@@ -469,49 +596,17 @@ def cmd_classify(args: argparse.Namespace) -> int:
     # ------------------------------------------------------------------
     # 7. Create classifier and classify emails
     # ------------------------------------------------------------------
+    is_batch = getattr(args, "batch", False)
+
     try:
-        classifier = LLMClassifier(effective_config)
-
-        categorizations: list[EmailCategorization] = []
-        categories_used: dict[str, int] = {}
-        categorized_count = 0
-        total = len(corpus.emails)
-
-        for idx, email in enumerate(corpus.emails, start=1):
-            logger.info(f"Classifying email {idx}/{total}: {email.id}")
-
-            result = classifier.classify(email, category_names)
-
-            # Check confidence threshold
-            if result.confidence < confidence_threshold:
-                cat_result = EmailCategorization.uncategorized(email_id=email.id)
-            else:
-                cat_result = EmailCategorization(
-                    email_id=email.id,
-                    primary_category=CategoryAssignment(
-                        category_name=result.category_name,
-                        confidence=result.confidence,
-                        source=result.source,
-                    ),
-                )
-                categorized_count += 1
-                categories_used[result.category_name] = (
-                    categories_used.get(result.category_name, 0) + 1
-                )
-
-            categorizations.append(cat_result)
-
-        uncategorized_count = total - categorized_count
-        coverage = round((categorized_count / total) * 100, 2) if total > 0 else 0.0
-
-        report = CategorizationReport(
-            total_emails=total,
-            categorized_count=categorized_count,
-            uncategorized_count=uncategorized_count,
-            coverage_percentage=coverage,
-            categories_used=categories_used,
-            categorizations=categorizations,
-        )
+        if is_batch:
+            report = _run_batch_classification(
+                corpus, effective_config, category_names, categories, confidence_threshold
+            )
+        else:
+            report = _run_sequential_classification(
+                corpus, effective_config, category_names, confidence_threshold
+            )
 
     except ClassifierConnectionError as e:
         msg = f"Cannot connect to LLM service: {e}"
