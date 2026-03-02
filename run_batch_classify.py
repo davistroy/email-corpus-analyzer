@@ -24,6 +24,13 @@ def main() -> None:
     t_start = time.time()
     log(f"=== BATCH CLASSIFY START: {time.strftime('%H:%M:%S')} ===")
 
+    # Check for --remaining flag (classify only uncategorized emails)
+    remaining_mode = "--remaining" in sys.argv
+    if remaining_mode:
+        log("MODE: Classifying remaining uncategorized emails only")
+    else:
+        log("MODE: Full corpus classification (use --remaining to classify only gaps)")
+
     # Verify API key
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -54,6 +61,30 @@ def main() -> None:
     )
     log(f"Corpus loaded: {len(corpus.emails)} emails in {time.time() - t0:.1f}s")
 
+    # Load existing report if in remaining mode
+    existing_report = None
+    already_categorized = {}
+    if remaining_mode:
+        report_path = Path.home() / "data/outputs/classify_report_batch.json"
+        if report_path.exists():
+            existing_report = json.loads(report_path.read_text(encoding="utf-8"))
+            already_categorized = existing_report.get("categorized_emails", {})
+            log(f"Existing report: {len(already_categorized)} already categorized")
+        else:
+            log("No existing report found, classifying all emails")
+            remaining_mode = False
+
+    # Filter to only uncategorized emails if in remaining mode
+    if remaining_mode:
+        emails_to_classify = [e for e in corpus.emails if e.id not in already_categorized]
+        log(f"Emails to classify: {len(emails_to_classify)} (skipping {len(already_categorized)})")
+    else:
+        emails_to_classify = list(corpus.emails)
+
+    if not emails_to_classify:
+        log("All emails already classified!")
+        return
+
     # Build batch classifier components
     from src.classifiers.batch_classifier import CLASSIFICATION_TOOL
     from src.classifiers.sanitizer import EmailSanitizer
@@ -75,12 +106,12 @@ def main() -> None:
         + "\n\nUse the classify_email tool to respond."
     )
 
-    # Build all requests
+    # Build requests for only the emails we need to classify
     log("Building requests...")
     t0 = time.time()
     all_requests = []
     email_ids = []  # parallel list for mapping results back
-    for idx, email in enumerate(corpus.emails):
+    for idx, email in enumerate(emails_to_classify):
         content = sanitizer.wrap_for_prompt(email.subject, email.body_text)
         user_prompt = (
             f"Classify the following email:\n\n"
@@ -102,8 +133,8 @@ def main() -> None:
             }
         )
         email_ids.append(email.id)
-        if (idx + 1) % 5000 == 0:
-            log(f"  Built {idx + 1}/{len(corpus.emails)}")
+        if (idx + 1) % 1000 == 0:
+            log(f"  Built {idx + 1}/{len(emails_to_classify)}")
     log(f"All {len(all_requests)} requests built in {time.time() - t0:.1f}s")
 
     # Submit in chunks of 1000
@@ -152,9 +183,9 @@ def main() -> None:
             poll_count += 1
             time.sleep(5)
 
-    # Collect results
+    # Collect results from this run
     log(f"\n=== Collecting results from {len(batch_ids)} batches ===")
-    results = {}  # idx -> {category, confidence, reasoning, error}
+    new_results = {}  # idx -> {category, confidence, reasoning, error}
 
     for batch_id, _start, _end in batch_ids:
         for result in client.messages.batches.results(batch_id):
@@ -168,7 +199,7 @@ def main() -> None:
                 for block in msg.content:
                     if block.type == "tool_use" and block.name == "classify_email":
                         inp = block.input
-                        results[idx] = {
+                        new_results[idx] = {
                             "email_id": real_email_id,
                             "category": inp.get("category", "Unknown"),
                             "confidence": inp.get("confidence", 0.0),
@@ -176,7 +207,7 @@ def main() -> None:
                         }
                         break
                 else:
-                    results[idx] = {
+                    new_results[idx] = {
                         "email_id": real_email_id,
                         "category": "Unknown",
                         "confidence": 0.0,
@@ -184,7 +215,7 @@ def main() -> None:
                         "error": True,
                     }
             else:
-                results[idx] = {
+                new_results[idx] = {
                     "email_id": real_email_id,
                     "category": "Unknown",
                     "confidence": 0.0,
@@ -192,41 +223,58 @@ def main() -> None:
                     "error": str(result.result),
                 }
 
-    # Build report
-    log(f"\n=== Building report ({len(results)} results) ===")
+    log(f"New results collected: {len(new_results)}")
+
+    # Build merged report
+    log("\n=== Building merged report ===")
 
     confidence_threshold = 0.6
-    categorized = {}
-    uncategorized_ids = []
+    categorized = dict(already_categorized)  # Start with existing results
     category_counts = {}
 
-    for idx in range(len(corpus.emails)):
-        email = corpus.emails[idx]
-        r = results.get(idx)
-        if r and r.get("confidence", 0) >= confidence_threshold and not r.get("error"):
+    # Count existing categories
+    for entry in categorized.values():
+        cat = entry["category"]
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+
+    # Add new results
+    new_categorized = 0
+    new_uncategorized = 0
+    for _idx, r in new_results.items():
+        email_id = r["email_id"]
+        if r.get("confidence", 0) >= confidence_threshold and not r.get("error"):
             cat = r["category"]
-            if cat not in category_counts:
-                category_counts[cat] = 0
-            category_counts[cat] += 1
-            categorized[email.id] = {
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+            categorized[email_id] = {
                 "category": cat,
                 "confidence": r["confidence"],
-                "source": "llm:claude",
+                "source": "llm:claude:batch",
             }
+            new_categorized += 1
         else:
-            uncategorized_ids.append(email.id)
+            new_uncategorized += 1
+
+    log(f"New results: {new_categorized} categorized, {new_uncategorized} still uncategorized")
+
+    # Build uncategorized list from full corpus
+    categorized_ids = set(categorized.keys())
+    uncategorized_ids = [e.id for e in corpus.emails if e.id not in categorized_ids]
 
     total = len(corpus.emails)
     cat_count = len(categorized)
     uncat_count = len(uncategorized_ids)
     coverage = cat_count / total * 100 if total > 0 else 0
 
+    total_submitted = (
+        existing_report.get("submitted_count", 0) if existing_report else 0
+    ) + submitted_count
+
     report = {
         "total_emails": total,
         "categorized_count": cat_count,
         "uncategorized_count": uncat_count,
         "coverage_percentage": round(coverage, 1),
-        "submitted_count": submitted_count,
+        "submitted_count": total_submitted,
         "categories_used": dict(sorted(category_counts.items(), key=lambda x: -x[1])),
         "categorized_emails": categorized,
         "uncategorized_email_ids": uncategorized_ids,
@@ -241,10 +289,10 @@ def main() -> None:
     log("BATCH CLASSIFICATION COMPLETE")
     log(f"{'=' * 60}")
     log(f"Total time: {t_total:.0f}s ({t_total / 60:.1f} min)")
-    log(f"Emails submitted: {submitted_count}/{total}")
-    log(f"Results received: {len(results)}")
-    log(f"Categorized: {cat_count} ({coverage:.1f}%)")
-    log(f"Uncategorized: {uncat_count}")
+    log(f"Emails submitted this run: {submitted_count}")
+    log(f"New categorized: {new_categorized}")
+    log(f"Total categorized: {cat_count}/{total} ({coverage:.1f}%)")
+    log(f"Still uncategorized: {uncat_count}")
     log(f"Categories used: {len(category_counts)}")
     log("\nTop categories:")
     for name, count in sorted(category_counts.items(), key=lambda x: -x[1])[:15]:
