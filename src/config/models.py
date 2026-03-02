@@ -196,6 +196,52 @@ class AnalyzeConfig(BaseModel):
         description="Configurable thresholds for analyzer modules",
     )
 
+    # Embedding provider configuration
+    embedding_provider: str = Field(
+        default="local",
+        description="Embedding provider: 'local' (sentence-transformers) or 'remote' (OpenAI-compatible API)",
+    )
+    embedding_base_url: str = Field(
+        default="http://localhost:8080/v1",
+        description="Base URL for remote embedding endpoint (OpenAI-compatible /v1/embeddings)",
+    )
+    embedding_model_name: str = Field(
+        default="mixedbread-ai/mxbai-embed-large-v1",
+        description="Model name for embeddings (local HF model or remote model identifier)",
+    )
+    embedding_api_key: str = Field(
+        default="",
+        description="API key for remote embedding endpoint (empty for local endpoints)",
+    )
+    embedding_api_key_env_var: str | None = Field(
+        default=None,
+        description="Environment variable name containing the embedding API key (e.g., OPENAI_API_KEY). "
+        "Takes precedence over embedding_api_key when set.",
+    )
+    embedding_batch_size: int = Field(
+        default=64,
+        ge=1,
+        le=10000,
+        description="Batch size for remote embedding requests",
+    )
+    clustering_pca_dims: int = Field(
+        default=0,
+        ge=0,
+        le=2048,
+        description="Apply PCA dimensionality reduction before clustering. "
+        "Set to 0 to disable. Recommended: 128 for high-dim embeddings (e.g., 1536). "
+        "Dramatically speeds up auto-clustering and silhouette scoring.",
+    )
+
+    @field_validator("embedding_provider")
+    @classmethod
+    def validate_embedding_provider(cls, v: str) -> str:
+        """Validate embedding provider is one of the allowed values."""
+        allowed = ("local", "remote")
+        if v not in allowed:
+            raise ValueError(f"embedding_provider must be one of {allowed}, got '{v}'")
+        return v
+
     @model_validator(mode="after")
     def validate_auto_cluster_bounds(self) -> "AnalyzeConfig":
         """Ensure auto_cluster_min <= auto_cluster_max."""

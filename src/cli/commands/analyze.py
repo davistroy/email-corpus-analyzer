@@ -108,15 +108,20 @@ def _build_analyze_config(args: argparse.Namespace) -> AnalyzeConfig:
     """
     Build an AnalyzeConfig from parsed CLI arguments.
 
-    Maps CLI argument names to AnalyzeConfig fields. Only sets fields
-    that exist on the args namespace.
+    Uses the loaded AppConfig's analyze section as the base (preserving
+    YAML settings like embedding_provider, embedding_base_url, etc.),
+    then overrides num_clusters from CLI args.
 
     Args:
         args: Parsed command-line arguments
 
     Returns:
-        AnalyzeConfig with values from CLI args
+        AnalyzeConfig with YAML config values and CLI overrides
     """
+    # Use loaded config as base if available (has YAML embedding settings)
+    if hasattr(args, "_app_config"):
+        return args._app_config.analyze.model_copy(update={"num_clusters": args.num_clusters})
+    # Fallback for direct invocation without config loading
     return AnalyzeConfig(
         num_clusters=args.num_clusters,
     )

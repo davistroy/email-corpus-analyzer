@@ -1018,7 +1018,7 @@ class TestSemanticAnalyzer:
             analyzer.analyze(corpus, num_clusters=-1)
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_reduces_clusters_for_small_corpus(
         self, mock_st_class, mock_ensure_model, analyzer
     ):
@@ -1048,7 +1048,7 @@ class TestSemanticAnalyzer:
         assert len(result) <= 3
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_creates_clusters(self, mock_st_class, mock_ensure_model, analyzer):
         """Test that analyze creates ContentCluster objects."""
         emails = [
@@ -1079,7 +1079,7 @@ class TestSemanticAnalyzer:
             assert len(cluster.email_ids) > 0
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_cluster_percentages_sum_correctly(
         self, mock_st_class, mock_ensure_model, analyzer
     ):
@@ -1102,7 +1102,7 @@ class TestSemanticAnalyzer:
         assert abs(total_percentage - 100.0) < 0.1
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_single_email_single_cluster(self, mock_st_class, mock_ensure_model, analyzer):
         """Test analyzing single email creates single cluster."""
         emails = [
@@ -1127,7 +1127,7 @@ class TestSemanticAnalyzer:
         assert result[0].percentage == 100.0
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_common_domains_extraction(self, mock_st_class, mock_ensure_model, analyzer):
         """Test that common domains are extracted for each cluster."""
         emails = [
@@ -1154,7 +1154,7 @@ class TestSemanticAnalyzer:
             assert isinstance(cluster.common_domains, list)
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_representative_samples(self, mock_st_class, mock_ensure_model, analyzer):
         """Test that representative samples are created correctly."""
         emails = [
@@ -1185,7 +1185,7 @@ class TestSemanticAnalyzer:
                 assert len(sample.body_preview) <= 200
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_progress_callback(self, mock_st_class, mock_ensure_model, analyzer):
         """Test progress callback is called correctly."""
         emails = [
@@ -1216,21 +1216,23 @@ class TestSemanticAnalyzer:
         """Test that model is lazily loaded."""
         assert analyzer.model is None
 
-        with patch("src.analyzers.semantic_analyzer.SentenceTransformer") as mock_st:
+        with patch("src.analyzers.embedding_provider.SentenceTransformer") as mock_st:
             mock_model = MagicMock()
+            mock_model.get_sentence_embedding_dimension.return_value = 384
             mock_st.return_value = mock_model
 
             analyzer._ensure_model_loaded()
 
             mock_st.assert_called_once_with(analyzer.model_name)
-            assert analyzer.model == mock_model
+            # After _ensure_model_loaded, the provider wraps the model
+            assert analyzer._provider is not None
 
     def test_ensure_model_loaded_only_once(self, analyzer):
         """Test that model is only loaded once."""
         mock_model = MagicMock()
         analyzer.model = mock_model
 
-        with patch("src.analyzers.semantic_analyzer.SentenceTransformer") as mock_st:
+        with patch("src.analyzers.embedding_provider.SentenceTransformer") as mock_st:
             analyzer._ensure_model_loaded()
             mock_st.assert_not_called()
 
@@ -1244,7 +1246,7 @@ class TestSemanticAnalyzer:
         assert custom_analyzer.max_embedding_text_length == 3000
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_analyze_uses_configurable_text_length(self, mock_st_class, mock_ensure_model):
         """Test that analyze uses max_embedding_text_length for text preparation."""
         custom_analyzer = SemanticAnalyzer(max_embedding_text_length=300)
@@ -1288,7 +1290,7 @@ class TestRunFullAnalysis:
         with pytest.raises(ValueError, match="Cannot analyze empty corpus"):
             run_full_analysis(corpus)
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_calls_all_analyzers_integration(self, mock_st_class):
         """Test that all analyzers are called and return AnalysisResults.
 
@@ -1298,6 +1300,7 @@ class TestRunFullAnalysis:
         # Configure the mock SentenceTransformer
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(5, 384)
+        mock_model.get_sentence_embedding_dimension.return_value = 384
         mock_st_class.return_value = mock_model
 
         emails = [
@@ -1330,7 +1333,7 @@ class TestRunFullAnalysis:
         assert result.subject_patterns.total_subjects_analyzed == 5
         assert result.volume_stats.total_emails == 5
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_num_clusters_parameter(self, mock_st_class):
         """Test that num_clusters parameter affects semantic analysis.
 
@@ -1339,6 +1342,7 @@ class TestRunFullAnalysis:
         # Configure the mock SentenceTransformer
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(10, 384)
+        mock_model.get_sentence_embedding_dimension.return_value = 384
         mock_st_class.return_value = mock_model
 
         emails = [
@@ -1358,12 +1362,13 @@ class TestRunFullAnalysis:
         # Should have clusters (num depends on KMeans results)
         assert isinstance(result.content_clusters, list)
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_progress_callback_integration(self, mock_st_class):
         """Test that progress callback is called during full analysis."""
         # Configure the mock SentenceTransformer
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(5, 384)
+        mock_model.get_sentence_embedding_dimension.return_value = 384
         mock_st_class.return_value = mock_model
 
         emails = [
@@ -1385,7 +1390,7 @@ class TestRunFullAnalysis:
         analyzer_names = {name for name, _, _ in callback_data}
         assert "sender" in analyzer_names or len(callback_data) > 0
 
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_with_embedding_cache_returns_incremental_stats(self, mock_st_class):
         """Test that providing embedding_cache triggers incremental mode and returns stats."""
         import os
@@ -1395,6 +1400,7 @@ class TestRunFullAnalysis:
 
         mock_model = MagicMock()
         mock_model.encode.return_value = np.random.rand(5, 1024)
+        mock_model.get_sentence_embedding_dimension.return_value = 1024
         mock_st_class.return_value = mock_model
 
         emails = [
@@ -1692,7 +1698,7 @@ class TestClusterQualityMetrics:
         assert cluster.cohesion_score is None
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_semantic_analyzer_calculates_quality_metrics(self, mock_st_class, mock_ensure_model):
         """Test that semantic analyzer calculates quality metrics for clusters."""
         analyzer = SemanticAnalyzer()
@@ -1732,7 +1738,7 @@ class TestClusterQualityMetrics:
             assert cluster.cohesion_score >= 0.0
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_semantic_analyzer_single_cluster_no_silhouette(self, mock_st_class, mock_ensure_model):
         """Test that silhouette is None for single cluster (k=1)."""
         analyzer = SemanticAnalyzer()
@@ -1759,7 +1765,7 @@ class TestClusterQualityMetrics:
         assert result[0].silhouette_score is None
 
     @patch.object(SemanticAnalyzer, "_ensure_model_loaded")
-    @patch("src.analyzers.semantic_analyzer.SentenceTransformer")
+    @patch("src.analyzers.embedding_provider.SentenceTransformer")
     def test_quality_metrics_included_in_json_output(self, mock_st_class, mock_ensure_model):
         """Test that quality metrics are included in model_dump output."""
         analyzer = SemanticAnalyzer()

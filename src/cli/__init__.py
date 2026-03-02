@@ -211,6 +211,9 @@ def main() -> int:
             config = load_config(config_path=args.config)
             # Apply config defaults to args where CLI didn't specify
             _apply_config_defaults(args, config, parser)
+            # Store loaded config for commands that need nested config sections
+            # (e.g., analyze needs embedding_provider settings from YAML)
+            args._app_config = config
         except ConfigLoadError as e:
             logger.error(f"Failed to load configuration: {e}")
             return 1

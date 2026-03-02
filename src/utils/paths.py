@@ -58,7 +58,7 @@ class PathConfig:
         Returns:
             Resolved absolute path
         """
-        cls._output_dir = Path(path).resolve()
+        cls._output_dir = Path(path).expanduser().resolve()
         logger.info(f"Output directory set to: {cls._output_dir}")
         return cls._output_dir
 

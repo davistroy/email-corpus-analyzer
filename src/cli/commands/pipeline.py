@@ -153,9 +153,15 @@ def _build_app_config(args: argparse.Namespace) -> AppConfig:
     else:
         extract_config = ExtractConfig(source=source)
 
-    analyze_config = AnalyzeConfig(
-        num_clusters=args.num_clusters,
-    )
+    # Use loaded config as base if available (preserves YAML embedding settings)
+    if hasattr(args, "_app_config"):
+        analyze_config = args._app_config.analyze.model_copy(
+            update={"num_clusters": args.num_clusters}
+        )
+    else:
+        analyze_config = AnalyzeConfig(
+            num_clusters=args.num_clusters,
+        )
 
     suggest_config = SuggestConfig(
         min_cluster_percentage=getattr(args, "min_cluster_percentage", 5.0),
