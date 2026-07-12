@@ -801,3 +801,283 @@ class TestApplyDispatcher:
         args = _make_args(apply_action=None)
         result = cmd_apply(args)
         assert result == 1
+
+
+# =============================================================================
+# Classify report format tests
+# =============================================================================
+
+
+def _make_classify_report() -> dict:
+    """Create a classify report dict (classify command output format)."""
+    return {
+        "total_emails": 100,
+        "categorized_count": 80,
+        "uncategorized_count": 20,
+        "coverage_percentage": 80.0,
+        "model": "Qwen/Qwen2.5-7B-Instruct",
+        "endpoint_id": "test_endpoint",
+        "categories_used": {
+            "Newsletter Updates": 50,
+            "Shipping Notifications": 30,
+        },
+        "categorized_emails": {
+            "msg_001": {
+                "category": "Newsletter Updates",
+                "confidence": 0.95,
+                "source": "llm:vllm:Qwen/Qwen2.5-7B-Instruct",
+            },
+            "msg_002": {
+                "category": "Shipping Notifications",
+                "confidence": 0.88,
+                "source": "llm:vllm:Qwen/Qwen2.5-7B-Instruct",
+            },
+            "msg_003": {
+                "category": "Newsletter Updates",
+                "confidence": 0.92,
+                "source": "llm:vllm:Qwen/Qwen2.5-7B-Instruct",
+            },
+        },
+        "uncategorized_email_ids": ["msg_004"],
+    }
+
+
+class TestParseMovesFromReport:
+    """Test the dual-format report parser."""
+
+    def test_categorization_report_format(self):
+        """Test parsing moves from categorization report (rules-based)."""
+        from src.cli.commands.apply import _parse_moves_from_report
+
+        report = _make_categorization_report()
+        moves = _parse_moves_from_report(report)
+
+        assert len(moves) == 5
+        assert all(cat == "Newsletter Updates" for _, cat in moves)
+        assert moves[0][0] == "msg_0"
+
+    def test_classify_report_format(self):
+        """Test parsing moves from classify report (LLM-based)."""
+        from src.cli.commands.apply import _parse_moves_from_report
+
+        report = _make_classify_report()
+        moves = _parse_moves_from_report(report)
+
+        assert len(moves) == 3
+        email_ids = {eid for eid, _ in moves}
+        assert email_ids == {"msg_001", "msg_002", "msg_003"}
+
+        categories = {cat for _, cat in moves}
+        assert categories == {"Newsletter Updates", "Shipping Notifications"}
+
+    def test_empty_report(self):
+        """Test parsing an empty report returns no moves."""
+        from src.cli.commands.apply import _parse_moves_from_report
+
+        moves = _parse_moves_from_report({})
+        assert moves == []
+
+    def test_classify_report_with_empty_category(self):
+        """Test that entries with empty category are skipped."""
+        from src.cli.commands.apply import _parse_moves_from_report
+
+        report = {
+            "categorized_emails": {
+                "msg_001": {"category": "Newsletter Updates", "confidence": 0.9},
+                "msg_002": {"category": "", "confidence": 0.5},
+            }
+        }
+        moves = _parse_moves_from_report(report)
+        assert len(moves) == 1
+        assert moves[0] == ("msg_001", "Newsletter Updates")
+
+
+class TestApplyMoveClassifyReport:
+    """Test apply move with classify report format."""
+
+    @patch("src.cli.commands.apply.load_json")
+    @patch("src.cli.commands.apply.PathConfig")
+    def test_move_dry_run_classify_report(self, mock_path_config, mock_load_json, capsys):
+        """Test move dry-run with classify report shows category breakdown."""
+        from src.cli.commands.apply import cmd_apply
+
+        mock_path_config.get_categorization_report_path.return_value = Path("/tmp/report.json")
+        mock_load_json.return_value = _make_classify_report()
+
+        args = _make_args(
+            apply_action="move", dry_run=True, report=None, rate_limit=0.25
+        )
+        result = cmd_apply(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Newsletter Updates" in captured.out
+        assert "Shipping Notifications" in captured.out
+        assert "Moves planned" in captured.out
+
+    @patch("src.cli.commands.apply.load_json")
+    @patch("src.cli.commands.apply.PathConfig")
+    def test_move_dry_run_classify_report_json(
+        self, mock_path_config, mock_load_json, capsys
+    ):
+        """Test move dry-run with classify report and --json flag."""
+        from src.cli.commands.apply import cmd_apply
+
+        mock_path_config.get_categorization_report_path.return_value = Path("/tmp/report.json")
+        mock_load_json.return_value = _make_classify_report()
+
+        args = _make_args(
+            apply_action="move", dry_run=True, json=True, report=None, rate_limit=0.25
+        )
+        result = cmd_apply(args)
+
+        assert result == 0
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["moves_planned"] == 3
+        assert "category_breakdown" in data
+        assert data["category_breakdown"]["Newsletter Updates"] == 2
+
+
+class TestApplyParserNewFlags:
+    """Test new CLI flags added to the apply parser."""
+
+    def test_user_email_flag(self):
+        """Test --user-email flag is parsed."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(
+            ["apply", "folders", "--user-email", "troy@hotmail.com"]
+        )
+        assert args.user_email == "troy@hotmail.com"
+
+    def test_user_email_default_is_none(self):
+        """Test --user-email defaults to None."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["apply", "folders"])
+        assert args.user_email is None
+
+    def test_rate_limit_flag(self):
+        """Test --rate-limit flag on move subcommand."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["apply", "move", "--rate-limit", "0.1"])
+        assert args.rate_limit == 0.1
+
+    def test_rate_limit_default(self):
+        """Test --rate-limit default is 0.25."""
+        from src.cli import create_parser
+
+        parser = create_parser()
+        args = parser.parse_args(["apply", "move"])
+        assert args.rate_limit == 0.25
+
+
+class TestApplyFoldersLiveMode:
+    """Test apply folders live mode wiring."""
+
+    @patch("src.cli.commands.apply.load_json")
+    @patch("src.cli.commands.apply.PathConfig")
+    def test_folders_live_requires_user_email(self, mock_path_config, mock_load_json, capsys):
+        """Test that live folders fails without user_email."""
+        from src.cli.commands.apply import cmd_apply
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/tmp/cats.json")
+        mock_load_json.return_value = _make_approved_categories()
+
+        args = _make_args(
+            apply_action="folders",
+            dry_run=False,
+            yes=True,
+            categories=None,
+            user_email=None,
+            _app_config=None,
+        )
+        result = cmd_apply(args)
+
+        assert result == 1
+
+    @patch("src.cli.commands.apply.load_json")
+    @patch("src.cli.commands.apply.PathConfig")
+    def test_folders_live_unsupported_source(self, mock_path_config, mock_load_json, capsys):
+        """Test that live folders with gmail source returns not-supported error."""
+        from src.cli.commands.apply import cmd_apply
+
+        mock_path_config.get_approved_categories_path.return_value = Path("/tmp/cats.json")
+        mock_load_json.return_value = _make_approved_categories()
+
+        args = _make_args(
+            apply_action="folders",
+            dry_run=False,
+            yes=True,
+            source="gmail",
+            categories=None,
+            user_email="test@gmail.com",
+        )
+        result = cmd_apply(args)
+
+        assert result == 1
+
+
+class TestApplyMoveLiveMode:
+    """Test apply move live mode wiring."""
+
+    @patch("src.cli.commands.apply.load_json")
+    @patch("src.cli.commands.apply.PathConfig")
+    def test_move_live_requires_user_email(self, mock_path_config, mock_load_json, capsys):
+        """Test that live move fails without user_email."""
+        from src.cli.commands.apply import cmd_apply
+
+        mock_path_config.get_categorization_report_path.return_value = Path("/tmp/report.json")
+        mock_load_json.return_value = _make_classify_report()
+
+        args = _make_args(
+            apply_action="move",
+            dry_run=False,
+            yes=True,
+            report=None,
+            rate_limit=0.25,
+            user_email=None,
+            _app_config=None,
+        )
+        result = cmd_apply(args)
+
+        assert result == 1
+
+    @patch("src.cli.commands.apply.load_json")
+    @patch("src.cli.commands.apply.PathConfig")
+    def test_move_live_unsupported_source(self, mock_path_config, mock_load_json, capsys):
+        """Test that live move with gmail source returns not-supported error."""
+        from src.cli.commands.apply import cmd_apply
+
+        mock_path_config.get_categorization_report_path.return_value = Path("/tmp/report.json")
+        mock_load_json.return_value = _make_classify_report()
+
+        args = _make_args(
+            apply_action="move",
+            dry_run=False,
+            yes=True,
+            source="gmail",
+            report=None,
+            rate_limit=0.25,
+            user_email="test@gmail.com",
+        )
+        result = cmd_apply(args)
+
+        assert result == 1
+
+
+class TestFolderMapPath:
+    """Test PathConfig.get_folder_map_path()."""
+
+    def test_folder_map_path(self):
+        """Test folder map path returns expected location."""
+        from src.utils.paths import PathConfig
+
+        path = PathConfig.get_folder_map_path()
+        assert path.name == "folder_map.json"
+        assert path.parent == PathConfig.get_output_dir()

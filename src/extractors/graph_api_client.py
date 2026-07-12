@@ -28,8 +28,8 @@ DEFAULT_CLIENT_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e"
 # Personal accounts use "common" tenant
 DEFAULT_TENANT_ID = "common"
 
-# Scopes for reading email
-SCOPES = ["Mail.Read", "User.Read"]
+# Scopes for reading and writing email (Mail.ReadWrite is a superset of Mail.Read)
+SCOPES = ["Mail.ReadWrite", "User.Read"]
 
 # Token cache location
 TOKEN_CACHE_DIR = Path.home() / ".email-analyzer"
@@ -154,15 +154,21 @@ class GraphAPIClient:
         self,
         url: str,
         params: dict[str, Any] | None = None,
+        *,
+        method: str = "GET",
+        json_data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Make authenticated GET request to Graph API.
+        Make authenticated request to Graph API.
 
+        Supports any HTTP method (GET, POST, PATCH, DELETE).
         Handles token refresh on 401 responses.
 
         Args:
             url: Full Graph API URL
             params: Query parameters
+            method: HTTP method (default: GET)
+            json_data: JSON body for POST/PATCH requests
 
         Returns:
             JSON response dict
@@ -176,14 +182,18 @@ class GraphAPIClient:
             "Content-Type": "application/json",
         }
 
-        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response = requests.request(
+            method, url, headers=headers, params=params, json=json_data, timeout=30
+        )
 
         # Handle token expiry — re-auth and retry once
         if response.status_code == 401:
             logger.info("Token expired, re-authenticating...")
             token = self.authenticate(force_new=True)
             headers["Authorization"] = f"Bearer {token}"
-            response = requests.get(url, headers=headers, params=params, timeout=30)
+            response = requests.request(
+                method, url, headers=headers, params=params, json=json_data, timeout=30
+            )
 
         if response.status_code == 429:
             retry_after_header = response.headers.get("Retry-After")

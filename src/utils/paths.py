@@ -104,6 +104,11 @@ class PathConfig:
         return cls.get_output_dir() / "categorization_report.json"
 
     @classmethod
+    def get_folder_map_path(cls) -> Path:
+        """Get path for folder map JSON file (maps category names to folder IDs)."""
+        return cls.get_output_dir() / "folder_map.json"
+
+    @classmethod
     def get_error_log_path(cls) -> Path:
         """Get path for extraction errors log file."""
         return cls.get_output_dir() / "extraction_errors.log"

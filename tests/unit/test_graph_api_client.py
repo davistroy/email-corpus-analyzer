@@ -71,6 +71,16 @@ def sample_graph_messages():
     ]
 
 
+def _mock_response(status_code=200, json_data=None, headers=None):
+    """Helper to create a mock response."""
+    response = MagicMock()
+    response.status_code = status_code
+    response.json.return_value = json_data or {}
+    response.headers = headers or {}
+    response.raise_for_status = MagicMock()
+    return response
+
+
 class TestGraphAPIClientInit:
     def test_default_client_id(self, client):
         assert client.client_id == DEFAULT_CLIENT_ID
@@ -138,117 +148,93 @@ class TestGraphAPIClientAuth:
 
 
 class TestGraphAPIClientFetchEmails:
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_fetch_emails_success(self, mock_get, client, sample_graph_messages):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_fetch_emails_success(self, mock_request, client, sample_graph_messages):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": sample_graph_messages}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(
+            json_data={"value": sample_graph_messages}
+        )
 
         result = client.fetch_emails(max_results=10, skip=0)
 
         assert len(result) == 2
         assert result[0]["id"] == "msg_001"
         assert result[1]["subject"] == "Newsletter Weekly"
+        # Verify it was called with GET method
+        mock_request.assert_called_once()
+        assert mock_request.call_args[0][0] == "GET"
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_fetch_emails_empty(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_fetch_emails_empty(self, mock_request, client):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         result = client.fetch_emails()
         assert result == []
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_fetch_emails_pagination_params(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_fetch_emails_pagination_params(self, mock_request, client):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         client.fetch_emails(max_results=50, skip=100)
 
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert params["$top"] == 50
         assert params["$skip"] == 100
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_fetch_emails_caps_at_999(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_fetch_emails_caps_at_999(self, mock_request, client):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         client.fetch_emails(max_results=5000)
 
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert params["$top"] == 999
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_rate_limit_raises_rate_limit_error(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_rate_limit_raises_rate_limit_error(self, mock_request, client):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 429
-        mock_response.headers = {}
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(status_code=429)
 
         with pytest.raises(RateLimitError):
             client.fetch_emails()
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_rate_limit_includes_retry_after(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_rate_limit_includes_retry_after(self, mock_request, client):
         """Test that RateLimitError includes retry_after from Retry-After header."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 429
-        mock_response.headers = {"Retry-After": "30"}
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(
+            status_code=429, headers={"Retry-After": "30"}
+        )
 
         with pytest.raises(RateLimitError) as exc_info:
             client.fetch_emails()
 
         assert exc_info.value.retry_after == 30
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_rate_limit_no_retry_after_header(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_rate_limit_no_retry_after_header(self, mock_request, client):
         """Test that RateLimitError has retry_after=None when no header present."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 429
-        mock_response.headers = {}
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(status_code=429)
 
         with pytest.raises(RateLimitError) as exc_info:
             client.fetch_emails()
 
         assert exc_info.value.retry_after is None
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_token_refresh_on_401(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_token_refresh_on_401(self, mock_request, client):
         client._access_token = "old_token"
 
-        # First call returns 401, second returns success
-        expired_response = MagicMock()
-        expired_response.status_code = 401
+        expired_response = _mock_response(status_code=401)
+        success_response = _mock_response(json_data={"value": []})
 
-        success_response = MagicMock()
-        success_response.status_code = 200
-        success_response.json.return_value = {"value": []}
-        success_response.raise_for_status = MagicMock()
-
-        mock_get.side_effect = [expired_response, success_response]
+        mock_request.side_effect = [expired_response, success_response]
 
         with patch.object(client, "authenticate", return_value="new_token"):
             result = client.fetch_emails()
@@ -256,39 +242,35 @@ class TestGraphAPIClientFetchEmails:
 
 
 class TestGraphAPIClientGetMessageBody:
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_get_message_body(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_get_message_body(self, mock_request, client):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"body": {"content": "<p>Full email body</p>"}}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(
+            json_data={"body": {"content": "<p>Full email body</p>"}}
+        )
 
         body = client.get_message_body("msg_001")
         assert body == "<p>Full email body</p>"
 
 
 class TestGraphAPIClientGetUserEmail:
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_get_user_email(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_get_user_email(self, mock_request, client):
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "mail": "test@hotmail.com",
-            "userPrincipalName": "test@hotmail.com",
-        }
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(
+            json_data={
+                "mail": "test@hotmail.com",
+                "userPrincipalName": "test@hotmail.com",
+            }
+        )
 
         email = client.get_user_email()
         assert email == "test@hotmail.com"
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_get_user_email_fallback(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_get_user_email_fallback(self, mock_request, client):
         client._access_token = "test_token"
-        mock_get.side_effect = Exception("API Error")
+        mock_request.side_effect = Exception("API Error")
 
         email = client.get_user_email()
         assert email == "test@hotmail.com"  # Falls back to constructor email
@@ -297,93 +279,169 @@ class TestGraphAPIClientGetUserEmail:
 class TestGraphAPIClientFilterAfter:
     """Tests for server-side date filtering via filter_after parameter."""
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_filter_after_adds_odata_filter(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_filter_after_adds_odata_filter(self, mock_request, client):
         """Test that filter_after datetime adds $filter to request params."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         filter_date = datetime(2024, 6, 15, 10, 30, 0)
         client.fetch_emails(max_results=50, skip=0, filter_after=filter_date)
 
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert "$filter" in params
         assert params["$filter"] == "receivedDateTime gt 2024-06-15T10:30:00Z"
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_no_filter_when_filter_after_is_none(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_no_filter_when_filter_after_is_none(self, mock_request, client):
         """Test that $filter is NOT included when filter_after is None."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         client.fetch_emails(max_results=50, skip=0, filter_after=None)
 
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert "$filter" not in params
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_full_extraction_no_filter_still_works(self, mock_get, client, sample_graph_messages):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_full_extraction_no_filter_still_works(
+        self, mock_request, client, sample_graph_messages
+    ):
         """Test that full extraction (no filter_after) returns messages normally."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": sample_graph_messages}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(
+            json_data={"value": sample_graph_messages}
+        )
 
         result = client.fetch_emails(max_results=100)
 
         assert len(result) == 2
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert "$filter" not in params
         assert params["$top"] == 100
         assert params["$orderby"] == "receivedDateTime DESC"
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_filter_after_with_pagination(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_filter_after_with_pagination(self, mock_request, client):
         """Test that filter_after works alongside pagination params."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         filter_date = datetime(2024, 1, 1, 0, 0, 0)
         client.fetch_emails(max_results=25, skip=50, filter_after=filter_date)
 
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert params["$top"] == 25
         assert params["$skip"] == 50
         assert params["$filter"] == "receivedDateTime gt 2024-01-01T00:00:00Z"
         assert params["$orderby"] == "receivedDateTime DESC"
 
-    @patch("src.extractors.graph_api_client.requests.get")
-    def test_filter_after_iso_format(self, mock_get, client):
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_filter_after_iso_format(self, mock_request, client):
         """Test that the ISO date format in filter is correct for Graph API."""
         client._access_token = "test_token"
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"value": []}
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
+        mock_request.return_value = _mock_response(json_data={"value": []})
 
         # Use a date with all components to verify formatting
         filter_date = datetime(2025, 12, 31, 23, 59, 59)
         client.fetch_emails(filter_after=filter_date)
 
-        call_kwargs = mock_get.call_args
-        params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+        call_kwargs = mock_request.call_args
+        params = call_kwargs.kwargs.get("params")
         assert params["$filter"] == "receivedDateTime gt 2025-12-31T23:59:59Z"
+
+
+class TestMakeRequestHTTPMethods:
+    """Tests for _make_request supporting POST and other HTTP methods."""
+
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_post_with_json_data(self, mock_request, client):
+        """Test _make_request with POST method and JSON body."""
+        client._access_token = "test_token"
+        mock_request.return_value = _mock_response(
+            json_data={"id": "folder_123", "displayName": "Test Folder"}
+        )
+
+        result = client._make_request(
+            "https://graph.microsoft.com/v1.0/me/mailFolders",
+            method="POST",
+            json_data={"displayName": "Test Folder"},
+        )
+
+        assert result["id"] == "folder_123"
+        mock_request.assert_called_once()
+        call_args = mock_request.call_args
+        assert call_args[0][0] == "POST"
+        assert call_args.kwargs["json"] == {"displayName": "Test Folder"}
+
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_post_401_retry(self, mock_request, client):
+        """Test that POST requests retry on 401 with re-authentication."""
+        client._access_token = "old_token"
+
+        expired = _mock_response(status_code=401)
+        success = _mock_response(
+            json_data={"id": "folder_123", "displayName": "Test"}
+        )
+        mock_request.side_effect = [expired, success]
+
+        with patch.object(client, "authenticate", return_value="new_token"):
+            result = client._make_request(
+                "https://graph.microsoft.com/v1.0/me/mailFolders",
+                method="POST",
+                json_data={"displayName": "Test"},
+            )
+
+        assert result["id"] == "folder_123"
+        assert mock_request.call_count == 2
+        # Both calls should be POST
+        for call in mock_request.call_args_list:
+            assert call[0][0] == "POST"
+
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_post_429_rate_limit(self, mock_request, client):
+        """Test that POST requests raise RateLimitError on 429."""
+        client._access_token = "test_token"
+        mock_request.return_value = _mock_response(
+            status_code=429, headers={"Retry-After": "10"}
+        )
+
+        with pytest.raises(RateLimitError) as exc_info:
+            client._make_request(
+                "https://graph.microsoft.com/v1.0/me/mailFolders",
+                method="POST",
+                json_data={"displayName": "Test"},
+            )
+
+        assert exc_info.value.retry_after == 10
+
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_default_method_is_get(self, mock_request, client):
+        """Test that default method is GET when not specified."""
+        client._access_token = "test_token"
+        mock_request.return_value = _mock_response(json_data={"value": []})
+
+        client._make_request("https://graph.microsoft.com/v1.0/me/messages")
+
+        call_args = mock_request.call_args
+        assert call_args[0][0] == "GET"
+        assert call_args.kwargs["json"] is None
+
+    @patch("src.extractors.graph_api_client.requests.request")
+    def test_get_with_params(self, mock_request, client):
+        """Test GET request passes query params correctly."""
+        client._access_token = "test_token"
+        mock_request.return_value = _mock_response(json_data={"value": []})
+
+        client._make_request(
+            "https://graph.microsoft.com/v1.0/me/messages",
+            params={"$top": 10, "$select": "id"},
+        )
+
+        call_args = mock_request.call_args
+        assert call_args[0][0] == "GET"
+        assert call_args.kwargs["params"] == {"$top": 10, "$select": "id"}
